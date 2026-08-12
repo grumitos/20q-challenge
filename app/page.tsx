@@ -102,11 +102,16 @@ const awayTabFollowUps: Record<string, string> = {
   "Bienvenidos a los juegos de Gaspi": "de Gaspi",
 };
 
-/** Roughly what a browser tab shows before it truncates. Titles at or under
-    this are left still; longer ones scroll so they can be read in full. */
-const AWAY_TITLE_VISIBLE_CHARS = 22;
-/** Long enough to read a line before it cuts to the other half. */
-const AWAY_TITLE_FRAME_MS = 2_200;
+/** A tab's width is physical, not a character count — it moves with the window,
+    the screen and how many tabs are open, so this can only ever be an estimate.
+    Erring high is the safe direction: it shortens the travel, and the cost of
+    guessing high is a nudge rather than a march. */
+const AWAY_TITLE_VISIBLE_CHARS = 28;
+/** Fast enough to read as motion. The reference implementations step every
+    300ms, which in a tab reads as a slideshow rather than a scroll. */
+const AWAY_TITLE_SCROLL_MS = 90;
+/** Hard ceiling on the travel, whatever the estimate above turns out to be. */
+const AWAY_TITLE_MAX_TRAVEL = 6;
 
 const tierLabels: Record<RankTier, string> = {
   IRON: "Hierro",
@@ -1147,17 +1152,18 @@ export default function Home() {
       const title = nextTitle();
       document.title = title;
       if (title.length <= AWAY_TITLE_VISIBLE_CHARS) return;
-      // Two views, held long enough to read, rather than a scroll. `document.title`
-      // can only change a whole character at a time, so nothing sliding through it
-      // is ever smooth — stepping one letter every third of a second read as a
-      // slideshow. Cutting to the tail and back is the same information, and a cut
-      // is not a stutter.
-      const frames = [title, `…${title.slice(-(AWAY_TITLE_VISIBLE_CHARS - 1))}`];
-      let frame = 0;
+      // A short, quick nudge and back. Most of the old travel was wasted: the
+      // window is wider than the estimate on most tabs, so the tail was already
+      // visible while it kept marching, one letter every third of a second.
+      const furthest = Math.min(title.length - AWAY_TITLE_VISIBLE_CHARS, AWAY_TITLE_MAX_TRAVEL);
+      let offset = 0;
+      let step = 1;
       scroll = window.setInterval(() => {
-        frame = (frame + 1) % frames.length;
-        document.title = frames[frame]!;
-      }, AWAY_TITLE_FRAME_MS);
+        offset += step;
+        if (offset >= furthest) { offset = furthest; step = -1; }
+        else if (offset <= 0) { offset = 0; step = 1; }
+        document.title = title.slice(offset);
+      }, AWAY_TITLE_SCROLL_MS);
     };
     const restoreTitle = () => {
       if (!isAway) return;
