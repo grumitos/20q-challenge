@@ -102,18 +102,6 @@ const awayTabFollowUps: Record<string, string> = {
   "Bienvenidos a los juegos de Gaspi": "de Gaspi",
 };
 
-/** A tab's width is physical, not a character count — it moves with the window,
-    the screen and how many tabs are open, so this can only ever be an estimate.
-    Erring high is the safe direction: it shortens the travel, and the cost of
-    guessing high is a nudge rather than a march. */
-const AWAY_TITLE_VISIBLE_CHARS = 28;
-/** Fast enough to read as motion rather than as steps. The reference
-    implementations use 300ms, which in a tab is a slideshow. */
-const AWAY_TITLE_SCROLL_MS = 50;
-/** Hard ceiling on the travel. Three is a shift, not a journey: past that the
-    tail is already visible on any real tab and the extra ticks just wobble. */
-const AWAY_TITLE_MAX_TRAVEL = 3;
-
 const tierLabels: Record<RankTier, string> = {
   IRON: "Hierro",
   BRONZE: "Bronce",
@@ -1139,37 +1127,19 @@ export default function Home() {
       pending = awayTabFollowUps[title] ?? null;
       return title;
     };
-    // A tab is a few characters wide, so the browser truncates anything longer
-    // and the joke lands half-told. Rotating the string past that window lets it
-    // read all the way through; short titles fit and are left alone.
-    let scroll: number | undefined;
-    const stopScrolling = () => {
-      if (scroll !== undefined) window.clearInterval(scroll);
-      scroll = undefined;
-    };
+    // Set once and left alone. Animating it is not possible in any way worth
+    // having: browsers clamp timers in a hidden tab — which is the only state
+    // this runs in — to about one tick a second, and to one a minute once the
+    // tab has been away five minutes. Every speed tried here ran at the same
+    // throttled rate, so a long title reads as a slideshow or not at all.
     const markAway = () => {
       if (isAway) return;
       isAway = true;
-      const title = nextTitle();
-      document.title = title;
-      if (title.length <= AWAY_TITLE_VISIBLE_CHARS) return;
-      // A short, quick nudge and back. Most of the old travel was wasted: the
-      // window is wider than the estimate on most tabs, so the tail was already
-      // visible while it kept marching, one letter every third of a second.
-      const furthest = Math.min(title.length - AWAY_TITLE_VISIBLE_CHARS, AWAY_TITLE_MAX_TRAVEL);
-      let offset = 0;
-      let step = 1;
-      scroll = window.setInterval(() => {
-        offset += step;
-        if (offset >= furthest) { offset = furthest; step = -1; }
-        else if (offset <= 0) { offset = 0; step = 1; }
-        document.title = title.slice(offset);
-      }, AWAY_TITLE_SCROLL_MS);
+      document.title = nextTitle();
     };
     const restoreTitle = () => {
       if (!isAway) return;
       isAway = false;
-      stopScrolling();
       document.title = "20Q Challenge";
     };
     const handleVisibilityChange = () => {
@@ -1181,7 +1151,6 @@ export default function Home() {
     window.addEventListener("blur", markAway);
     window.addEventListener("focus", restoreTitle);
     return () => {
-      stopScrolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", markAway);
       window.removeEventListener("focus", restoreTitle);
