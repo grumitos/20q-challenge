@@ -1,0 +1,1623 @@
+{
+  "season": "2026",
+  "queue": "RANKED_SOLO_5x5",
+  "generatedAt": "2026-07-13T21:28:02.564Z",
+  "dataDragonVersion": "16.13.1",
+  "players": {
+    "miqi": {
+      "id": "miqi",
+      "gameName": "miqi",
+      "tagLine": "8745",
+      "puuid": "5_8Qb1VsKIYpIro5e30W8NQaoOre5oyuamwhesY0CB2G3El99wiux-67BR9dVIgZ-fTEQx0b9JFM5A",
+      "profileIconId": 3152,
+      "analyticsGames": 108,
+      "kills": 593,
+      "deaths": 873,
+      "assists": 912,
+      "roles": {
+        "UTILITY": 36,
+        "MIDDLE": 7,
+        "BOTTOM": 64,
+        "TOP": 1
+      },
+      "champions": {
+        "18": {
+          "games": 3,
+          "wins": 2,
+          "id": "Tristana",
+          "name": "Tristana"
+        },
+        "21": {
+          "games": 1,
+          "wins": 1,
+          "id": "MissFortune",
+          "name": "Miss Fortune"
+        },
+        "22": {
+          "games": 3,
+          "wins": 1,
+          "id": "Ashe",
+          "name": "Ashe"
+        },
+        "24": {
+          "games": 3,
+          "wins": 1,
+          "id": "Jax",
+          "name": "Jax"
+        },
+        "25": {
+          "games": 1,
+          "wins": 0,
+          "id": "Morgana",
+          "name": "Morgana"
+        },
+        "26": {
+          "games": 1,
+          "wins": 1,
+          "id": "Zilean",
+          "name": "Zilean"
+        },
+        "29": {
+          "games": 2,
+          "wins": 1,
+          "id": "Twitch",
+          "name": "Twitch"
+        },
+        "45": {
+          "games": 2,
+          "wins": 0,
+          "id": "Veigar",
+          "name": "Veigar"
+        },
+        "50": {
+          "games": 1,
+          "wins": 1,
+          "id": "Swain",
+          "name": "Swain"
+        },
+        "51": {
+          "games": 2,
+          "wins": 0,
+          "id": "Caitlyn",
+          "name": "Caitlyn"
+        },
+        "53": {
+          "games": 3,
+          "wins": 2,
+          "id": "Blitzcrank",
+          "name": "Blitzcrank"
+        },
+        "57": {
+          "games": 2,
+          "wins": 2,
+          "id": "Maokai",
+          "name": "Maokai"
+        },
+        "63": {
+          "games": 3,
+          "wins": 3,
+          "id": "Brand",
+          "name": "Brand"
+        },
+        "89": {
+          "games": 12,
+          "wins": 5,
+          "id": "Leona",
+          "name": "Leona"
+        },
+        "90": {
+          "games": 1,
+          "wins": 1,
+          "id": "Malzahar",
+          "name": "Malzahar"
+        },
+        "99": {
+          "games": 9,
+          "wins": 4,
+          "id": "Lux",
+          "name": "Lux"
+        },
+        "110": {
+          "games": 1,
+          "wins": 0,
+          "id": "Varus",
+          "name": "Varus"
+        },
+        "115": {
+          "games": 1,
+          "wins": 0,
+          "id": "Ziggs",
+          "name": "Ziggs"
+        },
+        "202": {
+          "games": 30,
+          "wins": 18,
+          "id": "Jhin",
+          "name": "Jhin"
+        },
+        "223": {
+          "games": 3,
+          "wins": 2,
+          "id": "TahmKench",
+          "name": "Tahm Kench"
+        },
+        "236": {
+          "games": 3,
+          "wins": 0,
+          "id": "Lucian",
+          "name": "Lucian"
+        },
+        "518": {
+          "games": 1,
+          "wins": 1,
+          "id": "Neeko",
+          "name": "Neeko"
+        },
+        "523": {
+          "games": 15,
+          "wins": 6,
+          "id": "Aphelios",
+          "name": "Aphelios"
+        },
+        "711": {
+          "games": 3,
+          "wins": 1,
+          "id": "Vex",
+          "name": "Vex"
+        },
+        "893": {
+          "games": 2,
+          "wins": 1,
+          "id": "Aurora",
+          "name": "Aurora"
+        }
+      },
+      "lastGameStartTimestamp": 1783833792481,
+      "lastMatchId": "LA2_1608804113"
+    },
+    "wonder-boi": {
+      "id": "wonder-boi",
+      "gameName": "Wonder Boi",
+      "tagLine": "huhu",
+      "puuid": "NjegBn8qri0XwtL5FOBiREC6rXLePzzIS-Bx0UUBr87CZgybKnxoRsNStPaUes7Rr7MdnX0_krpP-Q",
+      "profileIconId": 6486,
+      "analyticsGames": 352,
+      "kills": 2145,
+      "deaths": 2458,
+      "assists": 3213,
+      "roles": {
+        "BOTTOM": 125,
+        "UTILITY": 113,
+        "JUNGLE": 57,
+        "TOP": 13,
+        "MIDDLE": 43,
+        "Invalid": 1
+      },
+      "champions": {
+        "3": {
+          "games": 1,
+          "wins": 1,
+          "id": "Galio",
+          "name": "Galio"
+        },
+        "8": {
+          "games": 1,
+          "wins": 0,
+          "id": "Vladimir",
+          "name": "Vladimir"
+        },
+        "9": {
+          "games": 2,
+          "wins": 0,
+          "id": "Fiddlesticks",
+          "name": "Fiddlesticks"
+        },
+        "11": {
+          "games": 5,
+          "wins": 3,
+          "id": "MasterYi",
+          "name": "Maestro Yi"
+        },
+        "19": {
+          "games": 4,
+          "wins": 3,
+          "id": "Warwick",
+          "name": "Warwick"
+        },
+        "29": {
+          "games": 15,
+          "wins": 5,
+          "id": "Twitch",
+          "name": "Twitch"
+        },
+        "30": {
+          "games": 1,
+          "wins": 1,
+          "id": "Karthus",
+          "name": "Karthus"
+        },
+        "31": {
+          "games": 1,
+          "wins": 0,
+          "id": "Chogath",
+          "name": "Cho'Gath"
+        },
+        "32": {
+          "games": 3,
+          "wins": 2,
+          "id": "Amumu",
+          "name": "Amumu"
+        },
+        "34": {
+          "games": 3,
+          "wins": 3,
+          "id": "Anivia",
+          "name": "Anivia"
+        },
+        "35": {
+          "games": 11,
+          "wins": 7,
+          "id": "Shaco",
+          "name": "Shaco"
+        },
+        "45": {
+          "games": 10,
+          "wins": 4,
+          "id": "Veigar",
+          "name": "Veigar"
+        },
+        "50": {
+          "games": 15,
+          "wins": 10,
+          "id": "Swain",
+          "name": "Swain"
+        },
+        "53": {
+          "games": 10,
+          "wins": 6,
+          "id": "Blitzcrank",
+          "name": "Blitzcrank"
+        },
+        "54": {
+          "games": 9,
+          "wins": 3,
+          "id": "Malphite",
+          "name": "Malphite"
+        },
+        "56": {
+          "games": 1,
+          "wins": 0,
+          "id": "Nocturne",
+          "name": "Nocturne"
+        },
+        "63": {
+          "games": 10,
+          "wins": 4,
+          "id": "Brand",
+          "name": "Brand"
+        },
+        "72": {
+          "games": 1,
+          "wins": 0,
+          "id": "Skarner",
+          "name": "Skarner"
+        },
+        "75": {
+          "games": 6,
+          "wins": 6,
+          "id": "Nasus",
+          "name": "Nasus"
+        },
+        "76": {
+          "games": 1,
+          "wins": 0,
+          "id": "Nidalee",
+          "name": "Nidalee"
+        },
+        "77": {
+          "games": 2,
+          "wins": 2,
+          "id": "Udyr",
+          "name": "Udyr"
+        },
+        "80": {
+          "games": 17,
+          "wins": 11,
+          "id": "Pantheon",
+          "name": "Pantheon"
+        },
+        "81": {
+          "games": 1,
+          "wins": 1,
+          "id": "Ezreal",
+          "name": "Ezreal"
+        },
+        "83": {
+          "games": 2,
+          "wins": 1,
+          "id": "Yorick",
+          "name": "Yorick"
+        },
+        "86": {
+          "games": 1,
+          "wins": 0,
+          "id": "Garen",
+          "name": "Garen"
+        },
+        "89": {
+          "games": 10,
+          "wins": 8,
+          "id": "Leona",
+          "name": "Leona"
+        },
+        "90": {
+          "games": 3,
+          "wins": 1,
+          "id": "Malzahar",
+          "name": "Malzahar"
+        },
+        "101": {
+          "games": 2,
+          "wins": 0,
+          "id": "Xerath",
+          "name": "Xerath"
+        },
+        "105": {
+          "games": 8,
+          "wins": 2,
+          "id": "Fizz",
+          "name": "Fizz"
+        },
+        "106": {
+          "games": 4,
+          "wins": 3,
+          "id": "Volibear",
+          "name": "Volibear"
+        },
+        "107": {
+          "games": 4,
+          "wins": 1,
+          "id": "Rengar",
+          "name": "Rengar"
+        },
+        "110": {
+          "games": 36,
+          "wins": 15,
+          "id": "Varus",
+          "name": "Varus"
+        },
+        "111": {
+          "games": 4,
+          "wins": 3,
+          "id": "Nautilus",
+          "name": "Nautilus"
+        },
+        "115": {
+          "games": 8,
+          "wins": 3,
+          "id": "Ziggs",
+          "name": "Ziggs"
+        },
+        "119": {
+          "games": 7,
+          "wins": 3,
+          "id": "Draven",
+          "name": "Draven"
+        },
+        "121": {
+          "games": 9,
+          "wins": 5,
+          "id": "Khazix",
+          "name": "Kha'Zix"
+        },
+        "141": {
+          "games": 7,
+          "wins": 3,
+          "id": "Kayn",
+          "name": "Kayn"
+        },
+        "202": {
+          "games": 29,
+          "wins": 15,
+          "id": "Jhin",
+          "name": "Jhin"
+        },
+        "235": {
+          "games": 3,
+          "wins": 2,
+          "id": "Senna",
+          "name": "Senna"
+        },
+        "236": {
+          "games": 9,
+          "wins": 6,
+          "id": "Lucian",
+          "name": "Lucian"
+        },
+        "238": {
+          "games": 7,
+          "wins": 4,
+          "id": "Zed",
+          "name": "Zed"
+        },
+        "267": {
+          "games": 1,
+          "wins": 0,
+          "id": "Nami",
+          "name": "Nami"
+        },
+        "412": {
+          "games": 5,
+          "wins": 1,
+          "id": "Thresh",
+          "name": "Thresh"
+        },
+        "427": {
+          "games": 1,
+          "wins": 0,
+          "id": "Ivern",
+          "name": "Ivern"
+        },
+        "497": {
+          "games": 2,
+          "wins": 1,
+          "id": "Rakan",
+          "name": "Rakan"
+        },
+        "517": {
+          "games": 12,
+          "wins": 6,
+          "id": "Sylas",
+          "name": "Sylas"
+        },
+        "523": {
+          "games": 2,
+          "wins": 0,
+          "id": "Aphelios",
+          "name": "Aphelios"
+        },
+        "555": {
+          "games": 20,
+          "wins": 10,
+          "id": "Pyke",
+          "name": "Pyke"
+        },
+        "777": {
+          "games": 1,
+          "wins": 0,
+          "id": "Yone",
+          "name": "Yone"
+        },
+        "800": {
+          "games": 1,
+          "wins": 1,
+          "id": "Mel",
+          "name": "Mel"
+        },
+        "876": {
+          "games": 3,
+          "wins": 2,
+          "id": "Lillia",
+          "name": "Lillia"
+        },
+        "888": {
+          "games": 3,
+          "wins": 1,
+          "id": "Renata",
+          "name": "Renata Glasc"
+        },
+        "901": {
+          "games": 17,
+          "wins": 8,
+          "id": "Smolder",
+          "name": "Smolder"
+        },
+        "950": {
+          "games": 1,
+          "wins": 1,
+          "id": "Naafiri",
+          "name": "Naafiri"
+        }
+      },
+      "lastGameStartTimestamp": 1783971777030,
+      "lastMatchId": "LA2_1609119305"
+    },
+    "rvn": {
+      "id": "rvn",
+      "gameName": "RVN",
+      "tagLine": "2105",
+      "puuid": "RNcpO-oNC3BQkAKDLoLV1w4h3Bi1t9dbG4A0P4d7jnVlBMAuEsflr13iNbOqaghL7xoecTEr-DzpsA",
+      "profileIconId": 7128,
+      "analyticsGames": 215,
+      "kills": 1424,
+      "deaths": 1457,
+      "assists": 1524,
+      "roles": {
+        "BOTTOM": 60,
+        "UTILITY": 61,
+        "JUNGLE": 14,
+        "TOP": 49,
+        "MIDDLE": 31
+      },
+      "champions": {
+        "5": {
+          "games": 1,
+          "wins": 0,
+          "id": "XinZhao",
+          "name": "Xin Zhao"
+        },
+        "11": {
+          "games": 4,
+          "wins": 2,
+          "id": "MasterYi",
+          "name": "Maestro Yi"
+        },
+        "13": {
+          "games": 1,
+          "wins": 0,
+          "id": "Ryze",
+          "name": "Ryze"
+        },
+        "18": {
+          "games": 1,
+          "wins": 1,
+          "id": "Tristana",
+          "name": "Tristana"
+        },
+        "19": {
+          "games": 2,
+          "wins": 1,
+          "id": "Warwick",
+          "name": "Warwick"
+        },
+        "21": {
+          "games": 2,
+          "wins": 1,
+          "id": "MissFortune",
+          "name": "Miss Fortune"
+        },
+        "22": {
+          "games": 1,
+          "wins": 1,
+          "id": "Ashe",
+          "name": "Ashe"
+        },
+        "25": {
+          "games": 8,
+          "wins": 2,
+          "id": "Morgana",
+          "name": "Morgana"
+        },
+        "36": {
+          "games": 3,
+          "wins": 1,
+          "id": "DrMundo",
+          "name": "Dr. Mundo"
+        },
+        "39": {
+          "games": 1,
+          "wins": 0,
+          "id": "Irelia",
+          "name": "Irelia"
+        },
+        "45": {
+          "games": 1,
+          "wins": 0,
+          "id": "Veigar",
+          "name": "Veigar"
+        },
+        "48": {
+          "games": 2,
+          "wins": 1,
+          "id": "Trundle",
+          "name": "Trundle"
+        },
+        "50": {
+          "games": 1,
+          "wins": 0,
+          "id": "Swain",
+          "name": "Swain"
+        },
+        "51": {
+          "games": 15,
+          "wins": 6,
+          "id": "Caitlyn",
+          "name": "Caitlyn"
+        },
+        "53": {
+          "games": 4,
+          "wins": 2,
+          "id": "Blitzcrank",
+          "name": "Blitzcrank"
+        },
+        "54": {
+          "games": 2,
+          "wins": 1,
+          "id": "Malphite",
+          "name": "Malphite"
+        },
+        "63": {
+          "games": 1,
+          "wins": 0,
+          "id": "Brand",
+          "name": "Brand"
+        },
+        "64": {
+          "games": 5,
+          "wins": 1,
+          "id": "LeeSin",
+          "name": "Lee Sin"
+        },
+        "67": {
+          "games": 6,
+          "wins": 4,
+          "id": "Vayne",
+          "name": "Vayne"
+        },
+        "80": {
+          "games": 9,
+          "wins": 6,
+          "id": "Pantheon",
+          "name": "Pantheon"
+        },
+        "82": {
+          "games": 22,
+          "wins": 13,
+          "id": "Mordekaiser",
+          "name": "Mordekaiser"
+        },
+        "83": {
+          "games": 2,
+          "wins": 0,
+          "id": "Yorick",
+          "name": "Yorick"
+        },
+        "84": {
+          "games": 4,
+          "wins": 3,
+          "id": "Akali",
+          "name": "Akali"
+        },
+        "89": {
+          "games": 2,
+          "wins": 1,
+          "id": "Leona",
+          "name": "Leona"
+        },
+        "92": {
+          "games": 1,
+          "wins": 0,
+          "id": "Riven",
+          "name": "Riven"
+        },
+        "96": {
+          "games": 1,
+          "wins": 0,
+          "id": "KogMaw",
+          "name": "Kog'Maw"
+        },
+        "99": {
+          "games": 3,
+          "wins": 1,
+          "id": "Lux",
+          "name": "Lux"
+        },
+        "111": {
+          "games": 10,
+          "wins": 5,
+          "id": "Nautilus",
+          "name": "Nautilus"
+        },
+        "115": {
+          "games": 1,
+          "wins": 0,
+          "id": "Ziggs",
+          "name": "Ziggs"
+        },
+        "122": {
+          "games": 6,
+          "wins": 5,
+          "id": "Darius",
+          "name": "Darius"
+        },
+        "141": {
+          "games": 2,
+          "wins": 2,
+          "id": "Kayn",
+          "name": "Kayn"
+        },
+        "157": {
+          "games": 14,
+          "wins": 8,
+          "id": "Yasuo",
+          "name": "Yasuo"
+        },
+        "161": {
+          "games": 6,
+          "wins": 3,
+          "id": "Velkoz",
+          "name": "Vel'Koz"
+        },
+        "223": {
+          "games": 12,
+          "wins": 6,
+          "id": "TahmKench",
+          "name": "Tahm Kench"
+        },
+        "238": {
+          "games": 1,
+          "wins": 1,
+          "id": "Zed",
+          "name": "Zed"
+        },
+        "266": {
+          "games": 2,
+          "wins": 1,
+          "id": "Aatrox",
+          "name": "Aatrox"
+        },
+        "360": {
+          "games": 28,
+          "wins": 16,
+          "id": "Samira",
+          "name": "Samira"
+        },
+        "412": {
+          "games": 1,
+          "wins": 0,
+          "id": "Thresh",
+          "name": "Thresh"
+        },
+        "420": {
+          "games": 2,
+          "wins": 1,
+          "id": "Illaoi",
+          "name": "Illaoi"
+        },
+        "516": {
+          "games": 2,
+          "wins": 0,
+          "id": "Ornn",
+          "name": "Ornn"
+        },
+        "517": {
+          "games": 4,
+          "wins": 1,
+          "id": "Sylas",
+          "name": "Sylas"
+        },
+        "518": {
+          "games": 2,
+          "wins": 0,
+          "id": "Neeko",
+          "name": "Neeko"
+        },
+        "555": {
+          "games": 1,
+          "wins": 1,
+          "id": "Pyke",
+          "name": "Pyke"
+        },
+        "711": {
+          "games": 1,
+          "wins": 0,
+          "id": "Vex",
+          "name": "Vex"
+        },
+        "777": {
+          "games": 1,
+          "wins": 0,
+          "id": "Yone",
+          "name": "Yone"
+        },
+        "800": {
+          "games": 3,
+          "wins": 2,
+          "id": "Mel",
+          "name": "Mel"
+        },
+        "875": {
+          "games": 3,
+          "wins": 1,
+          "id": "Sett",
+          "name": "Sett"
+        },
+        "901": {
+          "games": 5,
+          "wins": 2,
+          "id": "Smolder",
+          "name": "Smolder"
+        },
+        "950": {
+          "games": 3,
+          "wins": 2,
+          "id": "Naafiri",
+          "name": "Naafiri"
+        }
+      },
+      "lastGameStartTimestamp": 1783654869144,
+      "lastMatchId": "LA2_1608348979"
+    },
+    "inti": {
+      "id": "inti",
+      "gameName": "INTI VIRAC0NCHA",
+      "tagLine": "20CM",
+      "puuid": "Kc-XyTyhc7MuuMGqhh3SAF15uYKy3vWXKEXR9VcliItaecBrdzJj6VoC6I-Ht6ZM0lbhvBexzQkmYA",
+      "profileIconId": 6091,
+      "analyticsGames": 301,
+      "kills": 2134,
+      "deaths": 2805,
+      "assists": 2682,
+      "roles": {
+        "UTILITY": 121,
+        "BOTTOM": 39,
+        "JUNGLE": 24,
+        "MIDDLE": 92,
+        "TOP": 25
+      },
+      "champions": {
+        "2": {
+          "games": 26,
+          "wins": 17,
+          "id": "Olaf",
+          "name": "Olaf"
+        },
+        "3": {
+          "games": 1,
+          "wins": 0,
+          "id": "Galio",
+          "name": "Galio"
+        },
+        "5": {
+          "games": 5,
+          "wins": 0,
+          "id": "XinZhao",
+          "name": "Xin Zhao"
+        },
+        "12": {
+          "games": 1,
+          "wins": 0,
+          "id": "Alistar",
+          "name": "Alistar"
+        },
+        "13": {
+          "games": 27,
+          "wins": 18,
+          "id": "Ryze",
+          "name": "Ryze"
+        },
+        "26": {
+          "games": 2,
+          "wins": 2,
+          "id": "Zilean",
+          "name": "Zilean"
+        },
+        "29": {
+          "games": 2,
+          "wins": 1,
+          "id": "Twitch",
+          "name": "Twitch"
+        },
+        "31": {
+          "games": 43,
+          "wins": 22,
+          "id": "Chogath",
+          "name": "Cho'Gath"
+        },
+        "37": {
+          "games": 16,
+          "wins": 5,
+          "id": "Sona",
+          "name": "Sona"
+        },
+        "44": {
+          "games": 5,
+          "wins": 4,
+          "id": "Taric",
+          "name": "Taric"
+        },
+        "48": {
+          "games": 2,
+          "wins": 1,
+          "id": "Trundle",
+          "name": "Trundle"
+        },
+        "50": {
+          "games": 3,
+          "wins": 1,
+          "id": "Swain",
+          "name": "Swain"
+        },
+        "54": {
+          "games": 20,
+          "wins": 11,
+          "id": "Malphite",
+          "name": "Malphite"
+        },
+        "57": {
+          "games": 1,
+          "wins": 0,
+          "id": "Maokai",
+          "name": "Maokai"
+        },
+        "75": {
+          "games": 5,
+          "wins": 2,
+          "id": "Nasus",
+          "name": "Nasus"
+        },
+        "77": {
+          "games": 1,
+          "wins": 1,
+          "id": "Udyr",
+          "name": "Udyr"
+        },
+        "80": {
+          "games": 2,
+          "wins": 1,
+          "id": "Pantheon",
+          "name": "Pantheon"
+        },
+        "81": {
+          "games": 5,
+          "wins": 2,
+          "id": "Ezreal",
+          "name": "Ezreal"
+        },
+        "83": {
+          "games": 1,
+          "wins": 0,
+          "id": "Yorick",
+          "name": "Yorick"
+        },
+        "89": {
+          "games": 40,
+          "wins": 19,
+          "id": "Leona",
+          "name": "Leona"
+        },
+        "101": {
+          "games": 27,
+          "wins": 14,
+          "id": "Xerath",
+          "name": "Xerath"
+        },
+        "102": {
+          "games": 1,
+          "wins": 0,
+          "id": "Shyvana",
+          "name": "Shyvana"
+        },
+        "104": {
+          "games": 9,
+          "wins": 4,
+          "id": "Graves",
+          "name": "Graves"
+        },
+        "107": {
+          "games": 11,
+          "wins": 5,
+          "id": "Rengar",
+          "name": "Rengar"
+        },
+        "142": {
+          "games": 4,
+          "wins": 2,
+          "id": "Zoe",
+          "name": "Zoe"
+        },
+        "154": {
+          "games": 3,
+          "wins": 2,
+          "id": "Zac",
+          "name": "Zac"
+        },
+        "201": {
+          "games": 1,
+          "wins": 0,
+          "id": "Braum",
+          "name": "Braum"
+        },
+        "420": {
+          "games": 27,
+          "wins": 14,
+          "id": "Illaoi",
+          "name": "Illaoi"
+        },
+        "432": {
+          "games": 2,
+          "wins": 1,
+          "id": "Bard",
+          "name": "Bardo"
+        },
+        "497": {
+          "games": 1,
+          "wins": 0,
+          "id": "Rakan",
+          "name": "Rakan"
+        },
+        "555": {
+          "games": 4,
+          "wins": 1,
+          "id": "Pyke",
+          "name": "Pyke"
+        },
+        "875": {
+          "games": 1,
+          "wins": 0,
+          "id": "Sett",
+          "name": "Sett"
+        },
+        "876": {
+          "games": 1,
+          "wins": 0,
+          "id": "Lillia",
+          "name": "Lillia"
+        },
+        "910": {
+          "games": 1,
+          "wins": 0,
+          "id": "Hwei",
+          "name": "Hwei"
+        }
+      },
+      "lastGameStartTimestamp": 1783738123191,
+      "lastMatchId": "LA2_1608552455"
+    },
+    "papipu": {
+      "id": "papipu",
+      "gameName": "Papipu",
+      "tagLine": "HOLA",
+      "puuid": "X_mxNExAU31z21_hq8jyaXhP2GKMgI4LHp_Ytun9YEalix_JYeWZpfXmNbg2DOujIcgtFq36GID80Q",
+      "profileIconId": 7148,
+      "analyticsGames": 158,
+      "kills": 1057,
+      "deaths": 963,
+      "assists": 1593,
+      "roles": {
+        "UTILITY": 68,
+        "BOTTOM": 39,
+        "TOP": 43,
+        "MIDDLE": 8
+      },
+      "champions": {
+        "3": {
+          "games": 1,
+          "wins": 0,
+          "id": "Galio",
+          "name": "Galio"
+        },
+        "10": {
+          "games": 2,
+          "wins": 1,
+          "id": "Kayle",
+          "name": "Kayle"
+        },
+        "15": {
+          "games": 1,
+          "wins": 1,
+          "id": "Sivir",
+          "name": "Sivir"
+        },
+        "16": {
+          "games": 2,
+          "wins": 0,
+          "id": "Soraka",
+          "name": "Soraka"
+        },
+        "21": {
+          "games": 4,
+          "wins": 1,
+          "id": "MissFortune",
+          "name": "Miss Fortune"
+        },
+        "22": {
+          "games": 1,
+          "wins": 0,
+          "id": "Ashe",
+          "name": "Ashe"
+        },
+        "25": {
+          "games": 3,
+          "wins": 1,
+          "id": "Morgana",
+          "name": "Morgana"
+        },
+        "41": {
+          "games": 1,
+          "wins": 0,
+          "id": "Gangplank",
+          "name": "Gangplank"
+        },
+        "50": {
+          "games": 3,
+          "wins": 1,
+          "id": "Swain",
+          "name": "Swain"
+        },
+        "51": {
+          "games": 2,
+          "wins": 1,
+          "id": "Caitlyn",
+          "name": "Caitlyn"
+        },
+        "53": {
+          "games": 2,
+          "wins": 1,
+          "id": "Blitzcrank",
+          "name": "Blitzcrank"
+        },
+        "63": {
+          "games": 4,
+          "wins": 3,
+          "id": "Brand",
+          "name": "Brand"
+        },
+        "67": {
+          "games": 2,
+          "wins": 0,
+          "id": "Vayne",
+          "name": "Vayne"
+        },
+        "74": {
+          "games": 1,
+          "wins": 1,
+          "id": "Heimerdinger",
+          "name": "Heimerdinger"
+        },
+        "80": {
+          "games": 2,
+          "wins": 0,
+          "id": "Pantheon",
+          "name": "Pantheon"
+        },
+        "81": {
+          "games": 1,
+          "wins": 1,
+          "id": "Ezreal",
+          "name": "Ezreal"
+        },
+        "82": {
+          "games": 29,
+          "wins": 16,
+          "id": "Mordekaiser",
+          "name": "Mordekaiser"
+        },
+        "83": {
+          "games": 1,
+          "wins": 1,
+          "id": "Yorick",
+          "name": "Yorick"
+        },
+        "86": {
+          "games": 1,
+          "wins": 1,
+          "id": "Garen",
+          "name": "Garen"
+        },
+        "89": {
+          "games": 5,
+          "wins": 2,
+          "id": "Leona",
+          "name": "Leona"
+        },
+        "90": {
+          "games": 1,
+          "wins": 1,
+          "id": "Malzahar",
+          "name": "Malzahar"
+        },
+        "96": {
+          "games": 3,
+          "wins": 2,
+          "id": "KogMaw",
+          "name": "Kog'Maw"
+        },
+        "99": {
+          "games": 10,
+          "wins": 8,
+          "id": "Lux",
+          "name": "Lux"
+        },
+        "101": {
+          "games": 7,
+          "wins": 3,
+          "id": "Xerath",
+          "name": "Xerath"
+        },
+        "106": {
+          "games": 3,
+          "wins": 1,
+          "id": "Volibear",
+          "name": "Volibear"
+        },
+        "110": {
+          "games": 1,
+          "wins": 0,
+          "id": "Varus",
+          "name": "Varus"
+        },
+        "111": {
+          "games": 3,
+          "wins": 1,
+          "id": "Nautilus",
+          "name": "Nautilus"
+        },
+        "143": {
+          "games": 3,
+          "wins": 2,
+          "id": "Zyra",
+          "name": "Zyra"
+        },
+        "145": {
+          "games": 1,
+          "wins": 0,
+          "id": "Kaisa",
+          "name": "Kai'Sa"
+        },
+        "147": {
+          "games": 5,
+          "wins": 4,
+          "id": "Seraphine",
+          "name": "Seraphine"
+        },
+        "161": {
+          "games": 1,
+          "wins": 1,
+          "id": "Velkoz",
+          "name": "Vel'Koz"
+        },
+        "163": {
+          "games": 1,
+          "wins": 0,
+          "id": "Taliyah",
+          "name": "Taliyah"
+        },
+        "164": {
+          "games": 1,
+          "wins": 0,
+          "id": "Camille",
+          "name": "Camille"
+        },
+        "166": {
+          "games": 1,
+          "wins": 1,
+          "id": "Akshan",
+          "name": "Akshan"
+        },
+        "202": {
+          "games": 7,
+          "wins": 7,
+          "id": "Jhin",
+          "name": "Jhin"
+        },
+        "222": {
+          "games": 1,
+          "wins": 1,
+          "id": "Jinx",
+          "name": "Jinx"
+        },
+        "223": {
+          "games": 4,
+          "wins": 4,
+          "id": "TahmKench",
+          "name": "Tahm Kench"
+        },
+        "235": {
+          "games": 8,
+          "wins": 3,
+          "id": "Senna",
+          "name": "Senna"
+        },
+        "236": {
+          "games": 1,
+          "wins": 1,
+          "id": "Lucian",
+          "name": "Lucian"
+        },
+        "267": {
+          "games": 6,
+          "wins": 3,
+          "id": "Nami",
+          "name": "Nami"
+        },
+        "360": {
+          "games": 2,
+          "wins": 1,
+          "id": "Samira",
+          "name": "Samira"
+        },
+        "429": {
+          "games": 2,
+          "wins": 1,
+          "id": "Kalista",
+          "name": "Kalista"
+        },
+        "497": {
+          "games": 1,
+          "wins": 1,
+          "id": "Rakan",
+          "name": "Rakan"
+        },
+        "777": {
+          "games": 2,
+          "wins": 2,
+          "id": "Yone",
+          "name": "Yone"
+        },
+        "799": {
+          "games": 1,
+          "wins": 0,
+          "id": "Ambessa",
+          "name": "Ambessa"
+        },
+        "800": {
+          "games": 3,
+          "wins": 1,
+          "id": "Mel",
+          "name": "Mel"
+        },
+        "895": {
+          "games": 1,
+          "wins": 1,
+          "id": "Nilah",
+          "name": "Nilah"
+        },
+        "901": {
+          "games": 6,
+          "wins": 5,
+          "id": "Smolder",
+          "name": "Smolder"
+        },
+        "902": {
+          "games": 3,
+          "wins": 1,
+          "id": "Milio",
+          "name": "Milio"
+        },
+        "950": {
+          "games": 1,
+          "wins": 1,
+          "id": "Naafiri",
+          "name": "Naafiri"
+        }
+      },
+      "lastGameStartTimestamp": 1783828236464,
+      "lastMatchId": "LA2_1608777399"
+    },
+    "testiculos": {
+      "id": "testiculos",
+      "gameName": "TESTICrULoOS",
+      "tagLine": "2140",
+      "puuid": "A4Sq81SYhEZ4ki89gphMwWuw3a1lt07CIPJ0ThmZlPuBVDmyj-y6IlIYBFSwiEupcBw0xwgO9vKNVA",
+      "profileIconId": 2076,
+      "analyticsGames": 58,
+      "kills": 434,
+      "deaths": 556,
+      "assists": 552,
+      "roles": {
+        "BOTTOM": 7,
+        "UTILITY": 16,
+        "TOP": 16,
+        "MIDDLE": 18,
+        "JUNGLE": 1
+      },
+      "champions": {
+        "2": {
+          "games": 7,
+          "wins": 3,
+          "id": "Olaf",
+          "name": "Olaf"
+        },
+        "5": {
+          "games": 1,
+          "wins": 0,
+          "id": "XinZhao",
+          "name": "Xin Zhao"
+        },
+        "13": {
+          "games": 3,
+          "wins": 3,
+          "id": "Ryze",
+          "name": "Ryze"
+        },
+        "25": {
+          "games": 1,
+          "wins": 1,
+          "id": "Morgana",
+          "name": "Morgana"
+        },
+        "44": {
+          "games": 4,
+          "wins": 1,
+          "id": "Taric",
+          "name": "Taric"
+        },
+        "50": {
+          "games": 1,
+          "wins": 1,
+          "id": "Swain",
+          "name": "Swain"
+        },
+        "54": {
+          "games": 6,
+          "wins": 1,
+          "id": "Malphite",
+          "name": "Malphite"
+        },
+        "75": {
+          "games": 3,
+          "wins": 2,
+          "id": "Nasus",
+          "name": "Nasus"
+        },
+        "80": {
+          "games": 2,
+          "wins": 1,
+          "id": "Pantheon",
+          "name": "Pantheon"
+        },
+        "81": {
+          "games": 1,
+          "wins": 0,
+          "id": "Ezreal",
+          "name": "Ezreal"
+        },
+        "89": {
+          "games": 8,
+          "wins": 1,
+          "id": "Leona",
+          "name": "Leona"
+        },
+        "101": {
+          "games": 11,
+          "wins": 7,
+          "id": "Xerath",
+          "name": "Xerath"
+        },
+        "103": {
+          "games": 1,
+          "wins": 1,
+          "id": "Ahri",
+          "name": "Ahri"
+        },
+        "104": {
+          "games": 1,
+          "wins": 1,
+          "id": "Graves",
+          "name": "Graves"
+        },
+        "420": {
+          "games": 5,
+          "wins": 1,
+          "id": "Illaoi",
+          "name": "Illaoi"
+        },
+        "516": {
+          "games": 1,
+          "wins": 1,
+          "id": "Ornn",
+          "name": "Ornn"
+        },
+        "555": {
+          "games": 2,
+          "wins": 1,
+          "id": "Pyke",
+          "name": "Pyke"
+        }
+      },
+      "lastGameStartTimestamp": 1781851739786,
+      "lastMatchId": "LA2_1603688755"
+    },
+    "piper-twin": {
+      "id": "piper-twin",
+      "gameName": "PiperTwin",
+      "tagLine": "20CM",
+      "puuid": "fhnWps2btYO2zrn6oirsxKLoHI_aRoPdq6z8Nx0ZmuNRfMFPxTSlpm7e_vUWVCTlTeGsnl9QfW3C0A",
+      "profileIconId": 6874,
+      "analyticsGames": 91,
+      "kills": 666,
+      "deaths": 533,
+      "assists": 721,
+      "roles": {
+        "UTILITY": 7,
+        "BOTTOM": 79,
+        "JUNGLE": 5
+      },
+      "champions": {
+        "15": {
+          "games": 4,
+          "wins": 3,
+          "id": "Sivir",
+          "name": "Sivir"
+        },
+        "18": {
+          "games": 37,
+          "wins": 18,
+          "id": "Tristana",
+          "name": "Tristana"
+        },
+        "21": {
+          "games": 1,
+          "wins": 0,
+          "id": "MissFortune",
+          "name": "Miss Fortune"
+        },
+        "22": {
+          "games": 8,
+          "wins": 5,
+          "id": "Ashe",
+          "name": "Ashe"
+        },
+        "33": {
+          "games": 2,
+          "wins": 1,
+          "id": "Rammus",
+          "name": "Rammus"
+        },
+        "51": {
+          "games": 26,
+          "wins": 7,
+          "id": "Caitlyn",
+          "name": "Caitlyn"
+        },
+        "53": {
+          "games": 1,
+          "wins": 1,
+          "id": "Blitzcrank",
+          "name": "Blitzcrank"
+        },
+        "57": {
+          "games": 2,
+          "wins": 1,
+          "id": "Maokai",
+          "name": "Maokai"
+        },
+        "64": {
+          "games": 2,
+          "wins": 1,
+          "id": "LeeSin",
+          "name": "Lee Sin"
+        },
+        "67": {
+          "games": 1,
+          "wins": 0,
+          "id": "Vayne",
+          "name": "Vayne"
+        },
+        "76": {
+          "games": 1,
+          "wins": 0,
+          "id": "Nidalee",
+          "name": "Nidalee"
+        },
+        "115": {
+          "games": 1,
+          "wins": 1,
+          "id": "Ziggs",
+          "name": "Ziggs"
+        },
+        "201": {
+          "games": 1,
+          "wins": 1,
+          "id": "Braum",
+          "name": "Braum"
+        },
+        "222": {
+          "games": 2,
+          "wins": 1,
+          "id": "Jinx",
+          "name": "Jinx"
+        },
+        "555": {
+          "games": 2,
+          "wins": 0,
+          "id": "Pyke",
+          "name": "Pyke"
+        }
+      },
+      "lastGameStartTimestamp": 1780024597839,
+      "lastMatchId": "LA2_1598722412"
+    }
+  }
+}
