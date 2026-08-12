@@ -16,6 +16,8 @@ const RECENT_RESULT_COUNT = 5;
 const DUO_LOOKBACK_MATCHES = 400;
 /** A spectator session older than this is treated as finished but unlinked. */
 const LIVE_SESSION_MAX_AGE_MS = 3 * 60 * 60 * 1_000;
+/** Generous slack over the one-minute tick that writes these observations. */
+const PLACE_DELTA_LOOKBACK_MS = 6 * 60 * 60 * 1_000;
 
 type RecentRow = { player_id: string; won: number; game_start_timestamp: number };
 type ObservationRow = { player_id: string; tier: string; division: string; league_points: number };
@@ -32,11 +34,21 @@ type LiveRow = {
 async function readRecentResults(d1: Awaited<ReturnType<typeof getD1>>, playerIds: readonly string[]) {
   const byPlayer = new Map<string, boolean[]>();
   const rows = await d1.prepare(
+    // Ranked inside the query rather than in the loop below. This used to select
+    // every row for these players — 1,214 of them, growing with the season — sort
+    // them, ship them all across, and then keep five per player. On a reader's
+    // request, whose cost then rose with the whole history: the same shape that
+    // had `/api/leaderboard` answering 503 twice in five.
     `SELECT player_id, won, game_start_timestamp
-     FROM player_match_stats
-     WHERE player_id IN (SELECT value FROM json_each(?1))
+     FROM (
+       SELECT player_id, won, game_start_timestamp,
+              ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY game_start_timestamp DESC) AS recency
+       FROM player_match_stats
+       WHERE player_id IN (SELECT value FROM json_each(?1))
+     )
+     WHERE recency <= ?2
      ORDER BY player_id, game_start_timestamp DESC`,
-  ).bind(JSON.stringify(playerIds)).all<RecentRow>();
+  ).bind(JSON.stringify(playerIds), RECENT_RESULT_COUNT).all<RecentRow>();
 
   for (const row of rows.results ?? []) {
     const current = byPlayer.get(row.player_id) ?? [];
@@ -112,17 +124,27 @@ async function readPlaceDeltas(
   d1: Awaited<ReturnType<typeof getD1>>,
   players: readonly PlayerSnapshot[],
   rankScoreOf: (input: Pick<PlayerSnapshot, "tier" | "division" | "leaguePoints">) => number,
+  now: number,
 ) {
+  // Windowed, because this reads the fastest-growing table in the schema: the
+  // tracker adds nine rows a minute, some thirteen thousand a day. Unbounded, it
+  // scanned all of them twice — once for the MAX, once to group — on every
+  // request to /api/leaderboard, so a reader's cost climbed all day. The
+  // observation it wants is the previous tick's, minutes old; hours of slack is
+  // already far more than it can need.
+  const since = now - PLACE_DELTA_LOOKBACK_MS;
   const rows = await d1.prepare(
     `SELECT o.player_id, o.tier, o.division, o.league_points
      FROM rank_observations o
      JOIN (
        SELECT player_id, MAX(observed_at) AS observed_at
        FROM rank_observations
-       WHERE observed_at < (SELECT MAX(observed_at) FROM rank_observations)
+       WHERE observed_at > ?1
+         AND observed_at < (SELECT MAX(observed_at) FROM rank_observations WHERE observed_at > ?1)
        GROUP BY player_id
-     ) previous ON previous.player_id = o.player_id AND previous.observed_at = o.observed_at`,
-  ).all<ObservationRow>();
+     ) previous ON previous.player_id = o.player_id AND previous.observed_at = o.observed_at
+     WHERE o.observed_at > ?1`,
+  ).bind(since).all<ObservationRow>();
 
   const previous = rows.results ?? [];
   if (previous.length < 2) return new Map<string, number>();
@@ -175,7 +197,7 @@ export async function enrichPlayers(
   const [recentResults, habitualDuos, placeDeltas, liveGames] = await Promise.all([
     readRecentResults(d1, playerIds).catch(() => new Map<string, boolean[]>()),
     readHabitualDuos(d1, players).catch(() => new Map<string, HabitualDuo>()),
-    readPlaceDeltas(d1, players, rankScoreOf).catch(() => new Map<string, number>()),
+    readPlaceDeltas(d1, players, rankScoreOf, now).catch(() => new Map<string, number>()),
     readLiveGames(d1, playerIds, now).catch(() => new Map<string, LiveGame>()),
   ]);
 

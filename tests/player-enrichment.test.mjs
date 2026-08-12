@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { aggregateHabitualDuos } from "../lib/habitual-duos.ts";
@@ -49,4 +50,32 @@ test("calculates movement from the ranked current order", () => {
 
   assert.equal(deltas.get("falling"), -2);
   assert.equal(deltas.get("rising"), 1);
+});
+
+test("bounds every enrichment query so a reader's cost cannot grow with history", async () => {
+  // Each of these runs on every request to /api/leaderboard. One of them used to
+  // select every row for the roster — 1,214 and climbing — sort them, ship them
+  // across and then keep five per player; another grouped the whole season
+  // before taking its window. Both had the endpoint answering 503, and both grew
+  // worse every five minutes as the backfill ran. Nothing here may be unbounded.
+  const source = (await readFile(new URL("../db/player-enrichment.ts", import.meta.url), "utf8"))
+    .replace(/\r\n/g, "\n");
+
+  const queries = source.split("d1.prepare(").slice(1);
+  assert.equal(queries.length, 4, "expected four enrichment queries");
+
+  for (const query of queries) {
+    const sql = query.slice(0, query.indexOf("`,", query.indexOf("`")) + 1);
+    const bounded = /\bLIMIT\b/.test(sql) || /ROW_NUMBER\(\)/.test(sql) || /_at > \?/.test(sql);
+    assert.ok(bounded, `an enrichment query has no bound on how much it reads:\n${sql.slice(0, 160)}`);
+  }
+
+  // And the dedup must group the window, not the table: GROUP BY has to sit
+  // outside the LIMIT's subquery, never around the unbounded join.
+  const duo = queries.find((query) => query.includes("GROUP BY"));
+  assert.ok(duo, "the duo query must still deduplicate");
+  assert.ok(
+    duo.indexOf("LIMIT") < duo.indexOf("GROUP BY"),
+    "GROUP BY must run on the limited window, not before it",
+  );
 });
