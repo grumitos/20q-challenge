@@ -65,8 +65,14 @@ async function readHabitualDuos(
     // every duo tally. Grouping collapses them, and MIN(source) makes the
     // indexed row win — SQLite carries the bare columns from the row that
     // produced the minimum, and that row has the fuller participant list.
-    `SELECT player_id, activity_id, participants, MIN(source) AS source, activity_started_at
+    // The dedup groups the window, not the table. Grouping outside the LIMIT made
+    // SQLite collapse every indexed match before taking the most recent few, so
+    // the cost of a reader's request grew with the whole season's history — at
+    // 875 matches it was exceeding the CPU allowance on two requests in five.
+    `SELECT player_id, activity_id, participants, MIN(source) AS source
      FROM (
+       SELECT player_id, activity_id, participants, source, activity_started_at
+       FROM (
        SELECT s.player_id,
               m.match_id AS activity_id,
               m.participants,
@@ -87,10 +93,11 @@ async function readHabitualDuos(
        WHERE t.player_id IN (SELECT value FROM json_each(?1))
          AND t.status IN ('active', 'ended_waiting_match', 'linked')
          AND t.participants IS NOT NULL
+       )
+       ORDER BY activity_started_at DESC
+       LIMIT ?2
      )
-     GROUP BY player_id, activity_id
-     ORDER BY activity_started_at DESC
-     LIMIT ?2`,
+     GROUP BY player_id, activity_id`,
   ).bind(JSON.stringify(players.map((player) => player.id)), DUO_LOOKBACK_MATCHES * players.length * 2)
     .all<HabitualDuoRow>();
 
