@@ -105,7 +105,8 @@ const awayTabFollowUps: Record<string, string> = {
 /** Roughly what a browser tab shows before it truncates. Titles at or under
     this are left still; longer ones scroll so they can be read in full. */
 const AWAY_TITLE_VISIBLE_CHARS = 22;
-const AWAY_TITLE_SCROLL_MS = 320;
+/** Long enough to read a line before it cuts to the other half. */
+const AWAY_TITLE_FRAME_MS = 2_200;
 
 const tierLabels: Record<RankTier, string> = {
   IRON: "Hierro",
@@ -1146,18 +1147,17 @@ export default function Home() {
       const title = nextTitle();
       document.title = title;
       if (title.length <= AWAY_TITLE_VISIBLE_CHARS) return;
-      // Slides just far enough to reveal the tail, then comes back — no wrap.
-      // A full rotation reads as noise in a tab that narrow; a nudge and a
-      // return reads as one sentence.
-      const furthest = title.length - AWAY_TITLE_VISIBLE_CHARS;
-      let offset = 0;
-      let step = 1;
+      // Two views, held long enough to read, rather than a scroll. `document.title`
+      // can only change a whole character at a time, so nothing sliding through it
+      // is ever smooth — stepping one letter every third of a second read as a
+      // slideshow. Cutting to the tail and back is the same information, and a cut
+      // is not a stutter.
+      const frames = [title, `…${title.slice(-(AWAY_TITLE_VISIBLE_CHARS - 1))}`];
+      let frame = 0;
       scroll = window.setInterval(() => {
-        offset += step;
-        if (offset >= furthest) { offset = furthest; step = -1; }
-        else if (offset <= 0) { offset = 0; step = 1; }
-        document.title = title.slice(offset);
-      }, AWAY_TITLE_SCROLL_MS);
+        frame = (frame + 1) % frames.length;
+        document.title = frames[frame]!;
+      }, AWAY_TITLE_FRAME_MS);
     };
     const restoreTitle = () => {
       if (!isAway) return;
