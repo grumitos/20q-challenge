@@ -91,6 +91,17 @@ const awayTabTitles = [
   "API API...",
 ] as const;
 
+/**
+ * A title that sets up the next one. When the key is drawn, its value comes up
+ * on the following tab-away and then the bag carries on as normal — the pair
+ * reads as one line delivered across two glances, which is the joke.
+ *
+ * Follow-ups are not in the bag: they only ever arrive behind their setup.
+ */
+const awayTabFollowUps: Record<string, string> = {
+  "Bienvenidos a los juegos de Gaspi": "de Gaspi",
+};
+
 /** Roughly what a browser tab shows before it truncates. Titles at or under
     this are left still; longer ones scroll so they can be read in full. */
 const AWAY_TITLE_VISIBLE_CHARS = 22;
@@ -1108,10 +1119,18 @@ export default function Home() {
     // had shown them all, so the bag empties before it is refilled and a whole
     // session's worth of tab-aways works through the list instead.
     let bag: string[] = [];
+    let pending: string | null = null;
     const nextTitle = () => {
+      if (pending !== null) {
+        const followUp = pending;
+        pending = null;
+        return followUp;
+      }
       if (bag.length === 0) bag = [...awayTabTitles];
       const index = Math.floor(Math.random() * bag.length);
-      return bag.splice(index, 1)[0]!;
+      const title = bag.splice(index, 1)[0]!;
+      pending = awayTabFollowUps[title] ?? null;
+      return title;
     };
     // A tab is a few characters wide, so the browser truncates anything longer
     // and the joke lands half-told. Rotating the string past that window lets it
