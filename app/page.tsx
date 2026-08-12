@@ -107,11 +107,12 @@ const awayTabFollowUps: Record<string, string> = {
     Erring high is the safe direction: it shortens the travel, and the cost of
     guessing high is a nudge rather than a march. */
 const AWAY_TITLE_VISIBLE_CHARS = 28;
-/** Fast enough to read as motion. The reference implementations step every
-    300ms, which in a tab reads as a slideshow rather than a scroll. */
-const AWAY_TITLE_SCROLL_MS = 90;
-/** Hard ceiling on the travel, whatever the estimate above turns out to be. */
-const AWAY_TITLE_MAX_TRAVEL = 6;
+/** Fast enough to read as motion rather than as steps. The reference
+    implementations use 300ms, which in a tab is a slideshow. */
+const AWAY_TITLE_SCROLL_MS = 50;
+/** Hard ceiling on the travel. Three is a shift, not a journey: past that the
+    tail is already visible on any real tab and the extra ticks just wobble. */
+const AWAY_TITLE_MAX_TRAVEL = 3;
 
 const tierLabels: Record<RankTier, string> = {
   IRON: "Hierro",
