@@ -17,7 +17,10 @@ const DUO_LOOKBACK_MATCHES = 400;
 /** A spectator session older than this is treated as finished but unlinked. */
 const LIVE_SESSION_MAX_AGE_MS = 3 * 60 * 60 * 1_000;
 /** Generous slack over the one-minute tick that writes these observations. */
-const PLACE_DELTA_LOOKBACK_MS = 6 * 60 * 60 * 1_000;
+const PLACE_DELTA_LOOKBACK_MS = 20 * 60 * 1_000;
+/** Bounds the *scan*, not just the rows returned. Five matches back is days at
+    most; without this the window function still sorted the whole table. */
+const RECENT_RESULT_LOOKBACK_MS = 45 * 24 * 60 * 60 * 1_000;
 
 type RecentRow = { player_id: string; won: number; game_start_timestamp: number };
 type ObservationRow = { player_id: string; tier: string; division: string; league_points: number };
@@ -31,7 +34,7 @@ type LiveRow = {
 };
 
 /** Last five ranked results per player, ordered oldest to newest. */
-async function readRecentResults(d1: Awaited<ReturnType<typeof getD1>>, playerIds: readonly string[]) {
+async function readRecentResults(d1: Awaited<ReturnType<typeof getD1>>, playerIds: readonly string[], now: number) {
   const byPlayer = new Map<string, boolean[]>();
   const rows = await d1.prepare(
     // Ranked inside the query rather than in the loop below. This used to select
@@ -45,10 +48,11 @@ async function readRecentResults(d1: Awaited<ReturnType<typeof getD1>>, playerId
               ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY game_start_timestamp DESC) AS recency
        FROM player_match_stats
        WHERE player_id IN (SELECT value FROM json_each(?1))
+         AND game_start_timestamp > ?3
      )
      WHERE recency <= ?2
      ORDER BY player_id, game_start_timestamp DESC`,
-  ).bind(JSON.stringify(playerIds), RECENT_RESULT_COUNT).all<RecentRow>();
+  ).bind(JSON.stringify(playerIds), RECENT_RESULT_COUNT, now - RECENT_RESULT_LOOKBACK_MS).all<RecentRow>();
 
   for (const row of rows.results ?? []) {
     const current = byPlayer.get(row.player_id) ?? [];
@@ -195,7 +199,7 @@ export async function enrichPlayers(
 
   const playerIds = players.map((player) => player.id);
   const [recentResults, habitualDuos, placeDeltas, liveGames] = await Promise.all([
-    readRecentResults(d1, playerIds).catch(() => new Map<string, boolean[]>()),
+    readRecentResults(d1, playerIds, now).catch(() => new Map<string, boolean[]>()),
     readHabitualDuos(d1, players).catch(() => new Map<string, HabitualDuo>()),
     readPlaceDeltas(d1, players, rankScoreOf, now).catch(() => new Map<string, number>()),
     readLiveGames(d1, playerIds, now).catch(() => new Map<string, LiveGame>()),
