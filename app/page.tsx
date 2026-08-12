@@ -91,6 +91,11 @@ const awayTabTitles = [
   "API API...",
 ] as const;
 
+/** Roughly what a browser tab shows before it truncates. Titles at or under
+    this are left still; longer ones scroll so they can be read in full. */
+const AWAY_TITLE_VISIBLE_CHARS = 22;
+const AWAY_TITLE_SCROLL_MS = 320;
+
 const tierLabels: Record<RankTier, string> = {
   IRON: "Hierro",
   BRONZE: "Bronce",
@@ -1108,14 +1113,37 @@ export default function Home() {
       const index = Math.floor(Math.random() * bag.length);
       return bag.splice(index, 1)[0]!;
     };
+    // A tab is a few characters wide, so the browser truncates anything longer
+    // and the joke lands half-told. Rotating the string past that window lets it
+    // read all the way through; short titles fit and are left alone.
+    let scroll: number | undefined;
+    const stopScrolling = () => {
+      if (scroll !== undefined) window.clearInterval(scroll);
+      scroll = undefined;
+    };
     const markAway = () => {
       if (isAway) return;
       isAway = true;
-      document.title = nextTitle();
+      const title = nextTitle();
+      document.title = title;
+      if (title.length <= AWAY_TITLE_VISIBLE_CHARS) return;
+      // Slides just far enough to reveal the tail, then comes back — no wrap.
+      // A full rotation reads as noise in a tab that narrow; a nudge and a
+      // return reads as one sentence.
+      const furthest = title.length - AWAY_TITLE_VISIBLE_CHARS;
+      let offset = 0;
+      let step = 1;
+      scroll = window.setInterval(() => {
+        offset += step;
+        if (offset >= furthest) { offset = furthest; step = -1; }
+        else if (offset <= 0) { offset = 0; step = 1; }
+        document.title = title.slice(offset);
+      }, AWAY_TITLE_SCROLL_MS);
     };
     const restoreTitle = () => {
       if (!isAway) return;
       isAway = false;
+      stopScrolling();
       document.title = "20Q Challenge";
     };
     const handleVisibilityChange = () => {
@@ -1127,6 +1155,7 @@ export default function Home() {
     window.addEventListener("blur", markAway);
     window.addEventListener("focus", restoreTitle);
     return () => {
+      stopScrolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", markAway);
       window.removeEventListener("focus", restoreTitle);
