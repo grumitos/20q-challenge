@@ -38,7 +38,14 @@ type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<
 const RIOT_REQUEST_CONCURRENCY = 3;
 const SEASON_START_TIMESTAMP_MS = Date.UTC(2026, 0, 8, 15);
 const FORWARD_MATCH_BATCH_SIZE = 10;
-const BACKFILL_BATCH_SIZE = 10;
+/** Ten payloads is 7.6 ms of parsing at the rate measured for this runtime
+    (0.76 ms per 50 KiB), on a 10 ms per-invocation CPU allowance — over budget
+    before the lane's own snapshot rewrite. Three is 2.3 ms median and 5.6 ms
+    worst, which leaves room for the rest of the run. The batch resumes across
+    runs, so this costs elapsed time and not completeness; `backfillIds.size <
+    BACKFILL_BATCH_SIZE` below reads it as "a short page means we are done", so
+    the two uses stay consistent when this moves. */
+const BACKFILL_BATCH_SIZE = 3;
 const BACKFILL_PLAYERS_PER_REFRESH = 1;
 
 export const RIOT_PLAYERS: PlayerIdentity[] = [
@@ -569,7 +576,15 @@ async function refreshSeasonAnalytics(
       const cutoff = cutoffs.get(player.id);
       const backfillStart = player.analytics.backfillStartTimestamp;
       const backfillBefore = player.analytics.backfillBeforeTimestamp;
-      const shouldBackfill = backfillPlayerIds.has(player.id) &&
+      // Only the backfill lane backfills. The forward lane used to do it too —
+      // `mode` gated the forward scan but never this — so the twice-hourly
+      // analytics refresh quietly carried a batch of ten extra match payloads
+      // on top of its own work. Ten payloads is 7.6 ms of parsing at the rate
+      // measured for this runtime, against a 10 ms per-invocation allowance, so
+      // the lane was over budget by construction and 1102'd; and because it dies
+      // before advancing its cutoff, the next run inherited the same batch and
+      // failed identically. That is the trap this file already learned once.
+      const shouldBackfill = mode === "backfill" && backfillPlayerIds.has(player.id) &&
         typeof backfillStart === "number" && typeof backfillBefore === "number" && backfillBefore > backfillStart;
       const forwardIds = mode === "backfill" ? [] : await fetchSeasonMatchIds(
         player.puuid,
@@ -676,7 +691,11 @@ async function refreshSeasonAnalytics(
       if (typeof info?.gameStartTimestamp !== "number") return [];
       return [info.gameStartTimestamp];
     });
-    if (!backfillPlayerIds.has(player.id)) continue;
+    // Only the lane that actually ran a batch may conclude anything about its
+    // progress. Without the mode guard the forward lane, which no longer
+    // requests backfill ids, read its own empty result as a short page and
+    // marked the player's season complete — silently abandoning the backfill.
+    if (mode !== "backfill" || !backfillPlayerIds.has(player.id)) continue;
     if (request.backfillIds.size < BACKFILL_BATCH_SIZE || timestamps.length === 0) {
       player.analytics.backfillStatus = "complete";
       player.analytics.backfillStartTimestamp = undefined;

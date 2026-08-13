@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fetchRiotLeaderboard, fetchRiotPlayer, inferLeaguePointsChange, normalizePersistedSoloQueueMatch, normalizeSoloQueueMatch, RIOT_PLAYERS, RiotApiError } from "../lib/riot-client.ts";
+import { backfillSeasonAnalytics, fetchRiotLeaderboard, fetchRiotPlayer, inferLeaguePointsChange, normalizePersistedSoloQueueMatch, normalizeSoloQueueMatch, RIOT_PLAYERS, RiotApiError } from "../lib/riot-client.ts";
 import { createDemoSnapshot } from "../lib/leaderboard.ts";
 
 test("tracks all nine challenge Riot IDs", () => {
@@ -164,8 +164,11 @@ test("backfills a new player's season in rate-limit-safe batches", async () => {
     if (url.includes("/matches/by-puuid/puuid-mamimu/ids")) {
       const params = new URL(url).searchParams;
       if (!params.has("endTime")) return Response.json([]);
-      const start = mamimuIdRequests * 10;
-      const length = mamimuIdRequests === 0 ? 10 : 1;
+      // Honour the page size the caller asked for, so the batch constant is
+      // what this test measures rather than a number baked into the fake.
+      const pageSize = Number(params.get("count") ?? 10);
+      const start = mamimuIdRequests * pageSize;
+      const length = mamimuIdRequests === 0 ? pageSize : 1;
       mamimuIdRequests += 1;
       return Response.json(Array.from({ length }, (_, index) => `LA2_MAMIMU_${start + index}`));
     }
@@ -197,37 +200,54 @@ test("backfills a new player's season in rate-limit-safe batches", async () => {
     return new Response(null, { status: 404 });
   };
 
+  // The forward lane enrols a new player for backfill but must not drain it:
+  // carrying a batch of match payloads on top of its own scan is what put this
+  // lane over the 10 ms CPU allowance and had it answering 1102 twice an hour,
+  // with the kill landing before the cutoff advanced so the next run inherited
+  // the identical batch. `backfillSeasonAnalytics` exists to own that work.
   const firstSnapshot = await fetchRiotLeaderboard("secret-key", fakeFetch, new Date("2026-07-19T01:00:00Z"), undefined, undefined, 500);
-  const mamimu = firstSnapshot.players.find((player) => player.id === "mamimu");
+  const enrolled = firstSnapshot.players.find((player) => player.id === "mamimu");
+
+  assert.ok(enrolled);
+  assert.equal(mamimuMatchDetails, 0, "the forward lane must not download a backfill batch");
+  assert.equal(enrolled.analytics.backfillStatus, "in_progress");
+
+  const firstBatch = await backfillSeasonAnalytics(firstSnapshot, "secret-key", fakeFetch, new Date("2026-07-19T01:01:00Z"), 500);
+  assert.ok(firstBatch);
+  const mamimu = firstBatch.snapshot.players.find((player) => player.id === "mamimu");
 
   assert.ok(mamimu);
-  assert.equal(mamimu.analytics.games, 10);
-  assert.equal(mamimuMatchDetails, 10);
+  assert.equal(mamimu.analytics.games, 3);
+  assert.equal(mamimuMatchDetails, 3, "a batch is sized to fit the CPU allowance, not the id page");
   assert.equal(mamimu.analytics.backfillStatus, "in_progress");
   assert.equal(mamimu.analytics.backfillStartTimestamp, Date.UTC(2026, 0, 8, 15));
   assert.ok(mamimu.analytics.backfillBeforeTimestamp > Date.UTC(2026, 0, 8, 15));
 
+  // A short page means the season is exhausted, so the next batch completes it.
+  // Only one player is backfilled per run, picked by fewest games — mamimu now
+  // has three, so the slot would rotate to someone else. Retire the others to
+  // keep this test on its own subject: the batch size and the completion rule.
   mamimuMatchDetails = 0;
-  const intermediateSnapshot = await fetchRiotLeaderboard(
+  const soloSnapshot = {
+    ...firstBatch.snapshot,
+    players: firstBatch.snapshot.players.map((player) => player.id === "mamimu" ? player : {
+      ...player,
+      analytics: { ...player.analytics, backfillStatus: "complete" },
+    }),
+  };
+  const completedBatch = await backfillSeasonAnalytics(
+    soloSnapshot,
     "secret-key",
     fakeFetch,
     new Date("2026-07-19T01:02:00Z"),
-    firstSnapshot,
-    undefined,
     500,
   );
-  const completedSnapshot = await fetchRiotLeaderboard(
-    "secret-key",
-    fakeFetch,
-    new Date("2026-07-19T01:04:00Z"),
-    intermediateSnapshot,
-    undefined,
-    500,
-  );
-  const completedMamimu = completedSnapshot.players.find((player) => player.id === "mamimu");
+  assert.ok(completedBatch);
+  const completedMamimu = completedBatch.snapshot.players.find((player) => player.id === "mamimu");
 
   assert.ok(completedMamimu);
-  assert.equal(completedMamimu.analytics.games, 11);
+  assert.equal(mamimuMatchDetails, 1);
+  assert.equal(completedMamimu.analytics.games, 4);
   assert.equal(completedMamimu.analytics.backfillStatus, "complete");
   assert.equal(completedMamimu.analytics.backfillStartTimestamp, undefined);
   assert.equal(completedMamimu.analytics.backfillBeforeTimestamp, 0);
@@ -454,8 +474,16 @@ test("checks recent matches even when a cached player still needs historical bac
 
   assert.ok(mamimu);
   assert.ok(requestedMamimuIdUrls.some((url) => !new URL(url).searchParams.has("endTime")), "forward cursor must always run");
-  assert.ok(requestedMamimuIdUrls.some((url) => new URL(url).searchParams.has("endTime")), "backfill cursor must run independently");
-  assert.equal(mamimu.analytics.backfillStatus, "complete");
+  // This used to assert the backfill cursor ran here too. It did, and that was
+  // the defect: the forward lane carried a batch of match payloads on top of
+  // its own scan, over the 10 ms CPU allowance, and died before advancing the
+  // cutoff so the next run inherited the same batch. The lanes are separate now
+  // — this one enrols the player and `backfillSeasonAnalytics` drains them.
+  assert.equal(
+    requestedMamimuIdUrls.some((url) => new URL(url).searchParams.has("endTime")), false,
+    "the forward lane must not run the backfill cursor",
+  );
+  assert.equal(mamimu.analytics.backfillStatus, "in_progress", "but it must still enrol the player");
 });
 
 test("keeps a same-match PL delta pending instead of persisting a synthetic zero", () => {

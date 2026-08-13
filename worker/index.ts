@@ -54,7 +54,12 @@ async function runSeasonBackfill(env: Env, now: number) {
   // rewrites the entire cached snapshot from the copy it read at the start of
   // its run, so a backfill that overlapped it had its batch overwritten. They
   // must never hold the cache at the same time.
-  if (!await store.acquireLease("lp-tracker", owner, now, 2 * 60_000)) return;
+  // Ninety seconds, matching the tracker's own TTL, because nothing renews this
+  // one either. A backfill killed for exceeding its CPU budget never releases,
+  // and it holds the *tracker's* lane while it sits there — two minutes of that
+  // is two skipped tracker ticks every time, which is most of the four-minute
+  // window the live-game card is allowed to go unconfirmed.
+  if (!await store.acquireLease("lp-tracker", owner, now, 90_000)) return;
   try {
     await refreshSeasonBackfill(apiKey, now);
   } finally {

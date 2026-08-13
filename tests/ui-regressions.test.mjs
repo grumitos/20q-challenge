@@ -522,6 +522,13 @@ test("writes a match as two 20px lines instead of one long one", async () => {
   assert.match(page, /className="match-outcome"/);
   assert.match(page, /<small className=\{`match-when\$\{stale \? " is-stale" : ""\}`\}>hace \{formattedMatchAge\(match\.gameStartTimestamp\)\}<\/small>/);
   assert.doesNotMatch(page, /formattedMatchDuration\(match\.durationSeconds\).*formattedMatchAge/);
+  // The age reads "hace 20m" / "hace 3h" / "hace 1d": one letter, joined to its
+  // number. The space used to let a long age wrap away from the value.
+  const age = page.slice(page.indexOf("function formattedMatchAge"));
+  assert.match(age, /\$\{elapsedMinutes\}m`/);
+  assert.match(age, /\$\{elapsedHours\}h`/);
+  assert.match(age, /\/ 24\)\}d`/);
+  assert.doesNotMatch(age.slice(0, age.indexOf("}")), / (min|h|d)`/);
   assert.doesNotMatch(page, /match-headline|match-stats/);
   assert.doesNotMatch(css, /\.match-headline|\.match-stats/);
   // The KDA rides inside the score, so line 2 is one flex pair and not three.

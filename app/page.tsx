@@ -230,11 +230,14 @@ function formattedUpdate(iso: string) {
 
 function formattedMatchAge(timestamp: number) {
   const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60_000));
+  // One letter, joined to the number: "hace 20m", not "hace 20 min". The unit
+  // carries no information the letter does not, and the space let a long age
+  // wrap away from its number.
   if (elapsedMinutes < 1) return "ahora";
-  if (elapsedMinutes < 60) return `${elapsedMinutes} min`;
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
   const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours} h`;
-  return `${Math.floor(elapsedHours / 24)} d`;
+  if (elapsedHours < 24) return `${elapsedHours}h`;
+  return `${Math.floor(elapsedHours / 24)}d`;
 }
 
 function formattedLeaguePointsChange(evidence: LpChangeEvidence) {
