@@ -143,9 +143,9 @@ test("aggregates the habitual challenge duo instead of only naming one peer", as
   assert.doesNotMatch(page, /sin dúo del grupo/);
   assert.match(enrichment, /readHabitualDuos/);
   assert.match(duoLogic, /challengePlayerId/);
-  assert.match(enrichment, /tracked_game_sessions/);
-  assert.match(enrichment, /COALESCE\(t\.match_id, t\.platform_game_id\)/);
-  assert.match(enrichment, /aggregateHabitualDuos/);
+  assert.match(duoLogic, /tracked_game_sessions/);
+  assert.match(duoLogic, /COALESCE\(t\.match_id, t\.platform_game_id\)/);
+  assert.match(duoLogic, /pickHabitualDuos/);
 });
 
 test("gives a live game the last-match slot in a different state", async () => {

@@ -1,5 +1,5 @@
 import { getD1 } from ".";
-import { aggregateHabitualDuos, parseParticipants, type HabitualDuoRow } from "../lib/habitual-duos";
+import { HABITUAL_DUO_QUERY, parseParticipants, pickHabitualDuos, type DuoTallyRow } from "../lib/habitual-duos";
 import type { HabitualDuo, LiveGame, PlayerSnapshot } from "../lib/leaderboard";
 import { calculatePlaceDeltas } from "../lib/place-movement";
 
@@ -75,59 +75,16 @@ async function readRecentResults(d1: Awaited<ReturnType<typeof getD1>>, playerId
   return byPlayer;
 }
 
-/**
- * Counts how often each challenge member appears alongside every other member
- * across both immutable match history and tracker-linked sessions, keeping the
- * most frequent pairing.
- */
+/** Most frequent challenge-member pairing per player. */
 async function readHabitualDuos(
   d1: Awaited<ReturnType<typeof getD1>>,
   players: readonly Pick<PlayerSnapshot, "id" | "gameName">[],
 ) {
-  const rows = await d1.prepare(
-    // One game reaches this from both sides once the backfill catches up with a
-    // session the tracker watched live: indexed as a match, and still on record
-    // as a session under the same id. `UNION ALL` counted it twice and inflated
-    // every duo tally. Grouping collapses them, and MIN(source) makes the
-    // indexed row win — SQLite carries the bare columns from the row that
-    // produced the minimum, and that row has the fuller participant list.
-    // The dedup groups the window, not the table. Grouping outside the LIMIT made
-    // SQLite collapse every indexed match before taking the most recent few, so
-    // the cost of a reader's request grew with the whole season's history — at
-    // 875 matches it was exceeding the CPU allowance on two requests in five.
-    `SELECT player_id, activity_id, participants, MIN(source) AS source
-     FROM (
-       SELECT player_id, activity_id, participants, source, activity_started_at
-       FROM (
-       SELECT s.player_id,
-              m.match_id AS activity_id,
-              m.participants,
-              m.game_start_timestamp AS activity_started_at,
-              0 AS source
-       FROM player_match_stats s
-       JOIN ranked_matches m ON m.match_id = s.match_id
-       WHERE s.player_id IN (SELECT value FROM json_each(?1))
+  const rows = await d1.prepare(HABITUAL_DUO_QUERY)
+    .bind(JSON.stringify(players.map((player) => player.id)), DUO_LOOKBACK_MATCHES * players.length * 2)
+    .all<DuoTallyRow>();
 
-       UNION ALL
-
-       SELECT t.player_id,
-              COALESCE(t.match_id, t.platform_game_id) AS activity_id,
-              t.participants,
-              t.game_started_at AS activity_started_at,
-              1 AS source
-       FROM tracked_game_sessions t
-       WHERE t.player_id IN (SELECT value FROM json_each(?1))
-         AND t.status IN ('active', 'ended_waiting_match', 'linked')
-         AND t.participants IS NOT NULL
-       )
-       ORDER BY activity_started_at DESC
-       LIMIT ?2
-     )
-     GROUP BY player_id, activity_id`,
-  ).bind(JSON.stringify(players.map((player) => player.id)), DUO_LOOKBACK_MATCHES * players.length * 2)
-    .all<HabitualDuoRow>();
-
-  return aggregateHabitualDuos(rows.results ?? [], players);
+  return pickHabitualDuos(rows.results ?? [], players);
 }
 
 /**
