@@ -125,6 +125,29 @@ const worker = {
       return new Response(null, { status: 204 });
     }
 
+    // Served from the Worker's own cache when it can be. A `Cache-Control` header
+    // alone does not do this: Cloudflare does not cache dynamic responses off the
+    // header, which the absence of `cf-cache-status` made plain. So every poll
+    // from every open tab was reaching the enrichment — the failures tracked the
+    // number of viewers rather than anything about the data, which is exactly
+    // what the report of "several browsers" described.
+    //
+    // The payload is public, identical for everyone, and only changes when the
+    // cron writes it, so one invocation per window can answer everyone.
+    if (url.pathname === "/api/leaderboard" && request.method === "GET") {
+      // Absent outside the Cloudflare runtime — the test harness runs this worker
+      // under Node — and a cache is an optimisation, so its absence must not be
+      // an error.
+      const cache = typeof caches === "undefined" ? null : caches.default;
+      const cached = await cache?.match(request);
+      if (cached) return cached;
+      const response = await handler.fetch(request, env, ctx);
+      // Only a good answer is worth keeping, and `clone` because a body can be
+      // read once: the reader gets one copy, the cache the other.
+      if (cache && response.ok) ctx.waitUntil(cache.put(request, response.clone()));
+      return response;
+    }
+
     return handler.fetch(request, env, ctx);
   },
   // Kept for a Workers deployment, where crons run in-process. On Pages this

@@ -19,3 +19,12 @@ declare module "cloudflare:workers" {
     DB: D1Database;
   };
 }
+
+/**
+ * Cloudflare's own cache, which the standard `CacheStorage` type has no name
+ * for. Declared here because this project carries hand-rolled runtime shims
+ * rather than `@cloudflare/workers-types`.
+ */
+interface CacheStorage {
+  readonly default: Cache;
+}
