@@ -27,7 +27,12 @@ test("returns a safe demo leaderboard when the Riot secret is not configured", a
   const response = await render("/api/leaderboard");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/i);
-  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  // Shared at the edge on purpose: the payload is public and identical for
+  // everyone, so several viewers must not each cost an invocation. It was
+  // `private, no-store`, and the endpoint fell over once a handful of browsers
+  // had the page open at once.
+  assert.match(response.headers.get("cache-control") ?? "", /^public,/);
+  assert.match(response.headers.get("cache-control") ?? "", /s-maxage=\d+/);
 
   const payload = await response.json();
   assert.equal(payload.meta.source, "demo");

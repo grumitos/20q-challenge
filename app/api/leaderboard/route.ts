@@ -42,7 +42,14 @@ export async function GET() {
 
   return Response.json(enriched, {
     headers: {
-      "Cache-Control": "private, no-store",
+      // Cacheable at the edge, which is what makes several viewers cost the same
+      // as one. `private, no-store` meant every poll from every open tab invoked
+      // the Worker: nine players on a one-minute refresh is one visitor's worth
+      // of work, and the endpoint fell over once a handful of browsers had it
+      // open at the same time. The data is public and identical for everyone,
+      // and it only changes when the cron writes, so 30s of shared cache costs
+      // nothing in freshness and collapses the fan-out.
+      "Cache-Control": "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
       "X-Content-Type-Options": "nosniff",
     },
   });
