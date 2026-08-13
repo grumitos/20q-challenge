@@ -16,6 +16,16 @@ const RECENT_RESULT_COUNT = 5;
 const DUO_LOOKBACK_MATCHES = 400;
 /** A spectator session older than this is treated as finished but unlinked. */
 const LIVE_SESSION_MAX_AGE_MS = 3 * 60 * 60 * 1_000;
+/**
+ * "Live" has to mean the tracker saw it live recently, not that something once
+ * marked it active. A session whose row stops being written stays `active`
+ * forever: Papipu's sat on the card for an hour after the game ended, its
+ * `last_seen_at` frozen four minutes past kickoff. Why the writes stop is a
+ * separate question; this is the guard that should have been here regardless,
+ * because a card claiming a game that finished an hour ago is worse than no
+ * card. The tracker confirms every minute, so a few of them is ample slack.
+ */
+const LIVE_SESSION_CONFIRMED_WITHIN_MS = 4 * 60 * 1_000;
 /** Generous slack over the one-minute tick that writes these observations. */
 const PLACE_DELTA_LOOKBACK_MS = 20 * 60 * 1_000;
 /** Bounds the *scan*, not just the rows returned. Five matches back is days at
@@ -164,8 +174,13 @@ async function readLiveGames(d1: Awaited<ReturnType<typeof getD1>>, playerIds: r
      WHERE status = 'active'
        AND player_id IN (SELECT value FROM json_each(?1))
        AND game_started_at > ?2
+       AND last_seen_at > ?3
      ORDER BY game_started_at ASC`,
-  ).bind(JSON.stringify(playerIds), now - LIVE_SESSION_MAX_AGE_MS).all<LiveRow>();
+  ).bind(
+    JSON.stringify(playerIds),
+    now - LIVE_SESSION_MAX_AGE_MS,
+    now - LIVE_SESSION_CONFIRMED_WITHIN_MS,
+  ).all<LiveRow>();
 
   // Ordered oldest first and overwritten as we go, so the newest session wins.
   // A run killed mid-flight leaves its session `active` — that happened for
