@@ -80,47 +80,92 @@ export type MatchLpEvidence = {
   updatedAt: number;
 };
 
-type ProcessTrackerPlayerInput = {
+type AdvanceGameSessionsInput = {
+  now: number;
+  player: TrackerPlayerState;
+  observation: TrackerObservation;
+  sessions: TrackedGameSession[];
+  activeGame: ActiveSoloQueueGame | null;
+  /** Champion/roster detail for `activeGame`, already resolved to Data Dragon ids. */
+  activeGameDetail?: { championId: string; championName: string; participants: string } | null;
+};
+
+type ReconcilePlayerMatchesInput = {
   now: number;
   player: TrackerPlayerState;
   observation: TrackerObservation;
   observations: TrackerObservation[];
+  /** Already through `advanceGameSessions`. */
   sessions: TrackedGameSession[];
   candidates: ReconciliationCandidate[];
-  activeGame: ActiveSoloQueueGame | null;
-  /** Champion/roster detail for `activeGame`, already resolved to Data Dragon ids. */
-  activeGameDetail?: { championId: string; championName: string; participants: string } | null;
   recentMatches: TrackerMatch[];
 };
+
+type ProcessTrackerPlayerInput = AdvanceGameSessionsInput & ReconcilePlayerMatchesInput;
 
 const SESSION_MATCH_TOLERANCE_MS = 10 * 60 * 1_000;
 /** Caps the account lookups a single run spends catching up the roster, so a
     Riot ID that stays unresolvable cannot starve the polling budget. */
 const MAX_ENROLMENTS_PER_RUN = 3;
 
-/** One freshly finished game per player per tick — `matchIdsByRecency` puts
-    everyone's latest first, so this is exactly "everybody's newest, nobody's
-    second". A ranked game lasts a quarter of an hour, so nine players cannot
-    produce more than that between two minute ticks; anything beyond it is a
-    backlog, and draining a backlog in one invocation is what spiked the CPU
-    into answering 1102. The rest is still unknown next tick and picked up then. */
-const MATCH_DETAILS_PER_RUN = RIOT_PLAYERS.length;
+/**
+ * How many Match-V5 details one run may download and parse.
+ *
+ * This was `RIOT_PLAYERS.length`, one per player, on the reasoning that nine
+ * players cannot finish more than that between two minute ticks. True, and
+ * still beside the point: the binding limit is not how many games exist, it is
+ * that a Worker on the free plan gets **10 ms of CPU per invocation**, and
+ * parsing a match payload is the most expensive thing this run does.
+ *
+ * Measured, on a 50 KiB payload of match-v5's shape (ten participants with
+ * their stats and `challenges`): 0.76 ms median, 1.85 ms worst, per payload.
+ * Nine of them is 7.6 ms median and 11.0 ms worst — over the entire budget on
+ * that step alone, before the eighteen rank and spectator parses, the
+ * reconciliation, or the snapshot projection. Real payloads run larger than the
+ * one measured, so that is the optimistic end.
+ *
+ * Two costs ~1.5 ms median and ~3.7 ms worst, which leaves the rest of the run
+ * real headroom. Cloudflare absorbs an occasional overrun but terminates a
+ * Worker that exceeds the limit *consistently* — and a run killed before it
+ * persisted its candidates left the next run the same payloads to re-parse, so
+ * "consistently" is exactly what the old cap produced once a backlog appeared.
+ * That loop stalled the tracker for sixty-seven minutes on 2026-08-13.
+ *
+ * A backlog now drains two per tick — a nine-player roster in five minutes,
+ * against ranked games that take fifteen — so the cap costs elapsed time, not
+ * completeness.
+ */
+export const MATCH_DETAILS_PER_RUN = 2;
 
 /**
  * How long a run may hold the lane before another may take it.
  *
- * This was 55s — just under the cron interval — which quietly assumed a run
- * always finishes inside a minute. It does not: 45 requests spaced for Riot's
- * rate limit take seconds on their own, and each 429 sleeps its Retry-After on
- * top. Any run that overran let the next tick acquire and run *concurrently*,
- * doubling the Riot spend at exactly the moment the key was already throttling.
+ * This was 55s — just under the cron interval — which assumed a run always
+ * finishes inside a minute. It does not: requests spaced for Riot's rate limit
+ * take seconds on their own, and each 429 sleeps its Retry-After on top. Any run
+ * that overran let the next tick run *concurrently*, doubling the Riot spend at
+ * exactly the moment the key was already throttling.
  *
- * Nothing renews it, so it is really a crash bound: a run that ends, however
- * badly, releases the lane in its `finally`. Four minutes only costs anything
- * when a run is killed outright, and then it costs a few skipped ticks —
- * cheaper than two runs racing each other through the same budget.
+ * It was then four minutes, on the reasoning that nothing renews it so it is
+ * really a crash bound, and a crash costs only a few skipped ticks. The cost of
+ * that assumption showed up in production: a run killed for exceeding its CPU
+ * budget never reaches its `finally`, so the lane stayed leased for the full
+ * four minutes, and the tracker's effective cadence collapsed from one run a
+ * minute to one every five. Measured in D1: rank observations 297–301s apart for
+ * an hour at a stretch, and a live-game card that stayed on the board because no
+ * run was allowed to close it.
+ *
+ * So it is renewed now, at each phase boundary. That decouples the two jobs the
+ * number was doing: the TTL bounds how long a *dead* run holds the lane, while
+ * renewal is what lets a live one take as long as it legitimately needs. Ninety
+ * seconds means a killed run costs about one tick instead of four.
+ *
+ * The exposure this accepts: a run stalled on a Retry-After longer than the TTL
+ * can lose the lane to the next tick. That is bounded elsewhere and on purpose —
+ * a 429 makes the run call `blockLaneUntil`, so the lane is held shut for the
+ * rate limit's own duration by a mechanism that does not depend on this at all.
  */
-const LEASE_TTL_MS = 4 * 60_000;
+const LEASE_TTL_MS = 90_000;
 
 /** One cron tick. Long enough that a public request cannot re-drive a run that
     wrote no cache, short enough that the scheduled tick is never the one held
@@ -159,11 +204,21 @@ function nextAttempt(now: number, attempts: number) {
   return now + delays[Math.min(attempts, delays.length - 1)]!;
 }
 
-export function processTrackerPlayer(input: ProcessTrackerPlayerInput) {
-  const observations = [...input.observations, input.observation];
+/**
+ * Opens, refreshes and closes live-game sessions. Deliberately separate from the
+ * match reconciliation below, because this half needs nothing but the spectator
+ * answer the poll already has — no Match-V5 detail, no parsing, almost no CPU.
+ *
+ * That split is the whole point. Everything used to be persisted together, at
+ * the end, behind the most expensive work in the run; a Worker killed for
+ * exceeding its CPU budget had already written its rank observations and had
+ * not yet written any of this, so a session stayed `active` with a frozen
+ * `last_seen_at` until some later run survived long enough to close it. Papipu's
+ * card advertised a finished game for sixty-seven minutes that way. Persisting
+ * this first means a kill can no longer strand the board's live state.
+ */
+export function advanceGameSessions(input: AdvanceGameSessionsInput) {
   let sessions = input.sessions.map((session) => ({ ...session }));
-  let candidates = input.candidates.map((candidate) => ({ ...candidate }));
-  const evidence: MatchLpEvidence[] = [];
 
   if (input.activeGame) {
     const active = sessions.find((session) =>
@@ -200,6 +255,18 @@ export function processTrackerPlayer(input: ProcessTrackerPlayerInput) {
       ? { ...session, status: "ended_waiting_match" as const, endedDetectedAt: input.now, updatedAt: input.now }
       : session);
   }
+
+  return sessions;
+}
+
+/** Links closed sessions to their Match-V5 detail and drives reconciliation.
+    Everything here depends on `recentMatches`, so it can only run after the
+    expensive half of the poll — see `advanceGameSessions` for why that matters. */
+export function reconcilePlayerMatches(input: ReconcilePlayerMatchesInput) {
+  const observations = [...input.observations, input.observation];
+  const sessions = input.sessions.map((session) => ({ ...session }));
+  let candidates = input.candidates.map((candidate) => ({ ...candidate }));
+  const evidence: MatchLpEvidence[] = [];
 
   for (const session of sessions.filter((entry) => entry.status === "ended_waiting_match")) {
     const match = input.recentMatches.find((candidate) => {
@@ -361,6 +428,12 @@ export function processTrackerPlayer(input: ProcessTrackerPlayerInput) {
   return { sessions, candidates, evidence };
 }
 
+/** Both halves in order, which is what a caller wants when it is not trying to
+    persist between them. `runTemporalLpTracker` is the one that is. */
+export function processTrackerPlayer(input: ProcessTrackerPlayerInput) {
+  return reconcilePlayerMatches({ ...input, sessions: advanceGameSessions(input) });
+}
+
 export async function runTemporalLpTracker(options: {
   store: LpTrackerStore;
   apiKey: string;
@@ -394,6 +467,16 @@ export async function runTemporalLpTracker(options: {
   let evidenceWritten = 0;
   let outcome = "incomplete";
   let failure: string | null = null;
+  /** Pushes the lane's expiry out, so the short TTL bounds how long a *dead* run
+      holds it without bounding how long a live one may take. Best-effort: losing
+      a renewal costs a skipped tick, and throwing here would cost the run. */
+  const renewLease = async () => {
+    try {
+      await options.store.renewLease(leaseName, owner, Date.now() + LEASE_TTL_MS);
+    } catch {
+      // Nothing persisted depends on this.
+    }
+  };
   /** Labels how the run ended for the structured log, without touching what the
       caller receives. */
   const finish = <T>(label: string, result: T) => {
@@ -472,24 +555,6 @@ export async function runTemporalLpTracker(options: {
     await options.store.insertRankObservations(observations);
     observationsInserted = observations.length;
 
-    const knownMatchIds = new Set([
-      ...state.candidates.map((candidate) => candidate.matchId),
-      ...state.sessions.flatMap((session) => session.matchId ? [session.matchId] : []),
-    ]);
-    const matchIdsByRecency = Array.from({ length: 3 }, (_, index) =>
-      polled.flatMap((entry) => entry.matchIds[index] ? [entry.matchIds[index]] : []),
-    ).flat();
-    // Capped, not just budgeted. A ranked game lasts a quarter of an hour, so
-    // nine players cannot finish more than a couple between two minute ticks —
-    // anything beyond that is a backlog, and draining it in one invocation is
-    // what produced the CPU spikes that answered 1102. The remainder is not
-    // lost: it is still unknown next tick, and gets picked up then.
-    const requestedIds = [...new Set(matchIdsByRecency)]
-      .filter((matchId) => !knownMatchIds.has(matchId))
-      .slice(0, Math.min(MATCH_DETAILS_PER_RUN, api.requestsRemaining));
-    const matches = (await mapWithConcurrency(requestedIds, 3, (matchId) => api.fetchMatchById(matchId)))
-      .filter((match): match is TrackerMatch => match !== null);
-
     // Resolve spectator champion keys once per run so a live game can be shown
     // with its champion and roster instead of only being flagged as active.
     const liveDetails = new Map<string, { championId: string; championName: string; participants: string }>();
@@ -537,23 +602,63 @@ export async function runTemporalLpTracker(options: {
       }
     }
 
+    // ── Cheap phase, persisted before anything expensive runs ──
+    // Opening and closing live sessions needs only the spectator answer already
+    // in `polled`. Writing it here, rather than with everything else at the end,
+    // is what stops a Worker killed for CPU from leaving a finished game on the
+    // board: the state the reader renders is durable before the run puts itself
+    // at risk. See `advanceGameSessions`.
+    const advanced = new Map<string, TrackedGameSession[]>();
+    for (const entry of polled) {
+      const observation = observations.find((candidate) => candidate.playerId === entry.player.playerId);
+      if (!observation) continue;
+      advanced.set(entry.player.playerId, advanceGameSessions({
+        now: options.now,
+        player: entry.player,
+        observation,
+        sessions: state.sessions.filter((candidate) => candidate.playerId === entry.player.playerId),
+        activeGame: entry.activeGame,
+        activeGameDetail: liveDetails.get(entry.player.playerId) ?? null,
+      }));
+    }
+    const liveSessions = [...advanced.values()].flat();
+    await options.store.upsertGameSessions(liveSessions);
+    await renewLease();
+
+    // ── Expensive phase ──
+    const knownMatchIds = new Set([
+      ...state.candidates.map((candidate) => candidate.matchId),
+      ...state.sessions.flatMap((session) => session.matchId ? [session.matchId] : []),
+    ]);
+    const matchIdsByRecency = Array.from({ length: 3 }, (_, index) =>
+      polled.flatMap((entry) => entry.matchIds[index] ? [entry.matchIds[index]] : []),
+    ).flat();
+    // `matchIdsByRecency` puts every player's newest first, so this cap always
+    // takes newest-first across the roster and never a second before everyone
+    // has had a first. The remainder is not lost: it is still unknown next tick.
+    const requestedIds = [...new Set(matchIdsByRecency)]
+      .filter((matchId) => !knownMatchIds.has(matchId))
+      .slice(0, Math.min(MATCH_DETAILS_PER_RUN, api.requestsRemaining));
+    const matches = (await mapWithConcurrency(requestedIds, 3, (matchId) => api.fetchMatchById(matchId)))
+      .filter((match): match is TrackerMatch => match !== null);
+    await renewLease();
+
     const allSessions: TrackedGameSession[] = [];
     const allCandidates: ReconciliationCandidate[] = [];
     const allEvidence: MatchLpEvidence[] = [];
     for (const entry of polled) {
       const observation = observations.find((candidate) => candidate.playerId === entry.player.playerId);
-      if (!observation) continue;
+      const sessions = advanced.get(entry.player.playerId);
+      if (!observation || !sessions) continue;
       const playerMatches = matches.filter((match) =>
         match.participants.some((participant) => participant.puuid === entry.player.puuid));
-      const result = processTrackerPlayer({
+      const result = reconcilePlayerMatches({
         now: options.now,
         player: entry.player,
         observation,
         observations: state.observations.filter((candidate) => candidate.playerId === entry.player.playerId),
-        sessions: state.sessions.filter((candidate) => candidate.playerId === entry.player.playerId),
+        sessions,
         candidates: state.candidates.filter((candidate) => candidate.playerId === entry.player.playerId),
-        activeGame: entry.activeGame,
-        activeGameDetail: liveDetails.get(entry.player.playerId) ?? null,
         recentMatches: playerMatches,
       });
       allSessions.push(...result.sessions);

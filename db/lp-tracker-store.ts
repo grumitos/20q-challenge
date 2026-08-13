@@ -124,6 +124,15 @@ export function createLpTrackerStore(db: TrackerD1) {
       return lease?.owner === owner && lease.expires_at === expiresAt && lease.blocked_until <= now;
     },
 
+    /** Extends the caller's own claim, and only its own: the `owner` guard means
+        a run whose lease already lapsed and was taken cannot reclaim it and end
+        up writing alongside the run that now holds it. */
+    async renewLease(name: string, owner: string, expiresAt: number) {
+      await db.prepare(
+        "UPDATE sync_leases SET expires_at = ?3, updated_at = ?4 WHERE name = ?1 AND owner = ?2",
+      ).bind(name, owner, expiresAt, Date.now()).run();
+    },
+
     async releaseLease(name: string, owner: string) {
       await db.prepare(
         "UPDATE sync_leases SET owner = '', expires_at = 0, updated_at = ?3 WHERE name = ?1 AND owner = ?2",

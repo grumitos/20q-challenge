@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runTemporalLpTracker } from "../lib/lp-tracker.ts";
+import { MATCH_DETAILS_PER_RUN, runTemporalLpTracker } from "../lib/lp-tracker.ts";
 import { RIOT_PLAYERS } from "../lib/riot-client.ts";
 import { TRACKER_REQUEST_BUDGET } from "../lib/riot-request.ts";
 import { resetChampionCatalog } from "../lib/champion-catalog.ts";
@@ -18,10 +18,11 @@ const CHAMPION_CATALOG = {
 };
 
 function fakeStore(players, observations, sessions) {
-  const writes = { observations: [], sessions: [], candidates: [], evidence: [], cursors: [], enrolled: [], pruned: [] };
+  const writes = { observations: [], sessions: [], candidates: [], evidence: [], cursors: [], enrolled: [], pruned: [], renewals: [] };
   return {
     writes,
     async acquireLease() { return true; },
+    async renewLease(name, owner, expiresAt) { writes.renewals.push({ name, owner, expiresAt }); },
     async releaseLease() {},
     async blockLaneUntil() {},
     async loadTrackerState() { return { players, observations, sessions, candidates: [], snapshot: null }; },
@@ -86,7 +87,10 @@ test("runs the cron path without HTTP visits and persists terminal evidence", as
 
   assert.equal(result.status, "completed");
   assert.equal(store.writes.evidence[0].lpDelta, 22);
-  assert.equal(store.writes.sessions[0].status, "linked");
+  // Sessions are persisted twice now — once before the match details are
+  // fetched, so a run killed in between cannot strand a live card, and again
+  // once linking has happened. The last write is the one that has to be right.
+  assert.equal(store.writes.sessions.filter(({ platformGameId }) => platformGameId === "77").at(-1).status, "linked");
   assert.equal(store.writes.cursors[0].matchId, "LA2_77");
 });
 
@@ -127,6 +131,67 @@ test("names a failed run in its log instead of letting it read as a Riot outage"
   assert.equal(run.status, "failed");
   assert.match(run.error, /no column named champion_id/);
   assert.equal(released, true, "a failed run must still release its lease");
+});
+
+test("closes a finished game even when the run dies before its expensive half", async () => {
+  // The fault behind Papipu's stuck card. A Worker terminated for exceeding its
+  // 10 ms CPU budget stops mid-run, and every write used to happen at the end,
+  // behind the Match-V5 downloads: rank observations were already persisted, the
+  // session close was not. The row kept `status = 'active'` with a frozen
+  // `last_seen_at`, so the board advertised a game that had finished — for
+  // sixty-seven minutes, because each following run died in the same place.
+  //
+  // A kill is modelled here as the match-detail fetch never returning, which is
+  // where the CPU actually went.
+  const players = [{ playerId: "p1", puuid: "puuid-1", gameName: "P1", tagLine: "LAS", recentMatchId: null }];
+  const observations = [{ id: "p1:1000", playerId: "p1", observedAt: 1_000, tier: "SILVER", division: "I", leaguePoints: 90, wins: 10, losses: 10 }];
+  // Live as far as the store knows: the spectator 404 below is the game ending.
+  const sessions = [{ playerId: "p1", platformGameId: "77", queueId: 420, baselineObservationId: "p1:1000", gameStartedAt: 1_500, firstSeenAt: 2_000, lastSeenAt: 3_000, endedDetectedAt: null, matchId: null, status: "active", updatedAt: 3_000 }];
+  const store = fakeStore(players, observations, sessions);
+
+  await assert.rejects(runTemporalLpTracker({
+    store,
+    apiKey: "secret",
+    now: 5_000,
+    owner: "run-killed",
+    fetchImpl: async (input) => {
+      const url = String(input);
+      if (url.includes("/lol/match/v5/matches/LA2_")) throw new Error("Worker exceeded resource limits");
+      return riotResponse(url, { count: 0 });
+    },
+  }));
+
+  const closed = store.writes.sessions.find((session) => session.platformGameId === "77");
+  assert.ok(closed, "the session must be persisted before the run risks itself");
+  assert.equal(closed.status, "ended_waiting_match");
+  assert.equal(closed.endedDetectedAt, 5_000);
+});
+
+test("renews the lane while it works, so a killed run does not hold it for its full TTL", async () => {
+  // A killed run never reaches its `finally`, so nothing releases the lane and
+  // the next four ticks were refused. Measured in production as rank
+  // observations 297-301s apart for an hour: the cadence collapsed from one run
+  // a minute to one every five. Renewal is what lets the TTL be short enough
+  // that a dead run costs about a tick, without capping how long a live run may
+  // legitimately take.
+  const players = [{ playerId: "p1", puuid: "puuid-1", gameName: "P1", tagLine: "LAS", recentMatchId: null }];
+  const observations = [{ id: "p1:1000", playerId: "p1", observedAt: 1_000, tier: "SILVER", division: "I", leaguePoints: 90, wins: 10, losses: 10 }];
+  const store = fakeStore(players, observations, []);
+
+  await runTemporalLpTracker({
+    store, apiKey: "secret", now: 5_000, owner: "run-renew",
+    fetchImpl: (input) => Promise.resolve(riotResponse(String(input), { count: 0 })),
+  });
+
+  assert.ok(store.writes.renewals.length >= 2, "a run must renew as it crosses phases");
+  for (const renewal of store.writes.renewals) {
+    assert.equal(renewal.name, "lp-tracker");
+    assert.equal(renewal.owner, "run-renew", "a run may only ever extend its own claim");
+    assert.ok(
+      renewal.expiresAt - Date.now() <= 90_000,
+      "a renewal must not push the lane past the TTL a dead run would be held for",
+    );
+  }
 });
 
 test("logs a run that never starts, so a stuck lease is not silence", async () => {
@@ -354,15 +419,23 @@ test("gives every player their newest match before anyone gets a second", async 
     },
   });
 
+  // Newest-first across the roster, never a second before everyone has had a
+  // first. This used to assert all nine landed in one run; that was the cap
+  // reaching 7.6-11.0 ms of CPU parsing on a 10 ms budget, which is what got
+  // runs terminated. The fairness ordering is the part that was right, and it
+  // still holds — the cap just takes fewer from the front of it.
+  assert.equal(downloadedMatchIds.length, MATCH_DETAILS_PER_RUN);
   assert.deepEqual(
-    store.writes.cursors.map(({ playerId, matchId }) => [playerId, matchId]),
-    players.map((player, index) => [player.playerId, `LA2_${index + 1}_latest`]),
+    downloadedMatchIds,
+    players.slice(0, MATCH_DETAILS_PER_RUN).map((_, index) => `LA2_${index + 1}_latest`),
   );
-  // One detail per player per tick. `matchIdsByRecency` puts everyone's latest
-  // first, so the cap lands exactly on "everybody's newest, nobody's second" —
-  // and a backlog drains a tick at a time rather than in one CPU spike.
-  assert.deepEqual(downloadedMatchIds, players.map((_, index) => `LA2_${index + 1}_latest`));
-  assert.equal(downloadedMatchIds.some((matchId) => matchId.endsWith("older_")), false);
+  assert.equal(downloadedMatchIds.some((matchId) => matchId.includes("_older_")), false);
+  // Only the players whose detail was actually downloaded get their cursor
+  // moved; the rest keep theirs and are picked up on a following tick.
+  assert.deepEqual(
+    store.writes.cursors.filter(({ matchId }) => matchId !== null).map(({ playerId, matchId }) => [playerId, matchId]),
+    players.slice(0, MATCH_DETAILS_PER_RUN).map((player, index) => [player.playerId, `LA2_${index + 1}_latest`]),
+  );
   assert.ok(result.requestsUsed <= TRACKER_REQUEST_BUDGET);
 });
 
@@ -496,8 +569,8 @@ test("bounds match details per tick so a backlog cannot spike one run", async ()
   });
 
   assert.ok(
-    detailsFetched <= RIOT_PLAYERS.length,
-    `one tick downloaded ${detailsFetched} match details, over the ${RIOT_PLAYERS.length} cap`,
+    detailsFetched <= MATCH_DETAILS_PER_RUN,
+    `one tick downloaded ${detailsFetched} match details, over the ${MATCH_DETAILS_PER_RUN} cap`,
   );
   // The catch-up may now run, since details no longer drain the budget; what
   // matters is that it stays within its own allowance.
