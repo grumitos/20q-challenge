@@ -5,7 +5,6 @@ import {
   type LpChangeEvidence,
   type PlayerSnapshot,
 } from "../lib/leaderboard.ts";
-import { writeLeaderboardCache } from "./leaderboard-cache.ts";
 import type { PersistedSoloQueueMatch } from "../lib/riot-client.ts";
 import { expirePendingLpEvidence } from "../lib/lp-reconciliation.ts";
 import type {
@@ -490,6 +489,12 @@ export function createLpTrackerStore(db: TrackerD1) {
       snapshot: LeaderboardSnapshot,
       matches: readonly PersistedSoloQueueMatch[],
     ) {
+      // Dynamic, not static: `leaderboard-cache` reaches the D1 binding through
+      // a directory import the bundler resolves and plain Node does not, and
+      // this method only ever executes inside the Worker — the runner reaches
+      // it through the store endpoint. A static import would break every test
+      // that loads this store under Node.
+      const { writeLeaderboardCache } = await import("./leaderboard-cache.ts");
       await writeLeaderboardCache(snapshot, matches);
     },
 
