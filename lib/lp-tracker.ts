@@ -441,6 +441,16 @@ export async function runTemporalLpTracker(options: {
   fetchImpl?: RiotFetch;
   sleep?: (milliseconds: number) => Promise<void>;
   owner?: string;
+  /**
+   * The defaults are sized for the Worker, where the binding constraint is the
+   * free plan's 10 ms of CPU per invocation — parsing Match-V5 payloads is the
+   * expensive step, so the cap is tiny and the Riot budget conservative. The
+   * off-platform runner has no such ceiling, and the registered app key allows
+   * 2,000 match requests per 10 seconds, so it passes larger values: the same
+   * code, opened up where the constraint genuinely is not there.
+   */
+  maxRequests?: number;
+  matchDetailsPerRun?: number;
 }) {
   const startedAt = Date.now();
   const owner = options.owner ?? crypto.randomUUID();
@@ -457,10 +467,11 @@ export async function runTemporalLpTracker(options: {
     // Not `RIOT_PLAYERS.length * 5`: the ceiling belongs to Riot's two-minute
     // window, which this run shares with its own next tick — not to how many
     // players happen to be on the roster.
-    maxRequests: TRACKER_REQUEST_BUDGET,
+    maxRequests: options.maxRequests ?? TRACKER_REQUEST_BUDGET,
     fetchImpl: options.fetchImpl,
     sleep: options.sleep,
   });
+  const matchDetailsPerRun = options.matchDetailsPerRun ?? MATCH_DETAILS_PER_RUN;
   let observationsInserted = 0;
   let sessionsUpdated = 0;
   let candidatesUpdated = 0;
@@ -638,7 +649,7 @@ export async function runTemporalLpTracker(options: {
     // has had a first. The remainder is not lost: it is still unknown next tick.
     const requestedIds = [...new Set(matchIdsByRecency)]
       .filter((matchId) => !knownMatchIds.has(matchId))
-      .slice(0, Math.min(MATCH_DETAILS_PER_RUN, api.requestsRemaining));
+      .slice(0, Math.min(matchDetailsPerRun, api.requestsRemaining));
     const matches = (await mapWithConcurrency(requestedIds, 3, (matchId) => api.fetchMatchById(matchId)))
       .filter((match): match is TrackerMatch => match !== null);
     await renewLease();

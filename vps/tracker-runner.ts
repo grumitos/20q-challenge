@@ -19,6 +19,20 @@
  */
 import { runTemporalLpTracker } from "../lib/lp-tracker.ts";
 import { createRemoteLpTrackerStore } from "../lib/remote-lp-tracker-store.ts";
+import { RIOT_PLAYERS } from "../lib/riot-client.ts";
+
+/**
+ * The Worker's defaults exist because of its 10 ms CPU ceiling; out here the
+ * only limits that matter are Riot's, and the registered app key's are generous
+ * (2,000 match details per 10 s, 3,000 spectator per 10 s, 20,000 rank reads
+ * per 10 s). One detail per player per tick is all a minute can produce anyway
+ * — nine players cannot finish more than nine games between ticks — so the cap
+ * is the roster size, and the request budget just needs to never be the thing
+ * that stops a run: fixed cost ~28 plus details plus enrolment leaves 120 as
+ * "cannot bind" rather than a number to tune.
+ */
+const RUNNER_MAX_REQUESTS = 120;
+const RUNNER_MATCH_DETAILS_PER_RUN = RIOT_PLAYERS.length;
 
 function required(name: string): string {
   const value = (process.env[name] ?? "").trim();
@@ -41,7 +55,13 @@ async function main() {
   const store = createRemoteLpTrackerStore({ origin, secret });
 
   try {
-    const result = await runTemporalLpTracker({ store, apiKey, now: startedAt });
+    const result = await runTemporalLpTracker({
+      store,
+      apiKey,
+      now: startedAt,
+      maxRequests: RUNNER_MAX_REQUESTS,
+      matchDetailsPerRun: RUNNER_MATCH_DETAILS_PER_RUN,
+    });
     console.log(JSON.stringify({
       event: "tracker_runner",
       status: result.status,

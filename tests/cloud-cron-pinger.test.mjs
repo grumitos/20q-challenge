@@ -138,6 +138,14 @@ test("adds the backfill to every fifth minute of the tick that does fire", async
   assert.deepEqual(await at(35), ["backfill", "lp-tracker"]);
   assert.deepEqual(await at(1), ["lp-tracker"]);
   assert.deepEqual(await at(37), ["lp-tracker"]);
+  // The analytics lane rides minutes ending in 3, so most-played champions and
+  // roles lag a finished game by minutes rather than by up to half an hour —
+  // and never share a tick with the backfill, so no invocation carries three
+  // lanes.
+  assert.deepEqual(await at(3), ["leaderboard", "lp-tracker"]);
+  assert.deepEqual(await at(13), ["leaderboard", "lp-tracker"]);
+  assert.deepEqual(await at(53), ["leaderboard", "lp-tracker"]);
+  assert.deepEqual(await at(23), ["leaderboard", "lp-tracker"]);
 });
 
 test("still runs the backfill when the platform omits scheduledTime", async () => {

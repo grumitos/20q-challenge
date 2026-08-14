@@ -47,6 +47,12 @@ const FORWARD_MATCH_BATCH_SIZE = 10;
     the two uses stay consistent when this moves. */
 const BACKFILL_BATCH_SIZE = 3;
 const BACKFILL_PLAYERS_PER_REFRESH = 1;
+/** Match details one analytics run may download and parse, oldest first. Five
+    is 3.8 ms median of parsing at the measured rate, which with the snapshot
+    rewrite keeps the lane inside the Worker's 10 ms allowance. Must stay at or
+    above `BACKFILL_BATCH_SIZE`, whose batch must never be capped out of its own
+    run. The remainder is newer than the cutoff and picked up next run. */
+const ANALYTICS_MATCH_DETAILS_PER_RUN = 5;
 
 export const RIOT_PLAYERS: PlayerIdentity[] = [
   { id: "miqi", gameName: "miqi", tagLine: "8745" },
@@ -618,8 +624,20 @@ async function refreshSeasonAnalytics(
     request.backfillIds.forEach((matchId) => matchIds.add(matchId));
   }
 
+  // Capped, oldest first. This lane runs in the Worker, where parsing is the
+  // scarce resource: an evening of games left it a backlog whose details it
+  // downloaded in one invocation — the same repeat-kill shape as the tracker's,
+  // because a killed run advances no cutoff and inherits the identical list.
+  // Oldest first is what makes the cap safe: the analytics cutoff is the max
+  // *processed* timestamp, so draining from the old end advances it without
+  // holes, and the rest is still newer than the cutoff on the next run. Match
+  // ids are numeric and increase with time, which spares a details fetch just
+  // to learn the order.
+  const requestedDetailIds = [...matchIds]
+    .sort((left, right) => Number(left.split("_").at(-1)) - Number(right.split("_").at(-1)))
+    .slice(0, ANALYTICS_MATCH_DETAILS_PER_RUN);
   const matches = await mapWithConcurrency(
-    [...matchIds],
+    requestedDetailIds,
     RIOT_REQUEST_CONCURRENCY,
     async (matchId) => ({
       matchId,

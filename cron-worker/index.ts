@@ -56,11 +56,20 @@ const cronWorker = {
       ? (controller.scheduledTime as number)
       : Date.now();
     const minute = new Date(scheduledAt).getUTCMinutes();
+    // The leaderboard lane is what updates season analytics — most-played
+    // champions and roles — and at twice an hour a game finished after :37
+    // stayed invisible until :07. Its per-run cost is bounded now (details are
+    // capped oldest-first), so cadence is the lever that remains: every ten
+    // minutes keeps the lag under ten minutes and drains a backlog at thirty
+    // matches an hour instead of ten. `minute % 10 === 3` deliberately avoids
+    // the %5 ticks so a single invocation never carries all three lanes.
     const lanes: CronLane[] = controller.cron === "7,37 * * * *"
       ? ["leaderboard"]
-      : minute % 5 === 0
-        ? ["lp-tracker", "backfill"]
-        : ["lp-tracker"];
+      : minute % 10 === 3
+        ? ["lp-tracker", "leaderboard"]
+        : minute % 5 === 0
+          ? ["lp-tracker", "backfill"]
+          : ["lp-tracker"];
 
     // Sequential, not concurrent. The tracker rewrites the whole cached
     // snapshot from the copy it read when it started, so a backfill batch
