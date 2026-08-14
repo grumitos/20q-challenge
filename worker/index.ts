@@ -73,6 +73,33 @@ async function runLpTracker(env: Env, now: number) {
   await runTemporalLpTracker({ store: createLpTrackerStore(await getD1()), apiKey, now });
 }
 
+/**
+ * The store methods an off-platform runner may call, and nothing else.
+ *
+ * This is what lets the tracker run somewhere without a 10 ms CPU ceiling while
+ * its logic stays in one place: the runner implements `LpTrackerStore` over
+ * HTTP against this list, so `runTemporalLpTracker` is the same code either
+ * way and the two paths cannot drift. The Worker is left holding only D1 reads
+ * and writes — a couple of milliseconds — instead of parsing Riot payloads.
+ *
+ * An allowlist rather than a lookup on `store[method]`: the store object is
+ * reachable from a public endpoint, so anything reachable through it must be a
+ * deliberate choice rather than whatever happens to be defined on it.
+ */
+const REMOTE_STORE_METHODS = [
+  "acquireLease", "renewLease", "releaseLease", "blockLaneUntil",
+  "loadTrackerState", "bootstrapPlayerSyncState", "insertRankObservations",
+  "upsertGameSessions", "upsertCandidates", "writeTerminalEvidence",
+  "hydrateLatestMatchEvidence", "updateRecentCursors", "pruneRankObservations",
+  "writeLeaderboardProjection",
+] as const;
+
+type RemoteStoreMethod = typeof REMOTE_STORE_METHODS[number];
+
+function isRemoteStoreMethod(value: unknown): value is RemoteStoreMethod {
+  return typeof value === "string" && (REMOTE_STORE_METHODS as readonly string[]).includes(value);
+}
+
 /** Constant-time-ish compare so the shared secret cannot be probed byte by byte. */
 function secretMatches(expected: string, received: string) {
   if (expected.length !== received.length) return false;
@@ -86,6 +113,41 @@ function secretMatches(expected: string, received: string) {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === "/api/cron/store") {
+      const secret = (env.CRON_SECRET ?? "").trim();
+      const offered = request.headers.get("x-cron-secret") ?? "";
+      if (!secret || !secretMatches(secret, offered)) return new Response("Not found", { status: 404 });
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+
+      let call: unknown;
+      try {
+        call = await request.json();
+      } catch {
+        return new Response("Bad request", { status: 400 });
+      }
+      const method = (call as { method?: unknown })?.method;
+      const args = (call as { args?: unknown })?.args;
+      if (!isRemoteStoreMethod(method) || !Array.isArray(args)) {
+        return new Response("Bad request", { status: 400 });
+      }
+
+      try {
+        const store = createLpTrackerStore(await getD1()) as unknown as
+          Record<RemoteStoreMethod, (...values: unknown[]) => Promise<unknown>>;
+        const result = await store[method](...args);
+        // `undefined` is not JSON, and most of these return nothing.
+        return Response.json({ result: result ?? null });
+      } catch (error) {
+        console.log(JSON.stringify({
+          event: "cron_store",
+          method,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        }));
+        return new Response("Store call failed", { status: 500 });
+      }
+    }
 
     if (url.pathname === "/api/cron/leaderboard" || url.pathname === "/api/cron/lp-tracker" ||
         url.pathname === "/api/cron/backfill") {
