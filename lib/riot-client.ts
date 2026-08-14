@@ -633,7 +633,24 @@ async function refreshSeasonAnalytics(
   // holes, and the rest is still newer than the cutoff on the next run. Match
   // ids are numeric and increase with time, which spares a details fetch just
   // to learn the order.
+  // Boundary matches must not occupy the cap. Riot's `startTime` is inclusive,
+  // so every player's last-processed match comes back on every scan — up to
+  // nine ids, all older than anything genuinely new. Capped oldest-first
+  // without this filter, those nine re-filled the five slots on every single
+  // run: details fetched, the boundary check below discarded them, no cutoff
+  // moved, and the next run drew the identical list. Twenty-two consecutive
+  // runs ingested nothing that way. An id is dropped only when *every* player
+  // who requested it has it as their own boundary — for anyone else it is a
+  // genuinely new match and must stay eligible.
+  const boundaryOnly = (matchId: string) => {
+    for (const [playerId, request] of requestedMatchesByPlayer) {
+      if (request.backfillIds.has(matchId)) return false;
+      if (request.forwardIds.has(matchId) && cutoffs.get(playerId)?.matchId !== matchId) return false;
+    }
+    return true;
+  };
   const requestedDetailIds = [...matchIds]
+    .filter((matchId) => !boundaryOnly(matchId))
     .sort((left, right) => Number(left.split("_").at(-1)) - Number(right.split("_").at(-1)))
     .slice(0, ANALYTICS_MATCH_DETAILS_PER_RUN);
   const matches = await mapWithConcurrency(

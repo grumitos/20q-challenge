@@ -486,6 +486,74 @@ test("checks recent matches even when a cached player still needs historical bac
   assert.equal(mamimu.analytics.backfillStatus, "in_progress", "but it must still enrol the player");
 });
 
+test("boundary matches cannot crowd new games out of the detail cap", async () => {
+  // Riot's `startTime` is inclusive, so every player's last-processed match
+  // comes back on every forward scan. Those boundary ids are older than
+  // anything new, so an oldest-first cap without a boundary filter spent all
+  // its slots re-fetching them: details downloaded, discarded, no cutoff
+  // moved, and the next run drew the identical list. Twenty-two consecutive
+  // production runs ingested nothing while five fresh Jinx games sat waiting.
+  const cached = createDemoSnapshot(new Date("2026-07-19T00:00:00Z"));
+  for (const player of cached.players) {
+    player.analytics.backfillStatus = "complete";
+    player.analytics.backfillBeforeTimestamp = 0;
+    // Every player's cutoff sits on an old boundary match Riot will re-return.
+    player.analytics.lastGameStartTimestamp = Date.UTC(2026, 6, 10);
+    player.analytics.lastMatchId = `LA2_100_${player.id}`;
+    player.analytics.games = 1;
+  }
+  const detailRequests = [];
+
+  const fakeFetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/accounts/by-riot-id/")) {
+      const parts = new URL(url).pathname.split("/");
+      const gameName = decodeURIComponent(parts.at(-2));
+      return Response.json({ puuid: `puuid-${gameName.toLowerCase().replaceAll(" ", "-")}`, gameName, tagLine: decodeURIComponent(parts.at(-1)) });
+    }
+    if (url.includes("/league/v4/entries/by-puuid/")) return Response.json([]);
+    if (url.includes("/summoner/v4/summoners/by-puuid/")) return Response.json({ profileIconId: 1 });
+    if (url.includes("/ids")) {
+      const puuid = decodeURIComponent(new URL(url).pathname.split("/").at(-2));
+      const playerId = cached.players.find((player) => `puuid-${player.gameName.toLowerCase().replaceAll(" ", "-")}` === puuid)?.id ?? "unknown";
+      // The boundary comes back first; mamimu alone also has a genuinely new game.
+      const ids = [`LA2_100_${playerId}`];
+      if (playerId === "mamimu") ids.push("LA2_900_new");
+      return Response.json(ids);
+    }
+    if (url.includes("/matches/LA2_")) {
+      const matchId = decodeURIComponent(new URL(url).pathname.split("/").at(-1));
+      detailRequests.push(matchId);
+      const isNew = matchId === "LA2_900_new";
+      return Response.json({
+        info: {
+          queueId: 420,
+          gameStartTimestamp: isNew ? Date.UTC(2026, 6, 18) : Date.UTC(2026, 6, 10),
+          gameDuration: 1_800,
+          participants: [{
+            puuid: "puuid-mamimu", championId: 222, championName: "Jinx", teamId: 100,
+            kills: 5, deaths: 1, assists: 5, win: true, teamPosition: "BOTTOM",
+            riotIdGameName: "Mamimu", riotIdTagline: "HOLA",
+          }],
+        },
+      });
+    }
+    return new Response(null, { status: 404 });
+  };
+
+  const snapshot = await fetchRiotLeaderboard("secret-key", fakeFetch, new Date("2026-07-19T00:02:00Z"), cached, undefined, 500);
+  const mamimu = snapshot.players.find((player) => player.id === "mamimu");
+
+  assert.ok(detailRequests.includes("LA2_900_new"), "the genuinely new match must get a detail slot");
+  assert.equal(
+    detailRequests.some((matchId) => matchId.startsWith("LA2_100_")), false,
+    "pure boundary re-returns must not consume detail requests",
+  );
+  assert.ok(mamimu);
+  assert.equal(mamimu.analytics.games, 2, "the new game must be counted");
+  assert.ok(mamimu.analytics.lastGameStartTimestamp > Date.UTC(2026, 6, 10), "the cutoff must advance");
+});
+
 test("keeps a same-match PL delta pending instead of persisting a synthetic zero", () => {
   const state = {
     tier: "SILVER",
