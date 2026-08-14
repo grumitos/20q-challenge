@@ -549,6 +549,11 @@ async function refreshSeasonAnalytics(
    * failed outright — the split is what makes both possible.
    */
   mode: "forward" | "backfill" = "forward",
+  /** The Worker default is sized for its 10 ms CPU allowance. The off-platform
+      runner passes a much larger value: with no per-invocation ceiling, the
+      only bound that matters is Riot's, and a month-long backlog at five per
+      run would take days that forty per run drains in an hour or two. */
+  matchDetailsPerRun = ANALYTICS_MATCH_DETAILS_PER_RUN,
 ) {
   const cutoffs = new Map(players.map((player) => [player.id, {
     timestamp: player.analytics.lastGameStartTimestamp,
@@ -652,7 +657,7 @@ async function refreshSeasonAnalytics(
   const requestedDetailIds = [...matchIds]
     .filter((matchId) => !boundaryOnly(matchId))
     .sort((left, right) => Number(left.split("_").at(-1)) - Number(right.split("_").at(-1)))
-    .slice(0, ANALYTICS_MATCH_DETAILS_PER_RUN);
+    .slice(0, matchDetailsPerRun);
   const matches = await mapWithConcurrency(
     requestedDetailIds,
     RIOT_REQUEST_CONCURRENCY,
@@ -778,6 +783,7 @@ export async function fetchRiotLeaderboard(
   /** Overridable so tests can exercise the batching logic without being pinned
       to what production can currently afford per invocation. */
   maxRequests = ANALYTICS_REQUEST_BUDGET,
+  matchDetailsPerRun = ANALYTICS_MATCH_DETAILS_PER_RUN,
 ): Promise<LeaderboardSnapshot> {
   // This path used to call Riot with no budget and no 429 handling at all: a
   // full season backfill can ask for hundreds of match details in one
@@ -834,7 +840,7 @@ export async function fetchRiotLeaderboard(
   // run did gather are kept and the rest waits for the next one.
   let persistedMatches: PersistedSoloQueueMatch[] = [];
   try {
-    persistedMatches = await refreshSeasonAnalytics(players, apiKey, fetchImpl);
+    persistedMatches = await refreshSeasonAnalytics(players, apiKey, fetchImpl, "forward", matchDetailsPerRun);
   } catch (error) {
     if (!(error instanceof RiotRequestBudgetExceeded)) throw error;
     console.log(JSON.stringify({

@@ -124,7 +124,7 @@ const REMOTE_STORE_METHODS = [
   "loadTrackerState", "bootstrapPlayerSyncState", "insertRankObservations",
   "upsertGameSessions", "upsertCandidates", "writeTerminalEvidence",
   "hydrateLatestMatchEvidence", "updateRecentCursors", "pruneRankObservations",
-  "writeLeaderboardProjection",
+  "writeLeaderboardProjection", "persistLeaderboardSnapshot",
 ] as const;
 
 type RemoteStoreMethod = typeof REMOTE_STORE_METHODS[number];

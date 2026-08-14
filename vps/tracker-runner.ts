@@ -19,7 +19,7 @@
  */
 import { runTemporalLpTracker } from "../lib/lp-tracker.ts";
 import { createRemoteLpTrackerStore } from "../lib/remote-lp-tracker-store.ts";
-import { RIOT_PLAYERS } from "../lib/riot-client.ts";
+import { fetchRiotLeaderboard, RIOT_PLAYERS } from "../lib/riot-client.ts";
 
 /**
  * The Worker's defaults exist because of its 10 ms CPU ceiling; out here the
@@ -33,6 +33,55 @@ import { RIOT_PLAYERS } from "../lib/riot-client.ts";
  */
 const RUNNER_MAX_REQUESTS = 120;
 const RUNNER_MATCH_DETAILS_PER_RUN = RIOT_PLAYERS.length;
+
+/**
+ * The analytics phase — champion and role ingestion — runs here too, on every
+ * fifth minute. It lived only in the Worker, where the 10 ms CPU allowance
+ * froze it for a month once the backlog outgrew one invocation; out here the
+ * cap can be forty details per run, which drains a month in an hour or two and
+ * keeps a normal evening's games minutes fresh. The Worker's own capped lane
+ * stays enabled as the standby, same as the tracker's.
+ */
+const RUNNER_ANALYTICS_DETAILS_PER_RUN = 40;
+const RUNNER_ANALYTICS_MAX_REQUESTS = 200;
+
+async function runAnalyticsPhase(
+  store: ReturnType<typeof createRemoteLpTrackerStore>,
+  apiKey: string,
+  now: number,
+) {
+  const owner = crypto.randomUUID();
+  // Same two leases, same order, as the Worker's own analytics lane: one keeps
+  // a second analytics run out, the other keeps the tracker's snapshot rewrite
+  // from erasing this run's progress mid-write.
+  if (!await store.acquireLease("leaderboard-analytics", owner, now, 10 * 60_000)) return "skipped";
+  try {
+    if (!await store.acquireLease("lp-tracker", owner, now, 90_000)) return "skipped";
+    try {
+      const state = await store.loadTrackerState(RIOT_PLAYERS.map(({ id }) => id));
+      if (!state.snapshot) return "no_snapshot";
+      // The callback only captures; snapshot and matches are persisted together
+      // afterwards, exactly as `refreshLeaderboard` does it, so a run that dies
+      // mid-fetch writes nothing rather than half of something.
+      let matchesToPersist: Parameters<typeof store.persistLeaderboardSnapshot>[1] = [];
+      const snapshot = await fetchRiotLeaderboard(
+        apiKey,
+        fetch,
+        new Date(now),
+        state.snapshot,
+        (matches) => { matchesToPersist = matches; },
+        RUNNER_ANALYTICS_MAX_REQUESTS,
+        RUNNER_ANALYTICS_DETAILS_PER_RUN,
+      );
+      await store.persistLeaderboardSnapshot(snapshot, matchesToPersist);
+      return "completed";
+    } finally {
+      await store.releaseLease("lp-tracker", owner);
+    }
+  } finally {
+    await store.releaseLease("leaderboard-analytics", owner);
+  }
+}
 
 function required(name: string): string {
   const value = (process.env[name] ?? "").trim();
@@ -70,6 +119,27 @@ async function main() {
       ...("observationsInserted" in result ? { observationsInserted: result.observationsInserted } : {}),
       ...("sessionsUpdated" in result ? { sessionsUpdated: result.sessionsUpdated } : {}),
     }));
+
+    // Champion/role ingestion, every fifth minute — or on demand for a drain.
+    if (new Date(startedAt).getUTCMinutes() % 5 === 0 || process.env.FORCE_ANALYTICS === "1") {
+      const analyticsStartedAt = Date.now();
+      try {
+        const outcome = await runAnalyticsPhase(store, apiKey, analyticsStartedAt);
+        console.log(JSON.stringify({
+          event: "tracker_runner_analytics",
+          status: outcome,
+          durationMs: Date.now() - analyticsStartedAt,
+        }));
+      } catch (error) {
+        // Analytics lag must not mark a tracker run that succeeded as failed.
+        console.error(JSON.stringify({
+          event: "tracker_runner_analytics",
+          status: "failed",
+          durationMs: Date.now() - analyticsStartedAt,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      }
+    }
     // A skipped run is not a failure: another run holds the lane, which is the
     // lease doing its job. Only a thrown run is worth a non-zero exit, so the
     // timer's `OnFailure` and the journal mean what they say.

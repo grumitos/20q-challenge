@@ -76,5 +76,7 @@ export function createRemoteLpTrackerStore(options: {
     pruneRankObservations: (before) => call("pruneRankObservations", [before]) as Promise<unknown>,
     writeLeaderboardProjection: (snapshot, now) =>
       call("writeLeaderboardProjection", [snapshot, now]) as Promise<void>,
+    persistLeaderboardSnapshot: (snapshot, matches) =>
+      call("persistLeaderboardSnapshot", [snapshot, matches]) as Promise<void>,
   };
 }

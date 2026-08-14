@@ -5,6 +5,8 @@ import {
   type LpChangeEvidence,
   type PlayerSnapshot,
 } from "../lib/leaderboard.ts";
+import { writeLeaderboardCache } from "./leaderboard-cache.ts";
+import type { PersistedSoloQueueMatch } from "../lib/riot-client.ts";
 import { expirePendingLpEvidence } from "../lib/lp-reconciliation.ts";
 import type {
   MatchLpEvidence,
@@ -475,6 +477,20 @@ export function createLpTrackerStore(db: TrackerD1) {
             )`,
       ).bind(before).run();
       return result;
+    },
+
+    /**
+     * The analytics refresh's full write: snapshot cache plus the immutable
+     * match and per-player stat rows. Exists on the store so the off-platform
+     * runner can drive the analytics lane too — champion and role ingestion
+     * lived only in the Worker, whose 10 ms CPU allowance froze it for a month
+     * once the backlog outgrew what one invocation could parse.
+     */
+    async persistLeaderboardSnapshot(
+      snapshot: LeaderboardSnapshot,
+      matches: readonly PersistedSoloQueueMatch[],
+    ) {
+      await writeLeaderboardCache(snapshot, matches);
     },
 
     async writeLeaderboardProjection(snapshot: LeaderboardSnapshot, now: number) {
