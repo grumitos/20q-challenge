@@ -35,9 +35,24 @@ async function runLeaderboardRefresh(env: Env, now: number) {
   // Worker hammer Riot: a second caller inside the window is turned away here.
   if (!await store.acquireLease("leaderboard-analytics", owner, now, 10 * 60_000)) return;
   try {
-    // Strict: this caller drops the payload, so a swallowed failure here is a
-    // refresh that silently stops happening. The endpoint turns it into a 500.
-    await refreshLeaderboard(apiKey, now, true, true);
+    // The tracker's lane too, for the same reason the backfill takes it: the
+    // tracker rewrites the whole cached snapshot from the copy it read when it
+    // started, so an analytics write landing inside a tracker run's window was
+    // erased seconds later — champion tallies and the ingestion cutoff
+    // reverted, which made the champion backlog drain and then un-drain. The
+    // cron Worker used to guarantee this by running the lanes sequentially in
+    // one invocation; the VPS timer runs the tracker on its own clock, so the
+    // sequencing has to live in the lease again. Skipping this tick when the
+    // tracker holds the lane costs ten minutes of analytics lag at worst;
+    // racing it costs the run's entire progress.
+    if (!await store.acquireLease("lp-tracker", owner, now, 90_000)) return;
+    try {
+      // Strict: this caller drops the payload, so a swallowed failure here is a
+      // refresh that silently stops happening. The endpoint turns it into a 500.
+      await refreshLeaderboard(apiKey, now, true, true);
+    } finally {
+      await store.releaseLease("lp-tracker", owner);
+    }
   } finally {
     await store.releaseLease("leaderboard-analytics", owner);
   }
@@ -67,10 +82,28 @@ async function runSeasonBackfill(env: Env, now: number) {
   }
 }
 
+/** How fresh the cache must be for the Worker to stand down. Comfortably more
+    than one VPS tick (60s) plus a run (~8s), comfortably less than two ticks:
+    one missed VPS run flips the Worker back on at the next minute. */
+const STANDBY_FRESH_WITHIN_MS = 75_000;
+
 async function runLpTracker(env: Env, now: number) {
   const apiKey = (env.RIOT_API_KEY ?? "").trim();
   if (!apiKey) return;
-  await runTemporalLpTracker({ store: createLpTrackerStore(await getD1()), apiKey, now });
+  const d1 = await getD1();
+  // The VPS timer is the primary tracker; this lane is its automatic fallback.
+  // Without this gate both ran fully every minute — twice the Riot polling and
+  // twice the observation rows for the same answer. A fresh cache proves a
+  // healthy run finished moments ago (only a completed run writes it), so the
+  // Worker stands down; the first minute the VPS misses, the cache goes stale
+  // and this lane takes over on its own.
+  const cached = await d1.prepare("SELECT fetched_at FROM leaderboard_cache LIMIT 1")
+    .first<{ fetched_at: number }>();
+  if (cached && now - cached.fetched_at < STANDBY_FRESH_WITHIN_MS) {
+    console.log(JSON.stringify({ event: "lp_tracker_standby", cacheAgeMs: now - cached.fetched_at }));
+    return;
+  }
+  await runTemporalLpTracker({ store: createLpTrackerStore(d1), apiKey, now });
 }
 
 /**
