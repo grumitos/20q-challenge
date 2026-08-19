@@ -120,12 +120,28 @@ export type LiveGame = {
   participants: LastMatchParticipant[];
 };
 
+/**
+ * Wilson lower bound: the win rate a champion can be *shown* to hold, not the
+ * one it happens to have. The confidence level is the whole lever, because it
+ * is what a small sample is charged for.
+ *
+ * At 95% it was too cheap, and specifically for perfect records — a flawless
+ * run has no observed variance, so only the sample-size term holds it down.
+ * Two wins in two games scored above sixty-four percent across fourteen, and
+ * every profile on the board led with a champion played two or three times.
+ *
+ * At 99% those same two games fall from 0.34 to 0.23, below the fourteen-game
+ * champion's 0.32, while records with enough games behind them barely move —
+ * a 75% champion over twenty games loses about four points. That is the whole
+ * intent: charge the small samples, leave the real ones alone. It stays an
+ * ordinary Wilson interval, so nothing about how the ranking reads changes.
+ */
 function championConfidenceScore(champion: ChampionAggregate) {
   const games = Math.max(0, champion.games);
   if (games === 0) return 0;
   const wins = Math.min(games, Math.max(0, champion.wins));
   const winRate = wins / games;
-  const z = 1.96;
+  const z = 2.58;
   const zSquared = z * z;
   return (
     winRate + zSquared / (2 * games) -

@@ -62,6 +62,32 @@ test("ranks best champions by win rate confidence instead of raw win rate or gam
   ]);
 });
 
+test("a perfect record over two games is not a best champion", () => {
+  // Reported from the live board: Mamimu's card led with Milio at 100% over two
+  // games. A flawless run has no observed variance, so only the sample-size
+  // term holds its lower bound down, and at 95% confidence that was not enough
+  // — two games outranked sixty-four percent across fourteen. Every profile had
+  // one of these. The numbers below are Mamimu's real pool at the time.
+  const analytics = emptyAnalytics();
+  analytics.games = 141;
+  analytics.championCounts = {
+    milio: { id: "Milio", name: "Milio", games: 2, wins: 2 },
+    maokai: { id: "Maokai", name: "Maokai", games: 3, wins: 3 },
+    nautilus: { id: "Nautilus", name: "Nautilus", games: 8, wins: 6 },
+    malzahar: { id: "Malzahar", name: "Malzahar", games: 14, wins: 9 },
+    missfortune: { id: "MissFortune", name: "MissFortune", games: 27, wins: 14 },
+  };
+
+  const ranked = finalizeAnalytics(analytics).topChampions.map((champion) => champion.id);
+
+  assert.equal(ranked[0], "Nautilus", "a real sample must lead the card");
+  assert.ok(
+    ranked.indexOf("Malzahar") < ranked.indexOf("Maokai"),
+    "fourteen games at 64% must outrank three games at 100%",
+  );
+  assert.equal(ranked.at(-1), "Milio", "the two-game record must rank last of these");
+});
+
 test("keeps roles and champion pools on the same SoloQ 2026 match set", () => {
   assert.equal(seasonSeed.queue, "RANKED_SOLO_5x5");
   assert.equal(seasonSeed.season, "2026");
