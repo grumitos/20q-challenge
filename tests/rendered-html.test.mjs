@@ -73,7 +73,10 @@ test("server-renders the 20Q Challenge dashboard", async () => {
   assert.doesNotMatch(html, /is-skeleton/);
   assert.doesNotMatch(html, /pattern-grid/);
   assert.doesNotMatch(html, /class="hatch"/);
-  assert.match(html, /src="\/ranks\/iron\.png"/);
+  // The goal crest is served by the target's own tier. It was iron while the
+  // target was pinned to a name the demo snapshot leaves unranked; the target is
+  // whoever ranks highest now, so the crest follows the standings.
+  assert.match(html, /class="rank-emblem tier-\w+" src="\/ranks\/\w+\.png"/);
   assert.match(html, /class="lp-unit/);
   assert.match(html, /href="\/privacy"/);
   assert.match(html, /href="\/terms"/);
@@ -138,7 +141,7 @@ test("ships the finished product assets without starter dependencies", async () 
   assert.match(page, /caché de 1 min/);
   assert.match(page, /aria-busy=/);
   assert.match(page, /leagueofgraphs\.com\/summoner\/las/);
-  assert.match(page, /const mamimu = players\.find\(\(player\) => player\.id === CHALLENGE_GOAL_PLAYER_ID\)/);
+  assert.match(page, /const goalPlayer = challengeGoalPlayer\(players\)/);
   assert.match(page, /function MatchSummary/);
   assert.match(page, /function LiveSummary/);
   assert.match(page, /is-peer/);

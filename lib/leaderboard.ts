@@ -1,8 +1,6 @@
 export const CACHE_TTL_MS = 60 * 1000;
 export const CACHE_KEY = "las-2026-soloq";
 export const CHALLENGE_MEMBER_COUNT = 9;
-/** Mamimu is the target the others chase, not a ranked competitor. */
-export const CHALLENGE_GOAL_PLAYER_ID = "mamimu";
 
 const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
 
@@ -445,6 +443,28 @@ export function challengeGoalForLeader(
 ): ChallengeGoalTier {
   if (!leader) return "GOLD";
   return rankScore(leader) >= TIER_ORDER.indexOf("GOLD") * 400 ? "PLATINUM" : "GOLD";
+}
+
+/**
+ * The target the rest of the board chases: whoever currently ranks highest.
+ *
+ * This was pinned to Mamimu, which was true when the challenge started and
+ * silently stopped being the point — if someone overtakes her the card would
+ * have kept calling her the goal while the ranking showed otherwise. Reading it
+ * off the standings keeps the card honest without anyone editing a constant.
+ *
+ * Ranked by `rankScore`, not by raw league points: ninety-five points in Bronze
+ * are not more than ten in Gold, so "most LP" only means anything once tier and
+ * division are folded in, which is exactly what that score does.
+ */
+export function challengeGoalPlayer(players: readonly PlayerSnapshot[]) {
+  let goal: PlayerSnapshot | undefined;
+  for (const player of players) {
+    // Strictly greater, so a tie leaves the earlier player in place and the
+    // goal cannot flip back and forth between two equal scores on every poll.
+    if (!goal || rankScore(player) > rankScore(goal)) goal = player;
+  }
+  return goal;
 }
 
 export function sortLeaderboard(players: PlayerSnapshot[]) {

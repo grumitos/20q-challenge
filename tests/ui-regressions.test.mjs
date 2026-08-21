@@ -54,13 +54,13 @@ test("keeps the goal card as the switch that drops the target into the ranking",
 
   // The target is out of the ranking by default and pressing the card puts her
   // in, so the gap can be read against the contenders directly.
-  assert.match(page, /CHALLENGE_GOAL_PLAYER_ID/);
-  assert.match(page, /player\.id !== CHALLENGE_GOAL_PLAYER_ID/);
-  assert.match(page, /const \[mamimuVisible, setMamimuVisible\] = useState\(false\)/);
-  assert.match(page, /const visiblePlayers = mamimuVisible \? sortLeaderboard\(players\) : contenders/);
-  assert.match(page, /const toggleMamimu = \(\) => \{\s*captureRankingPositions\(\);/);
+  assert.match(page, /challengeGoalPlayer\(players\)/);
+  assert.match(page, /player\.id !== goalPlayer\?\.id/);
+  assert.match(page, /const \[goalVisible, setGoalVisible\] = useState\(false\)/);
+  assert.match(page, /const visiblePlayers = goalVisible \? sortLeaderboard\(players\) : contenders/);
+  assert.match(page, /const toggleGoal = \(\) => \{\s*captureRankingPositions\(\);/);
   assert.match(page, /<button\s+type="button"\s+className="goal-card"/);
-  assert.match(page, /aria-pressed=\{mamimuVisible\}/);
+  assert.match(page, /aria-pressed=\{goalVisible\}/);
 });
 
 test("anchors the goal maths to the contenders so revealing the target cannot move it", async () => {
@@ -68,7 +68,7 @@ test("anchors the goal maths to the contenders so revealing the target cannot mo
 
   // visiblePlayers[0] becomes the target herself once she is shown, which would
   // silently redefine "progress of the leader".
-  assert.match(page, /const contenders = sortLeaderboard\(players\.filter\(\(player\) => player\.id !== CHALLENGE_GOAL_PLAYER_ID\)\)/);
+  assert.match(page, /const contenders = sortLeaderboard\(players\.filter\(\(player\) => player\.id !== goalPlayer\?\.id\)\)/);
   assert.match(page, /challengeGoalForLeader\(contenders\[0\]\)/);
   assert.match(page, /calculateGoalProgress\(contenders\[0\]\.tier/);
 });
@@ -77,7 +77,7 @@ test("frames the goal card from the target's own tier rather than a fixed platin
   const [page, css] = await Promise.all([readPage(), readCss()]);
 
   assert.match(page, /function goalAccentStyle\(tier: RankTier\)/);
-  assert.match(page, /style=\{goalAccentStyle\(mamimuTier\)\}/);
+  assert.match(page, /style=\{goalAccentStyle\(goalPlayerTier\)\}/);
   // The heavy border is --goal-*, so it follows the tier instead of being written
   // into the stylesheet as teal.
   assert.match(css, /\.goal-card \{[\s\S]*?inset 0 0 0 2px var\(--goal-edge\)/);

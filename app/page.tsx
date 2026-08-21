@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  CHALLENGE_GOAL_PLAYER_ID,
+  challengeGoalPlayer,
   calculateGoalProgress,
   challengeGoalForLeader,
   championWinRatePercent,
@@ -902,7 +902,7 @@ export default function Home() {
   const [hydratedFromCache, setHydratedFromCache] = useState(false);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const [mamimuVisible, setMamimuVisible] = useState(false);
+  const [goalVisible, setGoalVisible] = useState(false);
   const hasCachedData = useRef(false);
   const renderedFetchedAt = useRef<string | null>(null);
   const rankingNodes = useRef(new Map<string, HTMLElement>());
@@ -910,13 +910,18 @@ export default function Home() {
   const rankingAnimations = useRef(new Map<string, Animation>());
   const rankingFallbackCleanups = useRef(new Map<string, () => void>());
   const players = payload.data.players;
-  // Mamimu is the target, not a competitor: the ranking she is measured against
-  // never includes her, so the goal card keeps its meaning once she is revealed.
-  const mamimu = players.find((player) => player.id === CHALLENGE_GOAL_PLAYER_ID);
-  const mamimuTier = mamimu?.tier ?? "UNRANKED";
-  const mamimuSummary = hasLiveData ? (mamimu ? `${rankLabel(mamimu)} ${mamimu.leaguePoints}PL` : "Sin rango 0PL") : "—";
-  const contenders = sortLeaderboard(players.filter((player) => player.id !== CHALLENGE_GOAL_PLAYER_ID));
-  const visiblePlayers = mamimuVisible ? sortLeaderboard(players) : contenders;
+  // The target is whoever currently ranks highest, not a fixed name: the board
+  // used to pin it to Mamimu, so anyone overtaking her would have been ranked
+  // against a goal they had already passed. The target is never a competitor,
+  // so the ranking measured against it excludes it and the card keeps its
+  // meaning once revealed.
+  const goalPlayer = challengeGoalPlayer(players);
+  const goalPlayerTier = goalPlayer?.tier ?? "UNRANKED";
+  const goalPlayerSummary = hasLiveData
+    ? (goalPlayer ? `${rankLabel(goalPlayer)} ${goalPlayer.leaguePoints}PL` : "Sin rango 0PL")
+    : "—";
+  const contenders = sortLeaderboard(players.filter((player) => player.id !== goalPlayer?.id));
+  const visiblePlayers = goalVisible ? sortLeaderboard(players) : contenders;
   const playersWithIncompleteHistory = visiblePlayers.filter((player) => player.analytics.backfillStatus !== "complete");
   const historyCoverage = playersWithIncompleteHistory.length === 0
     ? "Detalle de partidas disponible para toda la cobertura registrada"
@@ -940,24 +945,24 @@ export default function Home() {
   const respawnFor = (player: PlayerSnapshot) => player.gameName.toLocaleLowerCase("es-PE") === "papipu" ? papipuSeconds : null;
 
   useEffect(() => {
-    if (!hasLiveData || mamimuVisible || !mamimu?.riotIdFound) return;
+    if (!hasLiveData || goalVisible || !goalPlayer?.riotIdFound) return;
 
     const version = payload.data.dataDragonVersion;
-    const bestChampions = selectBestChampions(mamimu.analytics.championCounts, PODIUM_CHAMPION_SLOTS);
+    const bestChampions = selectBestChampions(goalPlayer.analytics.championCounts, PODIUM_CHAMPION_SLOTS);
     const bestChampion = bestChampions[0];
 
     const assetUrls = new Set<string>([
-      rankAsset(mamimu.tier),
+      rankAsset(goalPlayer.tier),
       ...bestChampions.map((champion) => championAsset(version, champion)),
     ]);
     if (bestChampion) assetUrls.add(championLoadingAsset(bestChampion));
-    if (mamimu.profileIconId > 0) assetUrls.add(profileAsset(version, mamimu.profileIconId));
-    if (mamimu.lastSoloQueueMatch) {
-      assetUrls.add(championAsset(version, mamimu.lastSoloQueueMatch.championId));
-      mamimu.lastSoloQueueMatch.participants.forEach((participant) => assetUrls.add(championAsset(version, participant.championId)));
+    if (goalPlayer.profileIconId > 0) assetUrls.add(profileAsset(version, goalPlayer.profileIconId));
+    if (goalPlayer.lastSoloQueueMatch) {
+      assetUrls.add(championAsset(version, goalPlayer.lastSoloQueueMatch.championId));
+      goalPlayer.lastSoloQueueMatch.participants.forEach((participant) => assetUrls.add(championAsset(version, participant.championId)));
     }
     assetUrls.forEach(preloadMemberImage);
-  }, [hasLiveData, mamimu, mamimuVisible, payload.data.dataDragonVersion]);
+  }, [hasLiveData, goalPlayer, goalVisible, payload.data.dataDragonVersion]);
 
   const registerRankingItem = useCallback<RankingItemRef>((playerId, element) => {
     if (element) rankingNodes.current.set(playerId, element);
@@ -977,9 +982,9 @@ export default function Home() {
     syncRankingNodes().forEach((element, playerId) => positions.set(playerId, element.getBoundingClientRect()));
     rankingPositions.current = positions;
   };
-  const toggleMamimu = () => {
+  const toggleGoal = () => {
     captureRankingPositions();
-    setMamimuVisible((visible) => !visible);
+    setGoalVisible((visible) => !visible);
   };
 
   useLayoutEffect(() => {
@@ -1085,7 +1090,7 @@ export default function Home() {
         { transform: "translate3d(0, 0, 0)" },
       ], isRow ? 360 : 480);
     });
-  }, [hasLiveData, mamimuVisible, syncRankingNodes]);
+  }, [hasLiveData, goalVisible, syncRankingNodes]);
 
   // A live game's elapsed clock is drawn from `clockNow`, so it only advances
   // while this ticks. Tying the per-second beat to `papipuSeconds` alone meant
@@ -1269,17 +1274,17 @@ export default function Home() {
         <button
           type="button"
           className="goal-card"
-          style={goalAccentStyle(mamimuTier)}
-          aria-pressed={mamimuVisible}
-          aria-label={`${mamimuVisible ? "Ocultar" : "Mostrar"} la meta en el ranking. Meta del challenge: ${mamimuSummary}. Progreso del líder: ${goalProgress}%`}
-          onClick={toggleMamimu}
+          style={goalAccentStyle(goalPlayerTier)}
+          aria-pressed={goalVisible}
+          aria-label={`${goalVisible ? "Ocultar" : "Mostrar"} la meta en el ranking. Meta del challenge: ${goalPlayerSummary}. Progreso del líder: ${goalProgress}%`}
+          onClick={toggleGoal}
         >
           <span className="goal-label">Meta</span>
-          <RankEmblem player={mamimu ?? PENDING_PLAYER} size={34} describe />
+          <RankEmblem player={goalPlayer ?? PENDING_PLAYER} size={34} describe />
           <span className="goal-body">
             <span className="goal-head">
-              <strong className={tierTextClass(mamimuTier)}>{mamimu ? rankLabel(mamimu) : "Sin rango"}</strong>
-              <small aria-live="polite">{mamimu ? `${mamimu.leaguePoints} PL` : "0 PL"}</small>
+              <strong className={tierTextClass(goalPlayerTier)}>{goalPlayer ? rankLabel(goalPlayer) : "Sin rango"}</strong>
+              <small aria-live="polite">{goalPlayer ? `${goalPlayer.leaguePoints} PL` : "0 PL"}</small>
             </span>
           </span>
           <span className="goal-toggle" aria-hidden="true" />
