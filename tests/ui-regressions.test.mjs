@@ -123,6 +123,27 @@ test("keeps the header taking its background whoever is doing the scrolling", as
   assert.doesNotMatch(css, /scrollbar-gutter/);
 });
 
+test("lets two surfaces take the invasion at reduced strength", async () => {
+  const css = await readCss();
+
+  // Neither sits it out and neither takes it in full: both mix their way back
+  // toward the cold value, far enough to still belong to the gold board.
+  // The podium card gets the lightest touch because it backs a photograph —
+  // the splash is Riot's art at 24% opacity, and full warm brown muddies it.
+  assert.match(css, /html\.is-invaded \.podium-card \{[^}]*--card: color-mix\(in srgb, #121008 50%, #0e1017\)/);
+  // The status readout takes more, being chrome rather than a frame around
+  // artwork, but every token it draws with is tempered together — a box with
+  // half its palette moved reads worse than one that moved none of it.
+  const stats = css.slice(css.indexOf("html.is-invaded .header-stats > span"));
+  const statsBody = stats.slice(0, stats.indexOf("}"));
+  for (const token of ["--panel", "--line", "--line-bright", "--muted-2", "--text-2", "--text"]) {
+    assert.ok(
+      statsBody.includes(`${token}: color-mix(in srgb, `) && statsBody.includes(" 65%, "),
+      `${token} is not tempered with the rest of the status readout`,
+    );
+  }
+});
+
 test("ranks the pairs that win together, on the champions' own criterion", async () => {
   const [page, css, leaderboard] = await Promise.all([readPage(), readCss(), readLeaderboard()]);
 

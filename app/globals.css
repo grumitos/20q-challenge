@@ -119,22 +119,35 @@ html.is-invaded {
   --header-wash: rgb(10 9 6 / 88%);
 }
 
-/* Two surfaces sit the invasion out, by taking their cold values back on their
-   own subtree — the tokens inherit, so restoring one here restores it for
-   everything drawn inside.
+/* Two surfaces take the invasion at half strength rather than in full, by
+   mixing their way back toward the cold value on their own subtree — the
+   tokens inherit, so tempering one here tempers it for everything drawn
+   inside. Enough tone to belong to the gold board, not enough to spoil what
+   they carry. The percentage is how far each one goes.
 
-   The podium card, because it is not a surface: it is the backing for a
-   photograph. The splash is Riot's art at 24% over whatever is behind it, and
-   behind warm brown the champion turns to mud. The medal gradients on top of
-   it are gold in the cold palette already, so the card keeps its place colour
-   either way.
+   The podium card gets the lightest touch, because it is not really a surface:
+   it is the backing for a photograph. The splash is Riot's art at 24% over
+   whatever is behind it, and behind full warm brown the champion turns to mud.
+   Half-way lands on a near-neutral black — no blue cast fighting the gold, no
+   brown cast muddying the art. The medal gradients over it are gold in the
+   cold palette already, so the card keeps its place colour either way.
 
-   The status readout, because it is a thin segmented frame — hairline borders
-   around a near-black fill — and at that weight the warm palette reads as a
-   smudge rather than as a panel, right beside the gold badge that has to be
-   the loudest thing in the header. */
-html.is-invaded .podium-card { --card: #0e1017; }
-html.is-invaded .header-stats > span { --panel: #0d0f16; --line: #20242f; --muted-2: #8b91a6; }
+   The status readout can take more, being chrome rather than a frame around
+   artwork, but not all of it: it is hairline borders around a near-black fill,
+   and at that weight the full warm palette reads as a smudge rather than as a
+   panel, right beside the gold badge that has to be the loudest thing in the
+   header. */
+html.is-invaded .podium-card {
+  --card: color-mix(in srgb, #121008 50%, #0e1017);
+}
+html.is-invaded .header-stats > span {
+  --panel: color-mix(in srgb, #110e09 65%, #0d0f16);
+  --line: color-mix(in srgb, #272117 65%, #20242f);
+  --line-bright: color-mix(in srgb, #322a1d 65%, #262b38);
+  --muted-2: color-mix(in srgb, #8f8069 65%, #8b91a6);
+  --text-2: color-mix(in srgb, #d8ccb9 65%, #c9cddb);
+  --text: color-mix(in srgb, #f0ebe3 65%, #eef0f6);
+}
 
 /* ─── RESET ─── */
 * { box-sizing: border-box; }
