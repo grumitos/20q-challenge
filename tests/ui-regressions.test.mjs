@@ -94,6 +94,19 @@ test("invades the ranking's palette rather than painting over it", async () => {
   assert.match(page, /useEffect\(\(\) => \(\) => \{[\s\S]*?classList\.remove\("is-invaded"\)[\s\S]*?\}, \[\]\)/);
 });
 
+test("keeps the sticky header pinned to the box that actually scrolls", async () => {
+  const css = await readCss();
+
+  // `overflow-x: hidden` on the body made it a scroll container, and a scroll
+  // container is what `position: sticky` resolves against. The body never
+  // scrolls — the document does — so the header pinned itself to a box that
+  // stood still and rode up out of view. `clip` contains overflow without
+  // becoming a scroll container, which is the whole fix.
+  assert.match(css, /body \{[^}]*overflow-x: clip/);
+  assert.doesNotMatch(css, /body \{[^}]*overflow-x: hidden/);
+  assert.match(css, /\.site-header \{[^}]*position: sticky/);
+});
+
 test("keeps the header taking its background whoever is doing the scrolling", async () => {
   const [page, css] = await Promise.all([readPage(), readCss()]);
 

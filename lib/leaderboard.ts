@@ -228,7 +228,7 @@ export type DuoRecord = {
 };
 
 /** Below this a pair has not played enough together to be worth ranking. */
-export const DUO_LEADERBOARD_MIN_GAMES = 4;
+export const DUO_LEADERBOARD_MIN_GAMES = 10;
 
 export type LeaderboardSnapshot = {
   region: "LAS";

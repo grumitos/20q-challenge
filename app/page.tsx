@@ -51,6 +51,11 @@ const GASPI_LETTER_START_MS = 350;
 const GASPI_LETTER_STEP_MS = 70;
 const GASPI_LINES = ["LOS JUEGOS", "DE GASPI"] as const;
 
+/** The duo table reveals row by row. Capped so a long list still lands. */
+const DUO_REVEAL_START_MS = 500;
+const DUO_REVEAL_STEP_MS = 80;
+const DUO_REVEAL_MAX_STEPS = 11;
+
 const awayTabTitles = [
   "Bienvenidos a los juegos de Gaspi",
   "Papipu, Mamimu e Hijuepu",
@@ -986,7 +991,10 @@ function DuoRow({ duo, players, version, place }: {
   const winRate = duo.games > 0 ? (duo.wins / duo.games) * 100 : 0;
   const names = `${firstName(first)} + ${firstName(second)}`;
   return (
-    <li className={`duo-row${place === 1 ? " is-top" : ""}`}>
+    <li
+      className={`duo-row${place === 1 ? " is-top" : ""}`}
+      style={{ "--duo-in": `${(DUO_REVEAL_START_MS + Math.min(place - 1, DUO_REVEAL_MAX_STEPS) * DUO_REVEAL_STEP_MS) / 1_000}s` } as CSSProperties}
+    >
       <div className="duo-grid">
         <span className="duo-place"><strong>{place}</strong></span>
         <span className="duo-pair">

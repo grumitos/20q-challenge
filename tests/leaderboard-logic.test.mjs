@@ -188,16 +188,23 @@ test("calculates progress toward Gold IV from the ranked ladder", () => {
 test("ranks duos by the same confidence bound that ranks champions", () => {
   // A perfect four-game pair must not outrank a long, genuinely strong one:
   // that is the entire reason the score is a lower bound and not a win rate.
+  // The minimum is passed explicitly so this keeps testing the ordering rather
+  // than quietly turning into another test of the threshold.
   const ranked = rankDuoRecords([
     { playerIds: ["a", "b"], games: 4, wins: 4 },
     { playerIds: ["c", "d"], games: 30, wins: 21 },
-  ]);
+  ], 1);
 
   assert.deepEqual(ranked.map((duo) => duo.playerIds[0]), ["c", "a"]);
   assert.equal(ranked[0].score, wilsonLowerBound(21, 30));
 });
 
 test("drops pairs that have not played enough together to be ranked", () => {
+  // Ten, because a handful of games together says more about who queued at the
+  // same time than about the pair. The panel's own footnote reads this value,
+  // so the number a visitor is told is the number that filtered the table.
+  assert.equal(DUO_LEADERBOARD_MIN_GAMES, 10);
+
   const records = [
     { playerIds: ["a", "b"], games: DUO_LEADERBOARD_MIN_GAMES, wins: 2 },
     { playerIds: ["c", "d"], games: DUO_LEADERBOARD_MIN_GAMES - 1, wins: 3 },
@@ -212,7 +219,7 @@ test("separates duos the interval cannot on the sample that proved them", () => 
   const ranked = rankDuoRecords([
     { playerIds: ["z", "y"], games: 8, wins: 4 },
     { playerIds: ["a", "b"], games: 16, wins: 8 },
-  ]);
+  ], 1);
 
   assert.deepEqual(ranked.map((duo) => duo.games), [16, 8]);
 });

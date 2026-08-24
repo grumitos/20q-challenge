@@ -127,16 +127,17 @@ test("keeps a pair readable while one of its members is still being backfilled",
   const ids = JSON.stringify(players.map((player) => player.id));
 
   // Only one side has its per-match rows yet, so only one direction reports.
-  // The pair still has to appear, on the sample that does exist.
-  insertRankedGame(db, "LA2_A", 1000, 100, { inti: true });
-  insertRankedGame(db, "LA2_B", 2000, 100, { inti: true });
-  insertRankedGame(db, "LA2_C", 3000, 100, { inti: false });
-  insertRankedGame(db, "LA2_D", 4000, 100, { inti: true });
+  // The pair still has to appear, on the sample that does exist — enough games
+  // to clear the minimum, so this tests the fold and not the threshold.
+  const played = 12;
+  for (let index = 0; index < played; index += 1) {
+    insertRankedGame(db, `LA2_${index}`, 1000 + index, 100, { inti: index % 4 !== 0 });
+  }
 
   const ranked = rankDuoRecords(foldDuoRecords(db.prepare(DUO_RECORD_QUERY).all(ids, 400)));
 
   assert.equal(ranked.length, 1);
-  assert.deepEqual({ games: ranked[0].games, wins: ranked[0].wins }, { games: 4, wins: 3 });
+  assert.deepEqual({ games: ranked[0].games, wins: ranked[0].wins }, { games: 12, wins: 9 });
 });
 
 test("leaves a live tracker session out of a duo's record", async () => {

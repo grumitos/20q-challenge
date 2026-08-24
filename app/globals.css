@@ -119,6 +119,23 @@ html.is-invaded {
   --header-wash: rgb(10 9 6 / 88%);
 }
 
+/* Two surfaces sit the invasion out, by taking their cold values back on their
+   own subtree — the tokens inherit, so restoring one here restores it for
+   everything drawn inside.
+
+   The podium card, because it is not a surface: it is the backing for a
+   photograph. The splash is Riot's art at 24% over whatever is behind it, and
+   behind warm brown the champion turns to mud. The medal gradients on top of
+   it are gold in the cold palette already, so the card keeps its place colour
+   either way.
+
+   The status readout, because it is a thin segmented frame — hairline borders
+   around a near-black fill — and at that weight the warm palette reads as a
+   smudge rather than as a panel, right beside the gold badge that has to be
+   the loudest thing in the header. */
+html.is-invaded .podium-card { --card: #0e1017; }
+html.is-invaded .header-stats > span { --panel: #0d0f16; --line: #20242f; --muted-2: #8b91a6; }
+
 /* ─── RESET ─── */
 * { box-sizing: border-box; }
 
@@ -134,7 +151,13 @@ html { overflow-x: hidden; background: var(--bg); color-scheme: dark; scroll-beh
 body {
   margin: 0;
   min-width: 320px;
-  overflow-x: hidden;
+  /* `clip`, not `hidden`. `hidden` made this a scroll container, and a scroll
+     container is what `position: sticky` resolves against — so the header was
+     pinning itself to a box that never scrolls (the document does) and rode up
+     out of view with the rest of the page. `clip` contains overflow the same
+     way without becoming one. Anything old enough not to know `clip` still has
+     the viewport-level clip on `html` above. */
+  overflow-x: clip;
   color: var(--text);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
@@ -822,12 +845,10 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
 .duo-heading, .duo-row { opacity: 0; transform: translateY(14px); transition: opacity .55s var(--ease-rank), transform .55s var(--ease-rank); }
 .duo-panel.is-in :is(.duo-heading, .duo-row) { opacity: 1; transform: none; }
 .duo-panel.is-in .duo-heading { transition-delay: .42s; }
-.duo-panel.is-in .duo-row:nth-child(1) { transition-delay: .5s; }
-.duo-panel.is-in .duo-row:nth-child(2) { transition-delay: .58s; }
-.duo-panel.is-in .duo-row:nth-child(3) { transition-delay: .66s; }
-.duo-panel.is-in .duo-row:nth-child(4) { transition-delay: .74s; }
-.duo-panel.is-in .duo-row:nth-child(5) { transition-delay: .82s; }
-.duo-panel.is-in .duo-row:nth-child(6) { transition-delay: .9s; }
+/* Each row carries its own --duo-in: the delay has to follow however many
+   pairs cleared the minimum, and a fixed list of nth-child rules left every
+   row past the sixth arriving first, with no delay at all. */
+.duo-panel.is-in .duo-row { transition-delay: var(--duo-in, .5s); }
 
 .duo-heading, .duo-grid { display: grid; grid-template-columns: 30px minmax(190px, 1fr) 90px minmax(220px, 1.1fr) 116px; align-items: center; column-gap: 11px; }
 .duo-heading { align-items: end; margin-top: 14px; padding: 0 14px 9px; border-bottom: 1px solid var(--line); color: var(--muted); font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
