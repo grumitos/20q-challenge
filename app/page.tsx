@@ -1029,13 +1029,20 @@ function DuoRow({ duo, players, version, place }: {
 }
 
 /**
- * The tournament title card. Every letter animates on its own delay, so the
- * name assembles rather than fading in as a block.
+ * The tournament title card. On its first opening of a page load every letter
+ * animates on its own delay, so the name assembles rather than fading in as a
+ * block. After that the reveal has been seen: `seen` opens the card as a place
+ * rather than as an entrance — one fade for everything at once, and the title
+ * steps back from hero to a header at the top edge.
  */
-function GaspiOverlay({ onClose, particles }: { onClose: () => void; particles: readonly CSSProperties[] }) {
+function GaspiOverlay({ onClose, particles, seen }: {
+  onClose: () => void;
+  particles: readonly CSSProperties[];
+  seen: boolean;
+}) {
   let letterIndex = 0;
   return (
-    <div className="gaspi" role="dialog" aria-modal="true" aria-label={GASPI_TITLE}>
+    <div className={`gaspi${seen ? " is-seen" : ""}`} role="dialog" aria-modal="true" aria-label={GASPI_TITLE}>
       <div className="gaspi-bg" aria-hidden="true" />
       <div className="gaspi-particles" aria-hidden="true">
         {particles.map((style, index) => <i key={index} style={style} />)}
@@ -1052,7 +1059,7 @@ function GaspiOverlay({ onClose, particles }: { onClose: () => void; particles: 
                 <span
                   className="gaspi-letter"
                   key={`${line}-${index}`}
-                  style={{ animationDelay: `${GASPI_LETTER_START_MS + letterIndex++ * GASPI_LETTER_STEP_MS}ms` }}
+                  style={seen ? undefined : { animationDelay: `${GASPI_LETTER_START_MS + letterIndex++ * GASPI_LETTER_STEP_MS}ms` }}
                 >{character === " " ? "\u00a0" : character}</span>
               ))}
             </span>
@@ -1081,12 +1088,14 @@ export default function Home() {
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [gaspiOpen, setGaspiOpen] = useState(false);
+  const [gaspiSeen, setGaspiSeen] = useState(false);
   const [duosRevealed, setDuosRevealed] = useState(false);
   const hasCachedData = useRef(false);
   const renderedFetchedAt = useRef<string | null>(null);
   const reloadBoard = useRef<() => void>(() => undefined);
   const renderedOrder = useRef<string | null>(null);
   const invasionTimer = useRef(0);
+  const gaspiRevealSpent = useRef(false);
   const scrollSentinel = useRef<HTMLSpanElement | null>(null);
   const duoPanel = useRef<HTMLElement | null>(null);
   const rankingNodes = useRef(new Map<string, HTMLElement>());
@@ -1361,8 +1370,12 @@ export default function Home() {
     document.documentElement.classList.remove("is-invaded");
   }, []);
 
+  // Spent once per page load, like the helicopter: a reveal that replays on
+  // every visit stops being a reveal and starts being a wait.
   const openGaspi = useCallback(() => {
     playHelicopter();
+    setGaspiSeen(gaspiRevealSpent.current);
+    gaspiRevealSpent.current = true;
     setGaspiOpen(true);
   }, []);
 
@@ -1635,7 +1648,7 @@ export default function Home() {
         <span lang="en">20Q Challenge is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</span>
       </footer>
 
-      {gaspiOpen ? <GaspiOverlay onClose={() => setGaspiOpen(false)} particles={gaspiParticles} /> : null}
+      {gaspiOpen ? <GaspiOverlay onClose={() => setGaspiOpen(false)} particles={gaspiParticles} seen={gaspiSeen} /> : null}
     </main>
   );
 }

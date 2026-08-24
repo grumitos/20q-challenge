@@ -935,6 +935,21 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
 @keyframes gaspi-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes gaspi-in { from { opacity: 0; } to { opacity: 1; } }
 
+/* ─── THE SECOND VISIT ───
+   The reveal is spent after one opening per page load. From then on the card
+   arrives whole: every piece rides the overlay's own fade rather than its own
+   delay, and the title stops being the thing you wait for — it moves up to the
+   top edge at a fraction of the size and hands the middle of the screen to the
+   hall of fame, which is what someone coming back a second time came to see. */
+.gaspi.is-seen :is(.gaspi-back, .gaspi-kicker, .gaspi-letter, .gaspi-beam, .gaspi-sub, .gaspi-hall) { animation: none; }
+.gaspi.is-seen .gaspi-beam { transform: scaleX(1); }
+.gaspi.is-seen .gaspi-stage { align-content: start; gap: 13px; padding: 64px 24px 48px; }
+.gaspi.is-seen .gaspi-kicker { font-size: 10.5px; letter-spacing: .34em; }
+.gaspi.is-seen .gaspi-title { font-size: clamp(21px, 3.2vw, 34px); }
+.gaspi.is-seen .gaspi-line { filter: drop-shadow(0 3px 16px rgb(224 180 94 / 26%)); }
+.gaspi.is-seen .gaspi-beam { width: min(280px, 46vw); }
+.gaspi.is-seen .gaspi-hall { margin-top: 38px; }
+
 /* ═══════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════ */
@@ -1145,6 +1160,8 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
   .duo-avatars img { width: 34px; height: 34px; }
   .gaspi-back { top: 12px; left: 12px; }
   .gaspi-stage { padding: 84px 16px 48px; }
+  .gaspi.is-seen .gaspi-stage { padding: 62px 16px 40px; }
+  .gaspi.is-seen .gaspi-hall { margin-top: 26px; }
 }
 
 /* A respawned Papipu stays a quiet, grayscale surface. The generic hover rules

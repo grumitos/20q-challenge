@@ -123,6 +123,25 @@ test("keeps the header taking its background whoever is doing the scrolling", as
   assert.doesNotMatch(css, /scrollbar-gutter/);
 });
 
+test("spends the tournament reveal once per page load, not once per opening", async () => {
+  const [page, css] = await Promise.all([readPage(), readCss()]);
+
+  // A ref, not state: it has to survive the card closing and reopening, and it
+  // resets only when the page does.
+  assert.match(page, /const gaspiRevealSpent = useRef\(false\)/);
+  assert.match(page, /setGaspiSeen\(gaspiRevealSpent\.current\);[\s\S]*?gaspiRevealSpent\.current = true/);
+  // No per-letter delay to stagger once the reveal is spent.
+  assert.match(page, /style=\{seen \? undefined : \{ animationDelay:/);
+  assert.match(page, /`gaspi\$\{seen \? " is-seen" : ""\}`/);
+
+  // Second visit: every piece rides the overlay's own fade instead of its own
+  // delay, and the title steps back from hero to a header at the top edge.
+  assert.match(css, /\.gaspi\.is-seen :is\([^)]*\) \{ animation: none; \}/);
+  assert.match(css, /\.gaspi\.is-seen \.gaspi-stage \{[^}]*align-content: start/);
+  assert.match(css, /\.gaspi\.is-seen \.gaspi-title \{ font-size: clamp\(21px/);
+  assert.match(css, /\.gaspi \{[^}]*animation: gaspi-in/);
+});
+
 test("lets two surfaces take the invasion at reduced strength", async () => {
   const css = await readCss();
 
