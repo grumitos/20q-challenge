@@ -10,6 +10,14 @@ export type DuoTallyRow = {
   games: number;
 };
 
+/** One pairing seen from one member's side, with the record they share. */
+export type DuoRecordRow = {
+  player_id: string;
+  peer_id: string;
+  games: number;
+  wins: number;
+};
+
 export function parseParticipants(raw: string | null): LastMatchParticipant[] {
   if (!raw) return [];
   try {
@@ -110,6 +118,83 @@ export const HABITUAL_DUO_QUERY =
        AND peer_id IN (SELECT value FROM json_each(?1))
      GROUP BY player_id, peer_id
      ORDER BY player_id, games DESC, peer_id`;
+
+/**
+ * The same co-appearance tally, narrowed to what a *duo* actually means and
+ * carrying the record the pair holds together.
+ *
+ * Two differences from `HABITUAL_DUO_QUERY`, both load-bearing:
+ *
+ * - **Same team only.** That query counts any co-appearance, which is the right
+ *   answer for "who do you keep running into" but the wrong one for a winrate:
+ *   two members drawn onto opposite sides share a game and never share its
+ *   outcome. The team is read off the roster blob, from the entry whose
+ *   `challengePlayerId` is the player themselves.
+ * - **Indexed matches only.** A tracker session is a game in progress, so it has
+ *   no result to fold in; the immutable history is the only source that can
+ *   answer this, and it carries `won` per player already.
+ *
+ * Rows come back directed — A beside B and B beside A — because each side is
+ * anchored on its own `player_match_stats` row. They agree whenever both sides
+ * are backfilled; `foldDuoRecords` collapses them and prefers the fuller one.
+ */
+export const DUO_RECORD_QUERY =
+    `SELECT player_id, peer_id, COUNT(*) AS games, SUM(won) AS wins
+     FROM (
+       SELECT mine.player_id,
+              mine.won,
+              mine.own_team,
+              json_extract(participant.value, '$.challengePlayerId') AS peer_id,
+              json_extract(participant.value, '$.teamId') AS peer_team
+       FROM (
+         SELECT s.player_id,
+                CASE WHEN s.won THEN 1 ELSE 0 END AS won,
+                m.participants,
+                (SELECT json_extract(own.value, '$.teamId')
+                   FROM json_each(m.participants) AS own
+                  WHERE json_extract(own.value, '$.challengePlayerId') = s.player_id) AS own_team
+         FROM player_match_stats s
+         JOIN ranked_matches m ON m.match_id = s.match_id
+         WHERE s.player_id IN (SELECT value FROM json_each(?1))
+         ORDER BY s.game_start_timestamp DESC
+         LIMIT ?2
+       ) AS mine
+       JOIN json_each(mine.participants) AS participant
+     )
+     WHERE peer_id IS NOT NULL
+       AND peer_id <> player_id
+       AND peer_id IN (SELECT value FROM json_each(?1))
+       AND own_team IS NOT NULL
+       AND peer_team = own_team
+     GROUP BY player_id, peer_id
+     ORDER BY player_id, games DESC, peer_id`;
+
+/**
+ * Collapses the directed rows into one record per unordered pair.
+ *
+ * A pair is keyed on its two ids sorted, so A/B and B/A land together. When
+ * both sides reported, they carry the same game — same team, same result — so
+ * either will do; the larger sample wins, which is what keeps a pair readable
+ * while one of its members is still being backfilled.
+ */
+export function foldDuoRecords(rows: readonly DuoRecordRow[]) {
+  const byPair = new Map<string, { playerIds: [string, string]; games: number; wins: number }>();
+  for (const row of rows) {
+    if (row.games <= 0 || row.player_id === row.peer_id) continue;
+    const pair: [string, string] = row.player_id < row.peer_id
+      ? [row.player_id, row.peer_id]
+      : [row.peer_id, row.player_id];
+    const key = `${pair[0]}\u0000${pair[1]}`;
+    const seen = byPair.get(key);
+    if (seen && seen.games >= row.games) continue;
+    byPair.set(key, {
+      playerIds: pair,
+      games: row.games,
+      wins: Math.min(row.games, Math.max(0, row.wins)),
+    });
+  }
+  return [...byPair.values()];
+}
 
 /**
  * Keeps each player's most frequent pairing out of the tallies D1 returns.

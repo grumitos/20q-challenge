@@ -30,14 +30,13 @@ export async function GET() {
     },
   });
 
-  // Recent form, habitual duo, place movement and any live game live in D1
-  // rather than in the cached snapshot, so they are resolved per request.
+  // Recent form, habitual duo, place movement, any live game and the duo
+  // ranking live in D1 rather than in the cached snapshot, so they are resolved
+  // per request.
+  const { players, duos } = await enrichPlayers(payload.data.players, rankScore, now);
   const enriched: typeof payload = {
     ...payload,
-    data: {
-      ...payload.data,
-      players: await enrichPlayers(payload.data.players, rankScore, now),
-    },
+    data: { ...payload.data, players, duos },
   };
 
   return Response.json(enriched, {

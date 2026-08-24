@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  challengeGoalPlayer,
-  calculateGoalProgress,
-  challengeGoalForLeader,
+  DUO_LEADERBOARD_MIN_GAMES,
   championWinRatePercent,
   championWinRateTone,
   createDemoSnapshot,
@@ -20,6 +18,7 @@ import {
   selectBestChampions,
   sortLeaderboard,
   type ChampionAggregate,
+  type DuoRecord,
   type LastMatchParticipant,
   type LeaderboardPayload,
   type LpChangeEvidence,
@@ -28,38 +27,6 @@ import {
   type RankTier,
   type RosterSlot,
 } from "../lib/leaderboard";
-
-/** Accent per tier. The goal card is the only frame still keyed to one. */
-const TIER_ACCENT: Record<RankTier, string> = {
-  IRON: "#a89e94",
-  BRONZE: "#d69a6a",
-  SILVER: "#d3dcec",
-  GOLD: "#f6d68a",
-  PLATINUM: "#7adbc8",
-  EMERALD: "#6fd69a",
-  DIAMOND: "#8fb8f5",
-  MASTER: "#c3a1ff",
-  GRANDMASTER: "#f08080",
-  CHALLENGER: "#f5d97e",
-  UNRANKED: "#8b91a6",
-};
-
-/**
- * A tier's accent and the washes derived from it, as custom properties, so the
- * heavy platinum framing on the goal block follows whatever tier the target
- * actually holds. The list rows deliberately take none of this: below the podium
- * the rank lives in the crest and the label, not in the frame.
- */
-function goalAccentStyle(tier: RankTier): CSSProperties {
-  const accent = TIER_ACCENT[tier];
-  return {
-    "--goal-color": accent,
-    "--goal-edge": `${accent}9e`,
-    "--goal-glow": `${accent}3d`,
-    "--goal-wash": `${accent}1f`,
-    "--goal-wash-soft": `${accent}0a`,
-  } as CSSProperties;
-}
 
 const initialPayload: LeaderboardPayload = {
   data: createDemoSnapshot(new Date("2026-01-01T00:00:00.000Z")),
@@ -70,6 +37,19 @@ const LEADERBOARD_STORAGE_KEY = "20q-leaderboard-payload-v1";
 const LEADERBOARD_REFRESH_MS = 60_000;
 const PODIUM_CHAMPION_SLOTS = 5;
 const ROW_CHAMPION_SLOTS = 4;
+
+/**
+ * Los Juegos de Gaspi. The header badge opens a title card over the ranking and
+ * repaints what is underneath it — see `html.is-invaded` in the stylesheet.
+ */
+const GASPI_PARTICLE_COUNT = 18;
+/** Long enough for the overlay's own fade to have covered the ranking, so the
+    palette swap underneath is never seen happening. */
+const GASPI_INVASION_DELAY_MS = 560;
+const GASPI_TITLE = "LOS JUEGOS DE GASPI";
+const GASPI_LETTER_START_MS = 350;
+const GASPI_LETTER_STEP_MS = 70;
+const GASPI_LINES = ["LOS JUEGOS", "DE GASPI"] as const;
 
 const awayTabTitles = [
   "Bienvenidos a los juegos de Gaspi",
@@ -206,13 +186,9 @@ function championLoadingAsset(champion: ChampionAggregate) {
   return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${champion.id}_0.jpg`;
 }
 
-const preloadedMemberImages = new Map<string, HTMLImageElement>();
-
-function preloadMemberImage(url: string) {
-  if (!url || preloadedMemberImages.has(url)) return;
-  const image = new window.Image();
-  image.src = url;
-  preloadedMemberImages.set(url, image);
+/** Duo labels use the part of a handle a person is actually called by. */
+function firstName(player: PlayerSnapshot) {
+  return player.gameName.split(" ")[0];
 }
 
 function profileUrl(player: PlayerSnapshot) {
@@ -731,9 +707,11 @@ function PodiumCard({ player, place, version, gap, isLeader, aheadName, respawnS
             {pending
               ? <Bone w={74} h={10} />
               : <small className={`podium-tier ${tierTextClass(player.tier)}`}>{rankLabel(player)}</small>}
-            {pending
-              ? <Bone w={118} h={16} />
-              : gapText ? <span className={`gap-pill${isLeader ? " is-leader" : ""}`}>{gapText}</span> : null}
+            <span className="gap-slot">
+              {pending
+                ? <Bone w={118} h={16} />
+                : gapText ? <span className="gap-pill">{gapText}</span> : null}
+            </span>
           </span>
         </div>
 
@@ -841,7 +819,7 @@ function LeaderboardRow({ player, place, version, gap, isLeader, aheadName, resp
                 <>
                   <strong className={`tier ${tierTextClass(player.tier)}`}>{rankLabel(player)}</strong>
                   <small className="lp">{player.leaguePoints}<i>PL</i></small>
-                  {gapText ? <small className={`gap-text${isLeader ? " is-leader" : ""}`}>{gapText}</small> : null}
+                  {gapText ? <small className="gap-text">{gapText}</small> : null}
                 </>
               )}
           </span>
@@ -879,7 +857,7 @@ function LeaderboardRow({ player, place, version, gap, isLeader, aheadName, resp
         <ChampionBand player={player} version={version} slots={ROW_CHAMPION_SLOTS} className="row-champions champions" label="Mejores campeones" pending={pending} />
 
         {isLive ? (
-          <span className="row-live" data-label="Partida">
+          <span className="row-live">
             <LiveSummary player={player} version={version} clockNow={clockNow} />
           </span>
         ) : (
@@ -894,6 +872,198 @@ function LeaderboardRow({ player, place, version, gap, isLeader, aheadName, resp
   );
 }
 
+let helicopterPlayed = false;
+
+/**
+ * The rotor that arrives with Los Juegos: brown noise chopped by an LFO at
+ * blade frequency over a low body tone, panned slowly across the stereo field.
+ * Synthesised rather than shipped, because seven seconds of audio is a bigger
+ * download than the whole ranking.
+ *
+ * Once per page load, and only ever from the click that opens the card — which
+ * is also what lets the context start at all. Anything unsupported, refused or
+ * broken leaves the view exactly as it was.
+ */
+function playHelicopter() {
+  if (helicopterPlayed) return;
+  helicopterPlayed = true;
+  try {
+    const AudioContextConstructor = window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+
+    const context = new AudioContextConstructor();
+    const duration = 7.5;
+    const now = context.currentTime;
+
+    const master = context.createGain();
+    master.gain.setValueAtTime(0, now);
+    master.gain.linearRampToValueAtTime(.05, now + 1.4);
+    master.gain.setValueAtTime(.05, now + 4.6);
+    master.gain.linearRampToValueAtTime(0, now + duration);
+
+    const sampleCount = Math.floor(context.sampleRate * duration);
+    const buffer = context.createBuffer(1, sampleCount, context.sampleRate);
+    const samples = buffer.getChannelData(0);
+    let previous = 0;
+    for (let index = 0; index < sampleCount; index += 1) {
+      const white = Math.random() * 2 - 1;
+      previous = (previous + .02 * white) / 1.02;
+      samples[index] = previous * 3.5;
+    }
+
+    const noise = context.createBufferSource();
+    noise.buffer = buffer;
+    const lowpass = context.createBiquadFilter();
+    lowpass.type = "lowpass";
+    lowpass.frequency.value = 300;
+    lowpass.Q.value = .7;
+
+    const chop = context.createGain();
+    chop.gain.value = .55;
+    const bladeRate = context.createOscillator();
+    bladeRate.frequency.setValueAtTime(11.2, now);
+    bladeRate.frequency.linearRampToValueAtTime(13.4, now + duration);
+    const bladeDepth = context.createGain();
+    bladeDepth.gain.value = .45;
+    bladeRate.connect(bladeDepth);
+    bladeDepth.connect(chop.gain);
+
+    // The body shares the chop, so the hum pulses with the blades.
+    const body = context.createOscillator();
+    body.type = "sine";
+    body.frequency.value = 52;
+    const bodyGain = context.createGain();
+    bodyGain.gain.value = .32;
+
+    if (typeof context.createStereoPanner === "function") {
+      const panner = context.createStereoPanner();
+      const panRate = context.createOscillator();
+      panRate.frequency.value = .16;
+      const panDepth = context.createGain();
+      panDepth.gain.value = .55;
+      panRate.connect(panDepth);
+      panDepth.connect(panner.pan);
+      master.connect(panner);
+      panner.connect(context.destination);
+      panRate.start(now);
+      panRate.stop(now + duration);
+    } else {
+      master.connect(context.destination);
+    }
+
+    noise.connect(lowpass);
+    lowpass.connect(chop);
+    chop.connect(master);
+    body.connect(bodyGain);
+    bodyGain.connect(chop);
+
+    noise.start(now);
+    bladeRate.start(now);
+    body.start(now);
+    noise.stop(now + duration);
+    bladeRate.stop(now + duration);
+    body.stop(now + duration);
+    window.setTimeout(() => { void context.close().catch(() => undefined); }, (duration + .4) * 1_000);
+  } catch {
+    // No audio is not a failure state: the card opens either way.
+  }
+}
+
+/**
+ * One line of the duo table. Nothing here is stored: the pair is two ids, and
+ * every name, crest and icon is read off the players the ranking already has.
+ */
+function DuoRow({ duo, players, version, place }: {
+  duo: DuoRecord;
+  players: readonly PlayerSnapshot[];
+  version: string;
+  place: number;
+}) {
+  const [first, second] = duo.playerIds.map((id) => players.find((player) => player.id === id));
+  if (!first || !second) return null;
+  const losses = duo.games - duo.wins;
+  const winRate = duo.games > 0 ? (duo.wins / duo.games) * 100 : 0;
+  const names = `${firstName(first)} + ${firstName(second)}`;
+  return (
+    <li className={`duo-row${place === 1 ? " is-top" : ""}`}>
+      <div className="duo-grid">
+        <span className="duo-place"><strong>{place}</strong></span>
+        <span className="duo-pair">
+          <span className="duo-avatars" aria-hidden="true">
+            {[first, second].map((player) => (
+              player.profileIconId > 0
+                /* eslint-disable-next-line @next/next/no-img-element */
+                ? <img key={player.id} src={profileAsset(version, player.profileIconId)} alt="" width={38} height={38} loading="lazy" />
+                /* eslint-disable-next-line @next/next/no-img-element */
+                : <img key={player.id} src="/brand-logo.webp" alt="" width={38} height={38} loading="lazy" />
+            ))}
+          </span>
+          <span translate="no">
+            <strong>{names}</strong>
+            <small>{rankLabel(first)} · {rankLabel(second)}</small>
+          </span>
+        </span>
+        <span className="duo-games" data-label="Partidas"><strong>{duo.games}</strong></span>
+        <span className="duo-wr" data-label="Winrate juntos">
+          <span className="duo-wr-head">
+            <strong>{winRate.toFixed(1)}%</strong>
+            <small className="record"><span className="wins">{duo.wins}V</span> · <span className="losses">{losses}D</span></small>
+          </span>
+          <span className="wr-bar" role="img" aria-label={`${names}: ${duo.wins} victorias, ${losses} derrotas juntos`}>
+            <i style={{ width: `${Math.max(2, winRate)}%` }} />
+          </span>
+        </span>
+        <span className="duo-score" data-label="Ponderado"><strong>{(duo.score * 100).toFixed(1)}</strong><small>puntaje</small></span>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The tournament title card. Every letter animates on its own delay, so the
+ * name assembles rather than fading in as a block.
+ */
+function GaspiOverlay({ onClose, particles }: { onClose: () => void; particles: readonly CSSProperties[] }) {
+  let letterIndex = 0;
+  return (
+    <div className="gaspi" role="dialog" aria-modal="true" aria-label={GASPI_TITLE}>
+      <div className="gaspi-bg" aria-hidden="true" />
+      <div className="gaspi-particles" aria-hidden="true">
+        {particles.map((style, index) => <i key={index} style={style} />)}
+      </div>
+      <button type="button" className="gaspi-back" onClick={onClose}>← Volver al ranking</button>
+      <div className="gaspi-stage">
+        <small className="gaspi-kicker">20Q Challenge</small>
+        <span className="gaspi-beam is-top" aria-hidden="true" />
+        <h2 className="gaspi-title">
+          <span className="sr-only">{GASPI_TITLE}</span>
+          {GASPI_LINES.map((line) => (
+            <span className="gaspi-line" key={line} aria-hidden="true">
+              {[...line].map((character, index) => (
+                <span
+                  className="gaspi-letter"
+                  key={`${line}-${index}`}
+                  style={{ animationDelay: `${GASPI_LETTER_START_MS + letterIndex++ * GASPI_LETTER_STEP_MS}ms` }}
+                >{character === " " ? "\u00a0" : character}</span>
+              ))}
+            </span>
+          ))}
+        </h2>
+        <span className="gaspi-beam is-bottom" aria-hidden="true" />
+        <small className="gaspi-sub">Torneo 1v1 · S2026</small>
+        <div className="gaspi-hall">
+          <small className="gaspi-hall-label">Sala de la fama</small>
+          <article className="gaspi-edition">
+            <strong className="gaspi-edition-name">Edición I</strong>
+            <span className="gaspi-slot" aria-hidden="true">?</span>
+          </article>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [payload, setPayload] = useState(initialPayload);
   const [hasLiveData, setHasLiveData] = useState(false);
@@ -902,40 +1072,30 @@ export default function Home() {
   const [hydratedFromCache, setHydratedFromCache] = useState(false);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const [goalVisible, setGoalVisible] = useState(false);
+  const [gaspiOpen, setGaspiOpen] = useState(false);
+  const [duosRevealed, setDuosRevealed] = useState(false);
   const hasCachedData = useRef(false);
   const renderedFetchedAt = useRef<string | null>(null);
+  const reloadBoard = useRef<() => void>(() => undefined);
+  const renderedOrder = useRef<string | null>(null);
+  const scrollSentinel = useRef<HTMLSpanElement | null>(null);
+  const duoPanel = useRef<HTMLElement | null>(null);
   const rankingNodes = useRef(new Map<string, HTMLElement>());
   const rankingPositions = useRef(new Map<string, DOMRectReadOnly>());
   const rankingAnimations = useRef(new Map<string, Animation>());
   const rankingFallbackCleanups = useRef(new Map<string, () => void>());
   const players = payload.data.players;
-  // The target is whoever currently ranks highest, not a fixed name: the board
-  // used to pin it to Mamimu, so anyone overtaking her would have been ranked
-  // against a goal they had already passed. The target is never a competitor,
-  // so the ranking measured against it excludes it and the card keeps its
-  // meaning once revealed.
-  const goalPlayer = challengeGoalPlayer(players);
-  const goalPlayerTier = goalPlayer?.tier ?? "UNRANKED";
-  const goalPlayerSummary = hasLiveData
-    ? (goalPlayer ? `${rankLabel(goalPlayer)} ${goalPlayer.leaguePoints}PL` : "Sin rango 0PL")
-    : "—";
-  const contenders = sortLeaderboard(players.filter((player) => player.id !== goalPlayer?.id));
-  const visiblePlayers = goalVisible ? sortLeaderboard(players) : contenders;
-  const playersWithIncompleteHistory = visiblePlayers.filter((player) => player.analytics.backfillStatus !== "complete");
-  const historyCoverage = playersWithIncompleteHistory.length === 0
-    ? "Detalle de partidas disponible para toda la cobertura registrada"
-    : `Agregados históricos disponibles; detalle de partidas en proceso (${playersWithIncompleteHistory.length} jugadores)`;
+  // Nobody is held out of the standings any more. The board used to keep its
+  // target beside the ranking rather than in it, which meant the place a player
+  // held and the arrow beside it were counted over different lists; one list
+  // makes both true at once.
+  const visiblePlayers = sortLeaderboard(players);
   const topThree = visiblePlayers.slice(0, 3);
   const remaining = visiblePlayers.slice(3);
   const leaderLead = leaderAdvantage(visiblePlayers);
   const liveCount = visiblePlayers.filter((player) => player.liveGame).length;
-  // `progressToGold` was recomputed on every load and never rendered; the goal
-  // card now shows how far the leading contender is from the challenge target.
-  const goalTier = challengeGoalForLeader(contenders[0]);
-  const goalProgress = contenders[0]
-    ? calculateGoalProgress(contenders[0].tier, contenders[0].division, contenders[0].leaguePoints, goalTier)
-    : 0;
+  const duos = payload.data.duos ?? [];
+  const duoCount = duos.length;
   const cardPropsFor = (player: PlayerSnapshot, index: number) => ({
     gap: index === 0 ? leaderLead : leaguePointsGap(visiblePlayers, index),
     isLeader: index === 0,
@@ -943,26 +1103,6 @@ export default function Home() {
   });
   const papipuSeconds = papipuRespawnSeconds(clockNow);
   const respawnFor = (player: PlayerSnapshot) => player.gameName.toLocaleLowerCase("es-PE") === "papipu" ? papipuSeconds : null;
-
-  useEffect(() => {
-    if (!hasLiveData || goalVisible || !goalPlayer?.riotIdFound) return;
-
-    const version = payload.data.dataDragonVersion;
-    const bestChampions = selectBestChampions(goalPlayer.analytics.championCounts, PODIUM_CHAMPION_SLOTS);
-    const bestChampion = bestChampions[0];
-
-    const assetUrls = new Set<string>([
-      rankAsset(goalPlayer.tier),
-      ...bestChampions.map((champion) => championAsset(version, champion)),
-    ]);
-    if (bestChampion) assetUrls.add(championLoadingAsset(bestChampion));
-    if (goalPlayer.profileIconId > 0) assetUrls.add(profileAsset(version, goalPlayer.profileIconId));
-    if (goalPlayer.lastSoloQueueMatch) {
-      assetUrls.add(championAsset(version, goalPlayer.lastSoloQueueMatch.championId));
-      goalPlayer.lastSoloQueueMatch.participants.forEach((participant) => assetUrls.add(championAsset(version, participant.championId)));
-    }
-    assetUrls.forEach(preloadMemberImage);
-  }, [hasLiveData, goalPlayer, goalVisible, payload.data.dataDragonVersion]);
 
   const registerRankingItem = useCallback<RankingItemRef>((playerId, element) => {
     if (element) rankingNodes.current.set(playerId, element);
@@ -977,15 +1117,11 @@ export default function Home() {
     rankingNodes.current = nodes;
     return nodes;
   }, []);
-  const captureRankingPositions = () => {
+  const captureRankingPositions = useCallback(() => {
     const positions = new Map<string, DOMRectReadOnly>();
     syncRankingNodes().forEach((element, playerId) => positions.set(playerId, element.getBoundingClientRect()));
     rankingPositions.current = positions;
-  };
-  const toggleGoal = () => {
-    captureRankingPositions();
-    setGoalVisible((visible) => !visible);
-  };
+  }, [syncRankingNodes]);
 
   useLayoutEffect(() => {
     if (rankingPositions.current.size === 0) return;
@@ -1067,8 +1203,8 @@ export default function Home() {
 
       const deltaX = previous.left - next.left;
       const deltaY = previous.top - next.top;
-      // Revealing the target pushes third place out of the podium and into the
-      // list, so that player's element changes shape between the two frames.
+      // A player crossing the podium boundary swaps a card for a row, so that
+      // element changes shape between the two frames.
       // Scaling the new element from the old one's dimensions squashes its
       // contents the whole way across; it travels centre to centre at its own
       // size instead, and a short fade carries the change of shape.
@@ -1090,7 +1226,7 @@ export default function Home() {
         { transform: "translate3d(0, 0, 0)" },
       ], isRow ? 360 : 480);
     });
-  }, [hasLiveData, goalVisible, syncRankingNodes]);
+  }, [hasLiveData, payload.data.fetchedAt, syncRankingNodes]);
 
   // A live game's elapsed clock is drawn from `clockNow`, so it only advances
   // while this ticks. Tying the per-second beat to `papipuSeconds` alone meant
@@ -1110,11 +1246,94 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [clockNow, needsSecondTicks]);
 
+  // Which box scrolls is not always the document, and whenever it was not, the
+  // header never took its contrast wash: `scrollY` stayed at zero while the
+  // page moved. A sentinel at the top of the shell answers the same question
+  // without caring who is doing the scrolling; the listener stays as the
+  // fallback for browsers without an observer.
   useEffect(() => {
-    const handleScroll = () => setIsHeaderScrolled(window.scrollY > 8);
+    const sentinel = scrollSentinel.current;
+    if (sentinel && typeof IntersectionObserver === "function") {
+      const observer = new IntersectionObserver(
+        ([entry]) => setIsHeaderScrolled(!entry.isIntersecting),
+        { rootMargin: "-9px 0px 0px 0px", threshold: 0 },
+      );
+      observer.observe(sentinel);
+      return () => observer.disconnect();
+    }
+
+    const handleScroll = () => setIsHeaderScrolled(Math.max(
+      window.scrollY || 0,
+      document.documentElement.scrollTop || 0,
+      document.body.scrollTop || 0,
+    ) > 8);
+    handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // The duos are a second chapter, so they arrive when they are reached rather
+  // than with the ranking. Once revealed they stay revealed.
+  useEffect(() => {
+    const panel = duoPanel.current;
+    if (!panel || duosRevealed) return;
+    if (typeof IntersectionObserver !== "function") {
+      // Nothing to observe with, so the chapter simply arrives with the board.
+      const frame = window.requestAnimationFrame(() => setDuosRevealed(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setDuosRevealed(true);
+      observer.disconnect();
+    }, { rootMargin: "0px 0px -18% 0px", threshold: .08 });
+    observer.observe(panel);
+    return () => observer.disconnect();
+    // The panel mounts with the first payload that carries a pair, which is not
+    // always the first payload at all, so its arrival is what starts this.
+  }, [duosRevealed, duoCount]);
+
+  // The invasion is not an overlay painted over the ranking: it mutates the
+  // palette the ranking is drawn from. It waits for the title card's own fade
+  // to have covered the board, so the swap is never seen happening, and it is
+  // undone the moment the card closes.
+  useEffect(() => {
+    if (!gaspiOpen) return;
+    // `<html>` is the scrolling element here (see `scroll-behavior` on it in
+    // globals.css), not `<body>`. Locking only the body left the document
+    // itself still scrollable underneath the fixed overlay, so the ranking's
+    // own scroll range leaked through as empty space above and below the card.
+    const root = document.documentElement;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    root.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    const swap = window.setTimeout(() => root.classList.add("is-invaded"), GASPI_INVASION_DELAY_MS);
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setGaspiOpen(false);
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      window.clearTimeout(swap);
+      window.removeEventListener("keydown", handleKey);
+      root.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      root.classList.remove("is-invaded");
+    };
+  }, [gaspiOpen]);
+
+  const openGaspi = useCallback(() => {
+    playHelicopter();
+    setGaspiOpen(true);
+  }, []);
+
+  // The tab title belongs to whichever view is on top, so a tab-away that
+  // returns to the tournament card comes back to its name and not the board's.
+  const homeTitle = useCallback(() => gaspiOpen ? GASPI_TITLE : "20Q Challenge", [gaspiOpen]);
+
+  useEffect(() => {
+    document.title = homeTitle();
+  }, [homeTitle]);
 
   useEffect(() => {
     let isAway = false;
@@ -1148,7 +1367,7 @@ export default function Home() {
     const restoreTitle = () => {
       if (!isAway) return;
       isAway = false;
-      document.title = "20Q Challenge";
+      document.title = homeTitle();
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") markAway();
@@ -1163,7 +1382,7 @@ export default function Home() {
       window.removeEventListener("blur", markAway);
       window.removeEventListener("focus", restoreTitle);
     };
-  }, []);
+  }, [homeTitle]);
 
   useEffect(() => {
     let active = true;
@@ -1179,6 +1398,7 @@ export default function Home() {
       if (storedPayload) {
         hasCachedData.current = true;
         renderedFetchedAt.current = storedPayload.data.fetchedAt;
+        renderedOrder.current = sortLeaderboard(storedPayload.data.players).map((player) => player.id).join(",");
         hydrateFrame = window.requestAnimationFrame(() => {
           if (!active) return;
           setHydratedFromCache(true);
@@ -1207,6 +1427,14 @@ export default function Home() {
           hydrateFrame = 0;
           const shouldAnimateRefresh = hasCachedData.current && renderedFetchedAt.current !== nextPayload.data.fetchedAt;
           renderedFetchedAt.current = nextPayload.data.fetchedAt;
+          // A refresh that reorders the board is the thing the arrows in the
+          // place column describe, so the cards travel to their new positions
+          // rather than snapping there. Measured before React commits, which
+          // is the whole point of a FLIP; nothing is captured when the order
+          // held, and the layout effect then has nothing to play.
+          const nextOrder = sortLeaderboard(nextPayload.data.players).map((player) => player.id).join(",");
+          if (renderedOrder.current !== null && renderedOrder.current !== nextOrder) captureRankingPositions();
+          renderedOrder.current = nextOrder;
           hasCachedData.current = true;
           setPayload(nextPayload);
           setHasLiveData(true);
@@ -1232,6 +1460,7 @@ export default function Home() {
       }
     }
 
+    reloadBoard.current = () => { void loadLeaderboard(); };
     void loadLeaderboard();
     pollTimer = window.setInterval(() => {
       void loadLeaderboard();
@@ -1239,28 +1468,39 @@ export default function Home() {
 
     return () => {
       active = false;
+      reloadBoard.current = () => undefined;
       controller.abort();
       window.cancelAnimationFrame(hydrateFrame);
       window.cancelAnimationFrame(refreshFrame);
       window.clearTimeout(refreshTimer);
       window.clearInterval(pollTimer);
     };
-  }, []);
+  }, [captureRankingPositions]);
 
   const pendingCardProps = { gap: null, isLeader: false, aheadName: undefined, respawnSeconds: null, clockNow, registerRankingItem, pending: true as const };
+  // Deterministic rather than random: the field has to look scattered, not be
+  // scattered, and a stable one survives a re-render without twitching.
+  const gaspiParticles: CSSProperties[] = Array.from({ length: GASPI_PARTICLE_COUNT }, (_, index) => ({
+    left: `${(index * 53 + 7) % 100}%`,
+    width: `${2 + index % 3}px`,
+    height: `${2 + index % 3}px`,
+    animationDuration: `${6 + (index % 5) * 1.3}s`,
+    animationDelay: `${((index * .7) % 5).toFixed(1)}s`,
+  }));
 
   return (
     <main className={`app-shell${isRefreshing ? " is-refreshing" : ""}`}>
+      <span className="scroll-sentinel" aria-hidden="true" ref={scrollSentinel} />
       <a className="skip-link" href="#clasificacion">Ir al ranking</a>
       <header className={`site-header${isHeaderScrolled ? " is-scrolled" : ""}`}>
-        <div className="brand">
+        <button type="button" className="brand" onClick={() => reloadBoard.current()} aria-label="Actualizar el marcador" title="Actualizar">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="brand-logo" src="/brand-logo.webp" alt="" width={34} height={34} />
           <span>
             <strong><span className="brand-mark">20Q</span> Challenge</strong>
             <small>LAS · Solo/Duo · S2026</small>
           </span>
-        </div>
+        </button>
         <div className="header-stats" aria-label="Contexto del ranking">
           <span>{visiblePlayers.length} jugadores</span>
           <span className={liveCount > 0 ? "is-live" : undefined}>
@@ -1269,25 +1509,13 @@ export default function Home() {
           </span>
           <span>{hasLiveData ? `act. ${formattedUpdate(payload.data.fetchedAt).split(", ")[1]}` : "cargando"}</span>
         </div>
-        {/* The goal is also the switch that measures it: pressing the card drops
-            the target into the ranking so the gap can be read directly. */}
-        <button
-          type="button"
-          className="goal-card"
-          style={goalAccentStyle(goalPlayerTier)}
-          aria-pressed={goalVisible}
-          aria-label={`${goalVisible ? "Ocultar" : "Mostrar"} la meta en el ranking. Meta del challenge: ${goalPlayerSummary}. Progreso del líder: ${goalProgress}%`}
-          onClick={toggleGoal}
-        >
-          <span className="goal-label">Meta</span>
-          <RankEmblem player={goalPlayer ?? PENDING_PLAYER} size={34} describe />
-          <span className="goal-body">
-            <span className="goal-head">
-              <strong className={tierTextClass(goalPlayerTier)}>{goalPlayer ? rankLabel(goalPlayer) : "Sin rango"}</strong>
-              <small aria-live="polite">{goalPlayer ? `${goalPlayer.leaguePoints} PL` : "0 PL"}</small>
-            </span>
+        <button type="button" className="gaspi-card" onClick={openGaspi} aria-label={`Abrir ${GASPI_TITLE}`}>
+          <span className="gaspi-card-label">Torneo</span>
+          <span className="gaspi-card-body">
+            <strong>Los Juegos de Gaspi</strong>
+            <small>Edición I</small>
           </span>
-          <span className="goal-toggle" aria-hidden="true" />
+          <span className="gaspi-card-arrow" aria-hidden="true">→</span>
         </button>
       </header>
 
@@ -1327,22 +1555,48 @@ export default function Home() {
               ))
           }
         </ol>
-
-        <div className="panel-footnote">
-          <span>{historyCoverage}</span>
-          <span>
-            Rango y récord: Riot League · {hasLiveData ? `actualización ${formattedUpdate(payload.data.fetchedAt)}` : "cargando"}
-            {hasLiveData && payload.meta.isStale ? " (sin refrescar)" : ""} · caché de 1 min
-          </span>
-        </div>
           </>
         ) : null}
       </section>
+
+      {hasLiveData && duos.length > 0 ? (
+        <>
+          <hr className="section-divider" />
+          <section
+            className={`duo-panel${duosRevealed ? " is-in" : ""}`}
+            id="duos"
+            aria-labelledby="duos-title"
+            ref={duoPanel}
+          >
+            <h2 className="sr-only" id="duos-title">Mejores dúos</h2>
+            <div className="duo-heading" aria-hidden="true">
+              <span>#</span><span>Dúo</span><span>Partidas</span><span>Winrate</span><span>Ponderado</span>
+            </div>
+            <ol className="duo-list">
+              {duos.map((duo, index) => (
+                <DuoRow
+                  key={duo.playerIds.join("-")}
+                  duo={duo}
+                  players={players}
+                  version={payload.data.dataDragonVersion}
+                  place={index + 1}
+                />
+              ))}
+            </ol>
+            <div className="panel-footnote">
+              <span>Puntaje: límite inferior de Wilson (99%) sobre el winrate del dúo — el mismo criterio que ordena los campeones</span>
+              <span>Mínimo {DUO_LEADERBOARD_MIN_GAMES} partidas juntos · parejas por debajo no listadas</span>
+            </div>
+          </section>
+        </>
+      ) : null}
 
       <footer>
         <span>El marcador se actualiza automáticamente aproximadamente cada minuto · <a href="/privacy">Privacidad</a> · <a href="/terms">Términos</a></span>
         <span lang="en">20Q Challenge is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</span>
       </footer>
+
+      {gaspiOpen ? <GaspiOverlay onClose={() => setGaspiOpen(false)} particles={gaspiParticles} /> : null}
     </main>
   );
 }

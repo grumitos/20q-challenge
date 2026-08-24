@@ -20,6 +20,21 @@
   --muted-2: #8b91a6;
   --faint: #3a4157;
 
+  /* Surfaces and inks that used to be written as literals wherever they were
+     needed. They are tokens now because the Juegos invasion repaints the whole
+     view by mutating this palette, and a literal is a patch it cannot reach. */
+  --pill: #12151d;
+  --pill-hover: #171b25;
+  --dim: #0a0c11;
+  --dead: #0c0e14;
+  --dead-2: #0a0b10;
+  --role-ink: #868ca0;
+  --remake-ink: #a9b0c2;
+  --self-ring: #7f879b;
+  --glow-a: rgb(142 92 234 / 15%);
+  --glow-b: rgb(224 180 94 / 7%);
+  --header-wash: rgb(7 8 12 / 88%);
+
   --green: #5fd39b;
   --green-deep: #4bb887;
   --red: #ec7b88;
@@ -48,6 +63,62 @@
   --hover-ease: cubic-bezier(.2, .8, .25, 1);
 }
 
+/* Registered as colours so the swap below interpolates instead of jumping:
+   Los Juegos does not paint an overlay on top of the ranking, it mutates the
+   palette underneath it, and the whole view repaints in one move from the 20Q
+   night blue to the tournament's gold. */
+@property --bg { syntax: "<color>"; inherits: true; initial-value: #07080c; }
+@property --panel { syntax: "<color>"; inherits: true; initial-value: #0d0f16; }
+@property --card { syntax: "<color>"; inherits: true; initial-value: #0e1017; }
+@property --strip { syntax: "<color>"; inherits: true; initial-value: #0b0d13; }
+@property --surface { syntax: "<color>"; inherits: true; initial-value: #151824; }
+@property --line { syntax: "<color>"; inherits: true; initial-value: #20242f; }
+@property --line-bright { syntax: "<color>"; inherits: true; initial-value: #262b38; }
+@property --line-dim { syntax: "<color>"; inherits: true; initial-value: #1a1d26; }
+@property --text { syntax: "<color>"; inherits: true; initial-value: #eef0f6; }
+@property --text-2 { syntax: "<color>"; inherits: true; initial-value: #c9cddb; }
+@property --muted { syntax: "<color>"; inherits: true; initial-value: #9aa0b4; }
+@property --muted-2 { syntax: "<color>"; inherits: true; initial-value: #8b91a6; }
+@property --faint { syntax: "<color>"; inherits: true; initial-value: #3a4157; }
+@property --pill { syntax: "<color>"; inherits: true; initial-value: #12151d; }
+@property --pill-hover { syntax: "<color>"; inherits: true; initial-value: #171b25; }
+@property --dim { syntax: "<color>"; inherits: true; initial-value: #0a0c11; }
+@property --dead { syntax: "<color>"; inherits: true; initial-value: #0c0e14; }
+@property --dead-2 { syntax: "<color>"; inherits: true; initial-value: #0a0b10; }
+@property --role-ink { syntax: "<color>"; inherits: true; initial-value: #868ca0; }
+@property --remake-ink { syntax: "<color>"; inherits: true; initial-value: #a9b0c2; }
+@property --self-ring { syntax: "<color>"; inherits: true; initial-value: #7f879b; }
+@property --glow-a { syntax: "<color>"; inherits: true; initial-value: rgb(142 92 234 / 15%); }
+@property --glow-b { syntax: "<color>"; inherits: true; initial-value: rgb(224 180 94 / 7%); }
+@property --header-wash { syntax: "<color>"; inherits: true; initial-value: rgb(7 8 12 / 88%); }
+
+html.is-invaded {
+  --bg: #0a0906;
+  --panel: #110e09;
+  --card: #121008;
+  --strip: #0d0b07;
+  --surface: #1a1611;
+  --line: #272117;
+  --line-bright: #322a1d;
+  --line-dim: #1f1a12;
+  --text: #f0ebe3;
+  --text-2: #d8ccb9;
+  --muted: #aa9678;
+  --muted-2: #8f8069;
+  --faint: #4a4234;
+  --pill: #16120c;
+  --pill-hover: #1d1810;
+  --dim: #0c0a07;
+  --dead: #0e0c08;
+  --dead-2: #0b0a07;
+  --role-ink: #948a76;
+  --remake-ink: #b3a893;
+  --self-ring: #93887a;
+  --glow-a: rgb(227 188 110 / 14%);
+  --glow-b: rgb(148 128 100 / 22%);
+  --header-wash: rgb(10 9 6 / 88%);
+}
+
 /* ─── RESET ─── */
 * { box-sizing: border-box; }
 
@@ -70,8 +141,8 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   background:
-    radial-gradient(ellipse 60% 40% at 50% -6%, rgb(142 92 234 / 15%), transparent),
-    radial-gradient(ellipse 40% 26% at 92% 0%, rgb(224 180 94 / 7%), transparent),
+    radial-gradient(ellipse 60% 40% at 50% -6%, var(--glow-a), transparent),
+    radial-gradient(ellipse 40% 26% at 92% 0%, var(--glow-b), transparent),
     var(--bg);
   background-attachment: fixed;
 }
@@ -115,13 +186,24 @@ img { display: block; max-width: 100%; }
 .rank-emblem.is-unranked { filter: grayscale(1) brightness(.9) opacity(.4); }
 
 @keyframes live-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.78); } }
-@keyframes live-sweep { 0%, 10% { transform: translateX(-115%); } 74%, 100% { transform: translateX(320%); } }
+/* The in-game sweep used to be a white rectangle crossing at a constant rate,
+   which read as a loading bar rather than as a game in progress. It is a warm
+   band with a bright core now: it fades in, crosses, fades out, and leaves a
+   pause before the next pass, while the panel around it breathes. */
+@keyframes live-sweep { 0%, 12% { transform: translateX(-140%) skewX(-14deg); opacity: 0; } 22% { opacity: 1; } 56% { opacity: 1; } 68%, 100% { transform: translateX(380%) skewX(-14deg); opacity: 0; } }
+@keyframes live-breathe { 0%, 100% { border-color: rgb(236 123 136 / 24%); } 50% { border-color: rgb(236 123 136 / 52%); } }
+@keyframes live-bar { 0%, 100% { box-shadow: 0 0 4px rgb(255 100 114 / 0%); } 50% { box-shadow: 0 0 12px rgb(255 100 114 / 55%); } }
+@keyframes live-art { 0%, 100% { box-shadow: 0 0 10px rgb(236 123 136 / 16%); } 50% { box-shadow: 0 0 18px rgb(236 123 136 / 42%); } }
 
 /* ═══════════════════════════════════════════
    LAYOUT + HEADER
    ═══════════════════════════════════════════ */
 
-.app-shell { width: min(1260px, calc(100% - 48px)); margin: 0 auto; padding: 0 0 24px; }
+.app-shell { position: relative; width: min(1260px, calc(100% - 48px)); margin: 0 auto; padding: 0 0 24px; }
+/* The header's scrolled state is read off this rather than off `scrollY`: the
+   page is not always the box that scrolls, and whenever it was not, the header
+   never picked up its contrast wash. */
+.scroll-sentinel { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
 
 .site-header {
   position: sticky;
@@ -142,7 +224,7 @@ img { display: block; max-width: 100%; }
   inset: 0 auto 0 50%;
   z-index: 0;
   width: 100vw;
-  background: rgb(7 8 12 / 84%);
+  background: var(--header-wash);
   backdrop-filter: blur(14px) saturate(1.4);
   -webkit-backdrop-filter: blur(14px) saturate(1.4);
   box-shadow: 0 10px 24px rgb(0 0 0 / 18%);
@@ -154,8 +236,11 @@ img { display: block; max-width: 100%; }
 .site-header.is-scrolled::before { opacity: 1; }
 .site-header > * { position: relative; z-index: 1; }
 
-.brand { display: inline-flex; align-items: center; gap: 12px; width: max-content; min-width: 0; }
-.brand-logo { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px; object-fit: cover; box-shadow: 0 0 0 1px rgb(246 214 138 / 22%); }
+/* The mark is the refresh control: it only ever updates the board. */
+.brand { display: inline-flex; align-items: center; gap: 12px; width: max-content; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.brand:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: var(--r-sm); }
+.brand-logo { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px; object-fit: cover; box-shadow: 0 0 0 1px rgb(246 214 138 / 22%); transition: box-shadow var(--hover-duration) var(--hover-ease), transform var(--hover-duration) var(--hover-ease); }
+.brand:is(:hover, :focus-visible) .brand-logo { box-shadow: 0 0 0 1px rgb(246 214 138 / 55%), 0 0 18px -2px rgb(246 214 138 / 40%); transform: rotate(-4deg) scale(1.05); }
 .brand > span { display: grid; gap: 2px; min-width: 0; }
 .brand strong { font-family: var(--display); font-size: 15px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
 .brand-mark { color: var(--gold); }
@@ -181,34 +266,31 @@ img { display: block; max-width: 100%; }
 .header-stats > span.is-live { color: var(--red-soft); }
 .header-stats .live-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--red-bright); animation: live-pulse 1.4s ease-in-out infinite; }
 
-/* ─── GOAL CARD ───
-   Renders the progress the payload always computed, and is the switch that
-   measures it: pressing it drops the target into the ranking. Every colour comes
-   from --goal-*, set from the target's own tier, so the heavy platinum framing
-   follows the target rather than being written into the stylesheet. */
-.goal-card {
+/* ─── GASPI CARD ───
+   The doorway to Los Juegos de Gaspi, and the only warm thing in a cold view.
+   It replaced the goal card: the target it named is a competitor like anyone
+   else now, so it is read off the ranking instead of framed beside it. */
+.gaspi-card {
   position: relative;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   justify-self: end;
   gap: 11px;
-  /* Sized to its own contents rather than to a fixed 268px, which left a gap
-     between the rank and the LP figure on every tier whose name is short. */
   width: max-content;
   min-height: 54px;
   overflow: hidden;
-  padding: 8px 12px 8px 15px;
+  padding: 8px 13px 8px 15px;
   border: 0;
   border-radius: var(--r-md);
   background:
-    linear-gradient(112deg, var(--goal-wash), var(--goal-wash-soft) 58%, transparent 84%),
-    #090c12;
+    linear-gradient(112deg, rgb(227 188 110 / 15%), rgb(227 188 110 / 5%) 58%, transparent 84%),
+    #0f0d08;
   box-shadow:
-    inset 0 0 0 2px var(--goal-edge),
-    inset 0 1px 0 var(--goal-glow),
-    0 0 0 4px var(--goal-wash-soft),
-    0 0 24px -4px var(--goal-glow);
+    inset 0 0 0 2px rgb(227 188 110 / 42%),
+    inset 0 1px 0 rgb(255 236 191 / 16%),
+    0 0 0 4px rgb(227 188 110 / 7%),
+    0 0 26px -6px rgb(227 188 110 / 45%);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -218,44 +300,34 @@ img { display: block; max-width: 100%; }
     box-shadow var(--hover-duration) var(--hover-ease),
     transform var(--hover-duration) var(--hover-ease);
 }
-/* The tier bar: the loudest part of the framing, and the part that changes
-   colour when the target changes division. */
-.goal-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--goal-color); box-shadow: 0 0 14px var(--goal-color); }
-.goal-card::after {
+.gaspi-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--gold); box-shadow: 0 0 14px var(--gold); }
+.gaspi-card::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(104deg, transparent 34%, var(--goal-glow) 50%, transparent 66%);
+  background: linear-gradient(104deg, transparent 34%, rgb(255 236 191 / 22%) 50%, transparent 66%);
   opacity: 0;
   pointer-events: none;
 }
-.goal-card:is(:hover, :focus-visible) {
+.gaspi-card:is(:hover, :focus-visible) {
   transform: translateY(-1px);
   box-shadow:
-    inset 0 0 0 2px var(--goal-color),
-    inset 0 1px 0 var(--goal-glow),
-    0 0 0 5px var(--goal-wash),
-    0 0 32px -2px var(--goal-glow);
+    inset 0 0 0 2px rgb(227 188 110 / 78%),
+    inset 0 1px 0 rgb(255 236 191 / 22%),
+    0 0 0 5px rgb(227 188 110 / 12%),
+    0 0 34px -4px rgb(227 188 110 / 62%);
 }
-.goal-card:is(:hover, :focus-visible)::after { animation: goal-sheen 900ms var(--ease-expo); }
-.goal-card:focus-visible { outline: 2px solid var(--goal-color); outline-offset: 3px; }
-.goal-card:active { transform: translateY(0) scale(.994); }
-.goal-card[aria-pressed="true"] { background: linear-gradient(112deg, var(--goal-wash), var(--goal-wash) 42%, var(--goal-wash-soft) 88%), #0b1017; }
+.gaspi-card:is(:hover, :focus-visible)::after { animation: goal-sheen 900ms var(--ease-expo); }
+.gaspi-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.gaspi-card:active { transform: translateY(0) scale(.994); }
 @keyframes goal-sheen { from { opacity: .9; transform: translateX(-70%); } to { opacity: 0; transform: translateX(70%); } }
 
-.goal-label { color: var(--goal-color); font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
-.goal-card > .rank-emblem { width: 34px; height: 34px; }
-.goal-body { display: grid; gap: 5px; min-width: 0; }
-.goal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
-.goal-head strong { font-size: 12.5px; font-weight: 700; letter-spacing: .01em; white-space: nowrap; }
-.goal-head small { color: var(--muted); font-family: var(--mono); font-size: 10px; font-weight: 500; }
-/* Plus while the target is hidden, minus once it is in the ranking. */
-.goal-toggle { position: relative; width: 18px; height: 18px; border: 1px solid var(--goal-edge); border-radius: 3px; transition: border-color var(--hover-fast) ease, background-color var(--hover-fast) ease; }
-.goal-toggle::before, .goal-toggle::after { content: ""; position: absolute; top: 50%; left: 50%; background: var(--goal-color); transform: translate(-50%, -50%); }
-.goal-toggle::before { width: 9px; height: 1.5px; }
-.goal-toggle::after { width: 1.5px; height: 9px; transition: opacity var(--hover-duration) var(--hover-ease), transform var(--hover-duration) var(--hover-ease); }
-.goal-card:is(:hover, :focus-visible) .goal-toggle { border-color: var(--goal-color); background: var(--goal-wash); }
-.goal-card[aria-pressed="true"] .goal-toggle::after { opacity: 0; transform: translate(-50%, -50%) scaleY(.2); }
+.gaspi-card-label { color: var(--gold); font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
+.gaspi-card-body { display: grid; gap: 3px; min-width: 0; }
+.gaspi-card-body strong { font-family: "Cinzel", var(--display), serif; font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.gaspi-card-body small { color: var(--gold-deep); font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.gaspi-card-arrow { color: var(--gold); font-size: 13px; transition: transform var(--hover-duration) var(--hover-ease); }
+.gaspi-card:is(:hover, :focus-visible) .gaspi-card-arrow { transform: translateX(3px); }
 
 .status-notice {
   margin: 16px 0 -2px;
@@ -276,7 +348,7 @@ img { display: block; max-width: 100%; }
    ═══════════════════════════════════════════ */
 
 .role-block { display: grid; justify-items: center; gap: 3px; }
-.role-icon { display: block; width: 24px; height: 24px; color: #868ca0; }
+.role-icon { display: block; width: 24px; height: 24px; color: var(--role-ink); }
 .role-share { color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
 
 /* Winrate bar: tall enough to compare across rows, marked at the 50% line. */
@@ -289,7 +361,7 @@ img { display: block; max-width: 100%; }
 .streak-dots { display: flex; gap: 3px; }
 .streak-dots > i { display: block; width: 14px; height: 4px; border-radius: 1px; background: rgb(236 123 136 / 55%); }
 .streak-dots > i.is-win { background: var(--green); }
-.streak-dots > i.is-empty { background: #262b38; }
+.streak-dots > i.is-empty { background: var(--line-bright); }
 .podium-form .streak-label { letter-spacing: .08em; }
 .podium-form .streak-dots > i { width: 13px; }
 
@@ -297,22 +369,6 @@ img { display: block; max-width: 100%; }
 .duo-text.is-none { color: var(--muted-2); }
 
 .gap-text { color: var(--muted); font-family: var(--mono); font-size: 10px; white-space: nowrap; }
-.gap-text.is-leader { color: var(--gold); }
-.gap-pill {
-  display: inline-flex;
-  align-items: center;
-  width: max-content;
-  padding: 3px 7px;
-  border: 1px solid var(--line-bright);
-  border-radius: 2px;
-  background: #12151d;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .04em;
-  white-space: nowrap;
-}
-.gap-pill.is-leader { border-color: rgb(246 214 138 / 32%); background: rgb(246 214 138 / 8%); color: var(--gold); }
 
 /* Champion discs: the winrate is text, readable without a pointer. The band is
    its own list — no wrapper between it and the discs — so a set shorter than its
@@ -350,7 +406,7 @@ img { display: block; max-width: 100%; }
 .roster > span.is-ally { border-color: #2c3648; }
 .roster > span.is-foe { border-color: #3d2a30; }
 .roster > span.is-empty { border-style: dashed; border-color: var(--line-dim); background: none; }
-.roster > span.is-self { border-color: #7f879b; }
+.roster > span.is-self { border-color: var(--self-ring); }
 .roster > span.is-peer { border-color: var(--gold-deep); box-shadow: 0 0 0 1px rgb(224 180 94 / 32%); }
 .roster img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -364,7 +420,7 @@ img { display: block; max-width: 100%; }
 .match-art.is-win { border-color: rgb(95 211 155 / 40%); }
 .match-art.is-loss { border-color: rgb(236 123 136 / 34%); }
 .match-art.is-remake { border-color: var(--faint); filter: saturate(.55); }
-.match-art.is-live { border-color: rgb(236 123 136 / 58%); box-shadow: 0 0 12px rgb(236 123 136 / 22%); }
+.match-art.is-live { border-color: rgb(236 123 136 / 58%); animation: live-art 2.8s ease-in-out infinite; }
 .match-art > img { width: 100%; height: 100%; object-fit: cover; }
 
 .match-body { display: grid; grid-template-rows: var(--match-line, 20px) var(--match-line, 20px); gap: var(--roster-row-gap, 3px); min-width: 0; }
@@ -373,12 +429,11 @@ img { display: block; max-width: 100%; }
 .match-result { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .match-result.is-win { color: var(--green); }
 .match-result.is-loss { color: var(--red); }
-.match-result.is-remake { color: #a9b0c2; }
+.match-result.is-remake { color: var(--remake-ink); }
 .match-lp { flex: none; font-family: var(--mono); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .match-lp.is-positive { color: var(--green); }
 .match-lp.is-negative { color: var(--red); }
 .match-lp.is-pending { color: var(--gold); }
-.match-lp.is-unavailable { color: var(--muted-2); }
 .match-lp.is-remake { color: var(--muted); }
 /* A match from last month must not carry the same weight as one from an hour ago. */
 .match-when { flex: none; color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -450,6 +505,12 @@ img { display: block; max-width: 100%; }
 .podium-crest { position: absolute; top: 0; right: 0; left: 0; height: 3px; pointer-events: none; transition: filter var(--hover-duration) var(--hover-ease); }
 .podium-card:not(.is-pending):is(:hover, :focus-within) .podium-crest { filter: brightness(1.3) saturate(1.15); }
 .podium-notch { position: absolute; top: 0; left: 0; width: 74px; height: 74px; clip-path: polygon(0 0, 100% 0, 0 100%); pointer-events: none; }
+
+/* The LP a podium card trails the one above it, as a chip on the rank block —
+   only on 2nd and 3rd, since the leader trails nobody. The slot is reserved on
+   all three so the card that has no chip does not ride up against the others. */
+.gap-pill { display: inline-flex; align-items: center; width: max-content; padding: 3px 7px; border: 1px solid var(--line-bright); border-radius: 2px; background: var(--pill); color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .04em; white-space: nowrap; }
+.podium-rank .gap-slot { display: flex; align-items: center; min-height: 22px; }
 
 /* Medal treatment per place */
 .podium-card.place-1 { border-color: rgb(224 180 94 / 34%); background: linear-gradient(168deg, rgb(224 180 94 / 9%) 0%, transparent 40%), var(--card); }
@@ -523,23 +584,22 @@ img { display: block; max-width: 100%; }
 .podium-strip a.match-row { margin: -12px -16px -13px; padding: 12px 16px 13px; }
 .podium-strip a.match-row:is(:hover, :focus-visible) { background: rgb(255 255 255 / 3.5%); }
 .podium-strip .match-art { width: var(--match-art, 44px); height: var(--match-art, 44px); }
-.podium-strip .roster { --roster-size: 17px; }
 
 /* The card's live state: same strip, swept and warmed. */
-.podium-strip.is-live { overflow: hidden; border-top-color: rgb(236 123 136 / 30%); background: linear-gradient(120deg, rgb(236 123 136 / 15%), rgb(236 123 136 / 4%) 70%, transparent), var(--strip); }
-.podium-strip.is-live::before { background: var(--red); }
-.podium-strip.is-live::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 38%; background: linear-gradient(90deg, transparent, rgb(255 255 255 / 8%), transparent); animation: live-sweep 3.6s linear infinite; pointer-events: none; }
+.podium-strip.is-live { overflow: hidden; border-top-color: rgb(236 123 136 / 30%); background: linear-gradient(120deg, rgb(236 123 136 / 15%), rgb(236 123 136 / 4%) 70%, transparent), var(--strip); animation: live-breathe 2.8s ease-in-out infinite; }
+.podium-strip.is-live::before { background: var(--red); animation: live-bar 2.8s ease-in-out infinite; }
+.podium-strip.is-live::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 34%; background: linear-gradient(90deg, transparent, rgb(255 138 148 / 4%) 28%, rgb(255 226 230 / 13%) 50%, rgb(255 138 148 / 4%) 72%, transparent); animation: live-sweep 4.4s cubic-bezier(.4, .1, .3, 1) infinite; pointer-events: none; }
 .podium-strip.is-live .match-row > * { position: relative; }
 
 /* ─── RESPAWN OVERLAY ───
    A real clock instead of five raw digits. The card behind it is dimmed *and*
    defocused: the blur is what lets a 46px countdown sit over champion art
    without the art competing for the same reading. */
-.podium-card.is-dead { background: #0c0e14; }
+.podium-card.is-dead { background: var(--dead); }
 .podium-card.is-dead :is(.podium-body, .podium-strip) { opacity: .5; filter: grayscale(1) blur(1.6px); }
-.podium-card.is-dead .podium-strip { background: #0a0b10; }
+.podium-card.is-dead .podium-strip { background: var(--dead-2); }
 .podium-card.is-dead .podium-splash { opacity: .1; filter: grayscale(1); }
-.leaderboard-row.is-dead { background: #0a0b10; }
+.leaderboard-row.is-dead { background: var(--dead-2); }
 .leaderboard-row.is-dead .row-grid > * { opacity: .5; filter: grayscale(1) blur(1.6px); }
 .respawn {
   position: absolute;
@@ -610,7 +670,7 @@ img { display: block; max-width: 100%; }
   background: var(--panel);
   transition: border-color var(--hover-duration) var(--hover-ease), box-shadow var(--hover-duration) var(--hover-ease), transform var(--hover-duration) var(--hover-ease);
 }
-.leaderboard-row.is-unranked { border-color: var(--line-dim); background: #0a0c11; }
+.leaderboard-row.is-unranked { border-color: var(--line-dim); background: var(--dim); }
 .leaderboard-row:not(.is-pending):is(:hover, :focus-within) { border-color: var(--line-bright); box-shadow: 0 10px 24px rgb(0 0 0 / 24%); transform: translateY(-1px); }
 .row-grid { position: relative; min-height: 92px; padding: 11px 0 10px 14px; }
 
@@ -647,9 +707,9 @@ img { display: block; max-width: 100%; }
 
 /* The match panel is a column of the row, floor to ceiling, not a box inside it. */
 .row-match, .row-live { position: relative; align-self: stretch; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin: -11px 0 -10px; padding: 10px 13px 10px 12px; }
-.row-match { border-left: 1px solid rgb(255 255 255 / 7%); background: #12151d; transition: background-color var(--hover-duration) var(--hover-ease); }
-.row-match.is-stale { background: #0a0c11; }
-a.row-match:is(:hover, :focus-visible) { background: #171b25; }
+.row-match { border-left: 1px solid rgb(255 255 255 / 7%); background: var(--pill); transition: background-color var(--hover-duration) var(--hover-ease); }
+.row-match.is-stale { background: var(--dim); }
+a.row-match:is(:hover, :focus-visible) { background: var(--pill-hover); }
 .row-match .match-art, .row-live .match-art { width: var(--match-art, 44px); height: var(--match-art, 44px); }
 
 /* Live game: same slot, different state. */
@@ -657,8 +717,9 @@ a.row-match:is(:hover, :focus-visible) { background: #171b25; }
   overflow: hidden;
   border-left: 1px solid rgb(236 123 136 / 32%);
   background: linear-gradient(120deg, rgb(236 123 136 / 16%), rgb(236 123 136 / 4%) 70%, transparent), var(--strip);
+  animation: live-breathe 2.8s ease-in-out infinite;
 }
-.row-live::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 38%; background: linear-gradient(90deg, transparent, rgb(255 255 255 / 8%), transparent); animation: live-sweep 3.6s linear infinite; pointer-events: none; }
+.row-live::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 34%; background: linear-gradient(90deg, transparent, rgb(255 138 148 / 4%) 28%, rgb(255 226 230 / 13%) 50%, rgb(255 138 148 / 4%) 72%, transparent); animation: live-sweep 4.4s cubic-bezier(.4, .1, .3, 1) infinite; pointer-events: none; }
 .row-live > * { position: relative; }
 
 .panel-footnote {
@@ -749,6 +810,98 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
 }
 
 /* ═══════════════════════════════════════════
+   MEJORES DÚOS
+   A second chapter under the ranking: which pairs actually win together, by the
+   same Wilson lower bound that orders every player's champions.
+   ═══════════════════════════════════════════ */
+
+.duo-panel { margin-top: 30px; }
+/* No caption between the two chapters — the change of shape already reads. */
+.section-divider { height: 1px; margin: 34px 0 0; border: 0; background: linear-gradient(90deg, transparent, var(--line-bright) 20%, var(--line-bright) 80%, transparent); }
+
+.duo-heading, .duo-row { opacity: 0; transform: translateY(14px); transition: opacity .55s var(--ease-rank), transform .55s var(--ease-rank); }
+.duo-panel.is-in :is(.duo-heading, .duo-row) { opacity: 1; transform: none; }
+.duo-panel.is-in .duo-heading { transition-delay: .42s; }
+.duo-panel.is-in .duo-row:nth-child(1) { transition-delay: .5s; }
+.duo-panel.is-in .duo-row:nth-child(2) { transition-delay: .58s; }
+.duo-panel.is-in .duo-row:nth-child(3) { transition-delay: .66s; }
+.duo-panel.is-in .duo-row:nth-child(4) { transition-delay: .74s; }
+.duo-panel.is-in .duo-row:nth-child(5) { transition-delay: .82s; }
+.duo-panel.is-in .duo-row:nth-child(6) { transition-delay: .9s; }
+
+.duo-heading, .duo-grid { display: grid; grid-template-columns: 30px minmax(190px, 1fr) 90px minmax(220px, 1.1fr) 116px; align-items: center; column-gap: 11px; }
+.duo-heading { align-items: end; margin-top: 14px; padding: 0 14px 9px; border-bottom: 1px solid var(--line); color: var(--muted); font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
+.duo-heading > span:nth-child(n+3) { text-align: center; }
+.duo-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.duo-row { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel); transition: border-color var(--hover-duration) var(--hover-ease), box-shadow var(--hover-duration) var(--hover-ease); }
+.duo-row:hover { border-color: var(--line-bright); box-shadow: 0 10px 24px rgb(0 0 0 / 24%); }
+.duo-row.is-top { border-color: rgb(246 214 138 / 30%); background: linear-gradient(90deg, rgb(224 180 94 / 7%), transparent 58%), var(--panel); }
+.duo-row.is-top:hover { border-color: rgb(246 214 138 / 45%); }
+.duo-row.is-top :is(.duo-place strong, .duo-score strong) { color: var(--gold); }
+.duo-grid { min-height: 64px; padding: 10px 14px; }
+
+.duo-place { display: grid; justify-items: center; }
+.duo-place strong { font-family: var(--display); font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1; }
+.duo-pair { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.duo-avatars { display: flex; flex: 0 0 auto; }
+.duo-avatars img { width: 38px; height: 38px; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: var(--surface); object-fit: cover; }
+.duo-avatars img + img { margin-left: -9px; box-shadow: -2px 0 0 rgb(7 8 12 / 85%); }
+.duo-pair > span { min-width: 0; }
+.duo-pair strong { display: block; overflow: hidden; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
+.duo-pair small { display: block; overflow: hidden; margin-top: 3px; color: var(--muted); font-family: var(--mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.duo-games { display: grid; justify-items: center; gap: 2px; }
+.duo-games strong { font-family: var(--display); font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.duo-games small { color: var(--muted-2); font-family: var(--mono); font-size: 10px; }
+.duo-wr { display: grid; gap: 6px; min-width: 0; }
+.duo-wr-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.duo-wr-head strong { font-family: var(--display); font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.duo-wr-head .record { color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.duo-wr-head .record .wins { color: var(--green); }
+.duo-wr-head .record .losses { color: var(--red); }
+.duo-score { display: grid; justify-items: center; gap: 2px; }
+.duo-score strong { font-family: var(--display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1; }
+.duo-score small { color: var(--muted-2); font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+
+/* ═══════════════════════════════════════════
+   LOS JUEGOS DE GASPI
+   The easter egg behind the header badge: a full-screen title card, with the
+   ranking underneath repainted in the tournament's gold.
+   ═══════════════════════════════════════════ */
+
+.gaspi { position: fixed; inset: 0; z-index: 200; overflow: auto; background: #070604; animation: gaspi-in .5s var(--ease-rank) backwards; }
+.gaspi-bg { position: fixed; inset: 0; background: radial-gradient(ellipse 70% 46% at 50% 16%, rgb(227 188 110 / 10%), transparent 70%), linear-gradient(180deg, rgb(10 9 6 / 82%), rgb(10 9 6 / 58%) 42%, rgb(10 9 6 / 90%)), url("https://halloflegends.leagueoflegends.com/meta-post-event.jpg") center 24% / cover no-repeat, #070604; }
+.gaspi-bg::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 26vmin rgb(0 0 0 / 72%); }
+.gaspi-particles { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+.gaspi-particles i { position: absolute; bottom: -4vh; border-radius: 50%; background: var(--gold); box-shadow: 0 0 8px rgb(246 214 138 / 60%); opacity: 0; filter: blur(.4px); animation: gaspi-rise linear infinite; }
+@keyframes gaspi-rise { 0% { transform: translateY(0); opacity: 0; } 12% { opacity: .7; } 82% { opacity: .18; } 100% { transform: translateY(-108vh); opacity: 0; } }
+
+.gaspi-back { position: fixed; top: 18px; left: 18px; z-index: 210; padding: 9px 13px; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: rgb(13 15 22 / 82%); color: var(--text-2); font-family: var(--mono); font-size: 11px; cursor: pointer; transition: border-color var(--hover-fast) ease, color var(--hover-fast) ease, background-color var(--hover-duration) var(--hover-ease); animation: gaspi-fade .6s ease .35s backwards; }
+.gaspi-back:is(:hover, :focus-visible) { border-color: rgb(246 214 138 / 45%); background: rgb(246 214 138 / 7%); color: var(--gold); }
+.gaspi-back:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
+.gaspi-stage { position: relative; z-index: 1; display: grid; justify-items: center; align-content: center; gap: 17px; min-height: 100%; padding: 92px 24px 64px; text-align: center; }
+.gaspi-kicker { color: var(--gold-deep); font-family: "Cinzel", var(--display), serif; font-size: 12px; font-weight: 600; letter-spacing: .42em; text-transform: uppercase; animation: gaspi-fade .7s ease .15s backwards; }
+.gaspi-title { position: relative; display: grid; gap: 6px; font-family: "Cinzel", var(--display), serif; font-size: clamp(36px, 7.4vw, 92px); font-weight: 700; letter-spacing: .06em; line-height: 1.04; text-transform: uppercase; }
+.gaspi-line { display: flex; justify-content: center; filter: drop-shadow(0 6px 34px rgb(224 180 94 / 30%)); }
+.gaspi-letter { color: transparent; background: linear-gradient(180deg, #fdf4d8 8%, var(--gold) 52%, #c89546 94%); -webkit-background-clip: text; background-clip: text; animation: gaspi-letter .72s var(--ease-rank) backwards; }
+@keyframes gaspi-letter { from { opacity: 0; transform: translateY(30px) scale(1.55); filter: blur(12px); } 62% { filter: blur(0); } to { opacity: 1; transform: none; filter: blur(0); } }
+.gaspi-beam { width: min(430px, 62vw); height: 1px; background: linear-gradient(90deg, transparent, var(--gold-deep), transparent); box-shadow: 0 0 12px rgb(224 180 94 / 50%); transform: scaleX(0); animation: gaspi-beam .8s var(--ease-expo) forwards; }
+.gaspi-beam.is-top { animation-delay: 1.62s; }
+.gaspi-beam.is-bottom { animation-delay: 1.74s; }
+@keyframes gaspi-beam { to { transform: scaleX(1); } }
+.gaspi-sub { color: var(--gold-deep); font-family: var(--mono); font-size: 11px; letter-spacing: .3em; text-transform: uppercase; animation: gaspi-fade .7s ease 1.95s backwards; }
+
+.gaspi-hall { display: grid; justify-items: center; gap: 14px; margin-top: 24px; animation: gaspi-fade .8s ease 2.3s backwards; }
+.gaspi-hall-label { display: flex; align-items: center; gap: 14px; color: rgb(224 180 94 / 78%); font-family: "Cinzel", var(--display), serif; font-size: 12px; font-weight: 600; letter-spacing: .34em; text-transform: uppercase; }
+.gaspi-hall-label::before, .gaspi-hall-label::after { content: ""; width: 52px; height: 1px; background: linear-gradient(90deg, transparent, rgb(224 180 94 / 45%)); }
+.gaspi-hall-label::after { background: linear-gradient(90deg, rgb(224 180 94 / 45%), transparent); }
+.gaspi-edition { display: grid; justify-items: center; gap: 10px; width: min(340px, 86vw); padding: 26px 28px 24px; border: 1px solid rgb(246 214 138 / 22%); border-radius: var(--r-md); background: linear-gradient(168deg, rgb(224 180 94 / 8%), transparent 46%), var(--card); box-shadow: 0 24px 60px rgb(0 0 0 / 45%), inset 0 1px 0 rgb(255 255 255 / 5%); }
+.gaspi-edition-name { font-family: "Cinzel", var(--display), serif; font-size: 19px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.gaspi-slot { display: grid; place-items: center; width: 58px; height: 58px; border: 1px dashed rgb(246 214 138 / 35%); border-radius: var(--r-sm); background: rgb(246 214 138 / 4%); color: var(--gold-deep); font-family: "Cinzel", var(--display), serif; font-size: 24px; }
+@keyframes gaspi-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes gaspi-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ═══════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════ */
 
@@ -759,6 +912,7 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
   .podium-champions .champion-portrait { width: 42px; height: 42px; }
   .podium-champions.is-partial { column-gap: 20px; }
   .row-champions .champion-portrait { width: 30px; height: 30px; }
+  .duo-heading, .duo-grid { grid-template-columns: 28px minmax(170px, 1fr) 80px minmax(190px, 1.1fr) 104px; }
 }
 
 @media (max-width: 1080px) {
@@ -800,8 +954,9 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
   .row-champions { grid-area: champions; position: relative; justify-self: end; min-width: 0; padding-top: 19px; }
   .row-champions[data-label]::before { position: absolute; inset: 0 0 auto 0; margin-bottom: 0; }
   .row-match, .row-live { grid-area: match; margin: 0 -12px; padding: 10px 12px 12px; border-left: 0; border-top: 1px solid rgb(255 255 255 / 7%); }
+  .row-live { border-top-color: rgb(236 123 136 / 32%); }
 
-  .row-grid [data-label]::before {
+  .row-grid [data-label]::before, .duo-grid [data-label]::before {
     content: attr(data-label);
     display: block;
     margin-bottom: 5px;
@@ -812,9 +967,14 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
     letter-spacing: .12em;
     text-transform: uppercase;
   }
+  /* The in-game panel never carries a caption: the IN-GAME badge names it. */
   .row-place[data-label]::before,
   .row-player[data-label]::before,
-  .row-match[data-label]::before { content: none; }
+  .row-match[data-label]::before,
+  .row-live[data-label]::before { content: none; }
+  /* An empty band has no discs to clear, so its caption goes back in flow. */
+  .row-champions.is-empty { padding-top: 0; }
+  .row-champions.is-empty[data-label]::before { position: static; }
   /* The gap sentence is the longest string in a narrow rank column: let it wrap
      instead of running under the performance band beside it. */
   .row-rank .gap-text { white-space: normal; }
@@ -825,21 +985,39 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
 
   .panel-footnote, footer { flex-direction: column; gap: 6px; }
   footer span:last-child { max-width: none; text-align: left; }
+
+  /* A duo row keeps the pair and its score on one line and drops the tallies
+     underneath, so the two figures that rank it stay side by side. */
+  .duo-heading { display: none; }
+  .duo-list { margin-top: 12px; }
+  .duo-grid {
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "place pair score"
+      "games wr   wr";
+    gap: 12px 10px;
+    padding: 11px 12px 12px;
+  }
+  .duo-place { grid-area: place; align-self: center; }
+  .duo-pair { grid-area: pair; }
+  .duo-score { grid-area: score; justify-self: end; align-self: center; justify-items: end; }
+  .duo-score strong { font-size: 19px; }
+  .duo-games { grid-area: games; justify-items: center; align-self: start; }
+  .duo-wr { grid-area: wr; }
 }
 
 @media (max-width: 560px) {
   .app-shell { width: min(100% - 16px, 1260px); }
   .brand-logo { width: 30px; height: 30px; }
   .brand strong { font-size: 13px; }
-  /* The brand has to yield before it reaches the goal card: max-content plus two
-     nowrap lines cannot shrink, so it silently overlapped instead. */
+  /* The brand has to yield before it reaches the Gaspi card: max-content plus
+     two nowrap lines cannot shrink, so it silently overlapped instead. */
   .brand { width: auto; min-width: 0; }
   .brand strong, .brand small { overflow: hidden; text-overflow: ellipsis; }
-  .goal-card { grid-template-columns: auto minmax(0, 1fr) auto; width: 168px; min-height: 48px; gap: 7px; padding: 5px 7px 5px 10px; }
-  .goal-label { display: none; }
-  .goal-card > .rank-emblem { width: 28px; height: 28px; }
-  .goal-head strong { font-size: 11.5px; }
-  .goal-toggle { width: 15px; height: 15px; }
+  .gaspi-card { grid-template-columns: minmax(0, 1fr) auto; width: 172px; min-height: 48px; gap: 8px; padding: 5px 9px 5px 11px; }
+  .gaspi-card-label { display: none; }
+  .gaspi-card-body strong { font-size: 11px; }
+  .gaspi-card-body small { font-size: 9px; }
 
   /* 384px reference frame: the same grid at 18px, with every label still on. */
   .app-shell { --match-art: 40px; --match-line: 18px; --roster-cell: 18px; --roster-row-gap: 2px; }
@@ -921,7 +1099,6 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
   .row-champions .champion-portrait { width: 40px; height: 40px; }
 
   .row-match, .row-live { gap: 9px; margin-top: 2px; padding: 10px 12px 11px; }
-  .row-live .match-art { box-shadow: none; }
   .row-live .live-badge { gap: 6px; }
   .row-live .live-badge > i { width: 6px; height: 6px; }
 
@@ -929,6 +1106,11 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
   .respawn small { font-size: 10.5px; }
   .respawn strong { font-size: 40px; }
   .leaderboard-row .respawn strong { font-size: 26px; }
+
+  .duo-pair strong { font-size: 13px; }
+  .duo-avatars img { width: 34px; height: 34px; }
+  .gaspi-back { top: 12px; left: 12px; }
+  .gaspi-stage { padding: 84px 16px 48px; }
 }
 
 /* A respawned Papipu stays a quiet, grayscale surface. The generic hover rules
@@ -960,7 +1142,7 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
   filter: grayscale(1) blur(1.6px);
 }
 .leaderboard-row.is-dead :is(a.row-match, .row-live):is(:hover, :focus-visible) {
-  background: #0a0b10;
+  background: var(--dead-2);
 }
 
 /* Respawn may quiet the contents, but it never changes the podium's medal edge. */

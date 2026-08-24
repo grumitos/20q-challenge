@@ -54,7 +54,7 @@ test("server-renders the 20Q Challenge dashboard", async () => {
   assert.doesNotMatch(html, /<title>[^<]*(?:—|SoloQ 2026)[^<]*<\/title>/i);
   assert.match(html, /20Q Challenge/);
   assert.doesNotMatch(html, /20Q \/ LAS|>Clasificación</i);
-  assert.match(html, /Meta del challenge:/i);
+  assert.match(html, /Abrir LOS JUEGOS DE GASPI/i);
   assert.match(html, /Top 3 del ranking/);
   assert.match(html, />Rol</);
   assert.doesNotMatch(html, /Rol principal/);
@@ -73,10 +73,9 @@ test("server-renders the 20Q Challenge dashboard", async () => {
   assert.doesNotMatch(html, /is-skeleton/);
   assert.doesNotMatch(html, /pattern-grid/);
   assert.doesNotMatch(html, /class="hatch"/);
-  // The goal crest is served by the target's own tier. It was iron while the
-  // target was pinned to a name the demo snapshot leaves unranked; the target is
-  // whoever ranks highest now, so the crest follows the standings.
-  assert.match(html, /class="rank-emblem tier-\w+" src="\/ranks\/\w+\.png"/);
+  // The loading view carries no crest of its own: with the goal card gone,
+  // nothing on the first frame knows a tier yet, so the emblem is a slot.
+  assert.match(html, /class="rank-slot sk-slot"/);
   assert.match(html, /class="lp-unit/);
   assert.match(html, /href="\/privacy"/);
   assert.match(html, /href="\/terms"/);
@@ -138,15 +137,16 @@ test("ships the finished product assets without starter dependencies", async () 
   assert.match(page, /window\.setInterval\([\s\S]*?void loadLeaderboard\(\)[\s\S]*?LEADERBOARD_REFRESH_MS/);
   assert.match(page, /void loadLeaderboard\(\)/);
   assert.match(page, /El marcador se actualiza automáticamente aproximadamente cada minuto/);
-  assert.match(page, /caché de 1 min/);
+  assert.match(page, /Mínimo \{DUO_LEADERBOARD_MIN_GAMES\} partidas juntos/);
   assert.match(page, /aria-busy=/);
   assert.match(page, /leagueofgraphs\.com\/summoner\/las/);
-  assert.match(page, /const goalPlayer = challengeGoalPlayer\(players\)/);
+  assert.match(page, /const visiblePlayers = sortLeaderboard\(players\)/);
   assert.match(page, /function MatchSummary/);
   assert.match(page, /function LiveSummary/);
   assert.match(page, /is-peer/);
   assert.match(page, /matchDetailsUrl/);
   assert.match(page, /src="\/brand-logo\.webp"/);
+  assert.match(page, /`\/ranks\/\$\{tier === "UNRANKED" \? "iron" : tier\.toLowerCase\(\)\}\.png`/);
   assert.match(layout, /lang="es"/);
   assert.match(layout, /const title = "20Q Challenge"/);
   assert.match(layout, /generateMetadata/);
@@ -158,7 +158,7 @@ test("ships the finished product assets without starter dependencies", async () 
   assert.match(css, /\.site-header\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)/i);
   assert.match(css, /\.site-header\s*\{[^}]*border-bottom:\s*1px\s+solid\s+var\(--line\)/i);
   assert.doesNotMatch(css, /\.brand\s*\{[^}]*border-right\s*:/i);
-  assert.match(css, /\.goal-card\s*\{[^}]*display:\s*grid/i);
+  assert.match(css, /\.gaspi-card\s*\{[^}]*display:\s*grid/i);
   assert.match(css, /\.podium-card\.place-1\s*\{[^}]*linear-gradient/i);
   assert.match(css, /\.podium-card\.place-2\s*\{[^}]*linear-gradient/i);
   assert.match(css, /\.podium-card\.place-3\s*\{[^}]*linear-gradient/i);
@@ -219,7 +219,7 @@ test("ships the finished product assets without starter dependencies", async () 
   assert.match(css, /\.row-rank\s*\{[^}]*grid-template-columns:\s*46px\s+minmax\(0,\s*1fr\)/i);
   assert.match(css, /\.podium-strip\s*\{[^}]*border-top:\s*1px\s+solid/i);
   assert.match(css, /mask-image:\s*linear-gradient\(180deg[^;]*transparent\s+86%\)/i);
-  assert.match(page, /className="goal-label">Meta<\/span>/);
+  assert.match(page, /className="gaspi-card-label">Torneo<\/span>/);
   assert.match(page, /className="role-share">\{player\.analytics\.roleShare\}%/);
   assert.match(css, /\.podium-rank\s*\{[^}]*column-gap:\s*8px/i);
   assert.match(css, /\.podium-lp\s*\{[^}]*display:\s*inline-flex[^}]*gap:\s*7px/i);

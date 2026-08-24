@@ -3,10 +3,10 @@ import test from "node:test";
 
 import { readdir, readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
-import { HABITUAL_DUO_QUERY, pickHabitualDuos } from "../lib/habitual-duos.ts";
+import { DUO_RECORD_QUERY, HABITUAL_DUO_QUERY, foldDuoRecords, pickHabitualDuos } from "../lib/habitual-duos.ts";
 
 import { calculatePlaceDeltas } from "../lib/place-movement.ts";
-import { rankScore } from "../lib/leaderboard.ts";
+import { rankDuoRecords, rankScore } from "../lib/leaderboard.ts";
 
 const players = [
   { id: "inti", gameName: "INTI VIRAC0NCHA" },
@@ -88,6 +88,73 @@ test("a reader's duo tally crosses the worker boundary as counts, not rosters", 
   );
 });
 
+/** Two challenge members, on the teams given, in one game. */
+function pairParticipants(teamOfMiqi = 100) {
+  return JSON.stringify([
+    { championId: "1", championName: "Annie", teamId: 100, gameName: "INTI VIRAC0NCHA", tagLine: "20CM", challengePlayerId: "inti" },
+    { championId: "2", championName: "Olaf", teamId: teamOfMiqi, gameName: "miqi", tagLine: "8745", challengePlayerId: "miqi" },
+  ]);
+}
+
+function insertRankedGame(db, matchId, at, teamOfMiqi, results) {
+  db.exec(`INSERT INTO ranked_matches (match_id, game_start_timestamp, duration_seconds, participants, recorded_at)
+           VALUES ('${matchId}', ${at}, 1800, '${pairParticipants(teamOfMiqi)}', ${at})`);
+  for (const [playerId, won] of Object.entries(results)) {
+    db.exec(`INSERT INTO player_match_stats (player_id, match_id, game_start_timestamp, champion_id, champion_name, kills, deaths, assists, won, role)
+             VALUES ('${playerId}', '${matchId}', ${at}, '1', 'Annie', 1, 2, 3, ${won ? 1 : 0}, 'MIDDLE')`);
+  }
+}
+
+test("counts a duo's record only from the games they actually played together", async () => {
+  const db = await migratedDatabase();
+  const ids = JSON.stringify(players.map((player) => player.id));
+
+  // Two on the same side, one won and one lost; then a game the draw put them
+  // on opposite sides of, which is a shared game and never a shared result.
+  insertRankedGame(db, "LA2_WIN", 1000, 100, { inti: true, miqi: true });
+  insertRankedGame(db, "LA2_LOSS", 2000, 100, { inti: false, miqi: false });
+  insertRankedGame(db, "LA2_ENEMIES", 3000, 200, { inti: true, miqi: false });
+
+  const rows = db.prepare(DUO_RECORD_QUERY).all(ids, 400);
+  const folded = foldDuoRecords(rows);
+
+  assert.equal(folded.length, 1, "one unordered pair, not one row per side");
+  assert.deepEqual(folded[0], { playerIds: ["inti", "miqi"], games: 2, wins: 1 });
+});
+
+test("keeps a pair readable while one of its members is still being backfilled", async () => {
+  const db = await migratedDatabase();
+  const ids = JSON.stringify(players.map((player) => player.id));
+
+  // Only one side has its per-match rows yet, so only one direction reports.
+  // The pair still has to appear, on the sample that does exist.
+  insertRankedGame(db, "LA2_A", 1000, 100, { inti: true });
+  insertRankedGame(db, "LA2_B", 2000, 100, { inti: true });
+  insertRankedGame(db, "LA2_C", 3000, 100, { inti: false });
+  insertRankedGame(db, "LA2_D", 4000, 100, { inti: true });
+
+  const ranked = rankDuoRecords(foldDuoRecords(db.prepare(DUO_RECORD_QUERY).all(ids, 400)));
+
+  assert.equal(ranked.length, 1);
+  assert.deepEqual({ games: ranked[0].games, wins: ranked[0].wins }, { games: 4, wins: 3 });
+});
+
+test("leaves a live tracker session out of a duo's record", async () => {
+  // A game in progress has no outcome to fold in, so the record query reads the
+  // immutable history only. Counting it would move the win rate on a result
+  // nobody knows yet.
+  const db = await migratedDatabase();
+  const ids = JSON.stringify(players.map((player) => player.id));
+
+  db.exec(`INSERT INTO tracked_game_sessions
+             (player_id, platform_game_id, queue_id, baseline_observation_id, game_started_at,
+              first_seen_at, last_seen_at, status, participants, updated_at)
+           VALUES ('inti', '4242', 420, 'inti:1', 3000, 3000, 3000, 'active',
+                   '${pairParticipants()}', 3000)`);
+
+  assert.deepEqual(db.prepare(DUO_RECORD_QUERY).all(ids, 400), []);
+});
+
 test("calculates movement from the ranked current order", () => {
   const previous = [
     { player_id: "falling", tier: "GOLD", division: "II", league_points: 90 },
@@ -125,9 +192,14 @@ test("bounds every enrichment query so a reader's cost cannot grow with history"
   const inline = source.split("d1.prepare(").slice(1)
     .filter((query) => query.trimStart().startsWith("`") || query.includes("`SELECT"))
     .map((query) => query.slice(0, query.indexOf("`,", query.indexOf("`")) + 1));
-  const duoSql = duo.slice(duo.indexOf("`SELECT player_id, peer_id"));
-  const queries = [...inline, duoSql];
-  assert.equal(queries.length, 4, "expected four enrichment queries");
+  const constant = (name) => {
+    const start = duo.indexOf("`SELECT", duo.indexOf(`export const ${name} =`));
+    return duo.slice(start, duo.indexOf("`;", start));
+  };
+  const duoSql = constant("HABITUAL_DUO_QUERY");
+  const duoRecordSql = constant("DUO_RECORD_QUERY");
+  const queries = [...inline, duoSql, duoRecordSql];
+  assert.equal(queries.length, 5, "expected five enrichment queries");
 
   for (const query of queries) {
     const bounded = /\bLIMIT\b/.test(query) || /ROW_NUMBER\(\)/.test(query) || /_at > \?/.test(query);
@@ -144,4 +216,8 @@ test("bounds every enrichment query so a reader's cost cannot grow with history"
   // out to be parsed in the Worker is what took the site down.
   assert.match(duoSql, /json_each\(activity\.participants\)/);
   assert.match(duoSql, /COUNT\(\*\) AS games/);
+  // Same for the record query: its window is bounded and its rosters are
+  // reduced to a tally inside D1, not shipped out to be parsed.
+  assert.match(duoRecordSql, /json_each\(mine\.participants\)/);
+  assert.match(duoRecordSql, /COUNT\(\*\) AS games, SUM\(won\) AS wins/);
 });

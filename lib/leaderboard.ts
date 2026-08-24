@@ -118,10 +118,13 @@ export type LiveGame = {
   participants: LastMatchParticipant[];
 };
 
+/** 99%. See `wilsonLowerBound` for why this number and not 1.96. */
+export const CONFIDENCE_Z = 2.58;
+
 /**
- * Wilson lower bound: the win rate a champion can be *shown* to hold, not the
- * one it happens to have. The confidence level is the whole lever, because it
- * is what a small sample is charged for.
+ * Wilson lower bound: the win rate a record can be *shown* to hold, not the one
+ * it happens to have. The confidence level is the whole lever, because it is
+ * what a small sample is charged for.
  *
  * At 95% it was too cheap, and specifically for perfect records — a flawless
  * run has no observed variance, so only the sample-size term holds it down.
@@ -133,18 +136,25 @@ export type LiveGame = {
  * a 75% champion over twenty games loses about four points. That is the whole
  * intent: charge the small samples, leave the real ones alone. It stays an
  * ordinary Wilson interval, so nothing about how the ranking reads changes.
+ *
+ * Both rankings that need to order win rates — a player's champions and the
+ * board's duos — come through here, so a pair is judged on exactly the terms
+ * the champion discs are.
  */
-function championConfidenceScore(champion: ChampionAggregate) {
-  const games = Math.max(0, champion.games);
-  if (games === 0) return 0;
-  const wins = Math.min(games, Math.max(0, champion.wins));
-  const winRate = wins / games;
-  const z = 2.58;
-  const zSquared = z * z;
+export function wilsonLowerBound(wins: number, games: number) {
+  const played = Math.max(0, games);
+  if (played === 0) return 0;
+  const won = Math.min(played, Math.max(0, wins));
+  const winRate = won / played;
+  const zSquared = CONFIDENCE_Z * CONFIDENCE_Z;
   return (
-    winRate + zSquared / (2 * games) -
-    z * Math.sqrt((winRate * (1 - winRate) + zSquared / (4 * games)) / games)
-  ) / (1 + zSquared / games);
+    winRate + zSquared / (2 * played) -
+    CONFIDENCE_Z * Math.sqrt((winRate * (1 - winRate) + zSquared / (4 * played)) / played)
+  ) / (1 + zSquared / played);
+}
+
+function championConfidenceScore(champion: ChampionAggregate) {
+  return wilsonLowerBound(champion.wins, champion.games);
 }
 
 export function selectBestChampions(
@@ -205,6 +215,21 @@ export type PlayerSnapshot = {
   placeDelta?: number;
 };
 
+/**
+ * A pair of challenge members and the record they hold on the same team, ranked
+ * by `wilsonLowerBound`. Ids rather than names: everything else the panel draws
+ * — icon, tier, first name — is already on the player it points at.
+ */
+export type DuoRecord = {
+  playerIds: [string, string];
+  games: number;
+  wins: number;
+  score: number;
+};
+
+/** Below this a pair has not played enough together to be worth ranking. */
+export const DUO_LEADERBOARD_MIN_GAMES = 4;
+
 export type LeaderboardSnapshot = {
   region: "LAS";
   platform: "LA2";
@@ -213,6 +238,11 @@ export type LeaderboardSnapshot = {
   fetchedAt: string;
   dataDragonVersion: string;
   players: PlayerSnapshot[];
+  /**
+   * Resolved from D1 on the read path like the per-player enrichments, so a
+   * snapshot cached before the duos panel existed still validates.
+   */
+  duos?: DuoRecord[];
 };
 
 export type LeaderboardSource = "riot" | "cache" | "demo";
@@ -438,33 +468,31 @@ export function rankScore(player: Pick<PlayerSnapshot, "tier" | "division" | "le
   return tierIndex * 400 + Math.max(0, divisionIndex) * 100 + player.leaguePoints;
 }
 
-export function challengeGoalForLeader(
-  leader: Pick<PlayerSnapshot, "tier" | "division" | "leaguePoints"> | undefined,
-): ChallengeGoalTier {
-  if (!leader) return "GOLD";
-  return rankScore(leader) >= TIER_ORDER.indexOf("GOLD") * 400 ? "PLATINUM" : "GOLD";
-}
-
 /**
- * The target the rest of the board chases: whoever currently ranks highest.
+ * Orders the pairs that cleared the minimum, best first.
  *
- * This was pinned to Mamimu, which was true when the challenge started and
- * silently stopped being the point — if someone overtakes her the card would
- * have kept calling her the goal while the ranking showed otherwise. Reading it
- * off the standings keeps the card honest without anyone editing a constant.
- *
- * Ranked by `rankScore`, not by raw league points: ninety-five points in Bronze
- * are not more than ten in Gold, so "most LP" only means anything once tier and
- * division are folded in, which is exactly what that score does.
+ * Ties break on games rather than on raw win rate: two pairs the interval
+ * cannot separate are separated by which of them has actually proven it more,
+ * and the id keeps the last step deterministic so a refresh cannot reshuffle a
+ * pair of equals.
  */
-export function challengeGoalPlayer(players: readonly PlayerSnapshot[]) {
-  let goal: PlayerSnapshot | undefined;
-  for (const player of players) {
-    // Strictly greater, so a tie leaves the earlier player in place and the
-    // goal cannot flip back and forth between two equal scores on every poll.
-    if (!goal || rankScore(player) > rankScore(goal)) goal = player;
-  }
-  return goal;
+export function rankDuoRecords(
+  records: readonly { playerIds: [string, string]; games: number; wins: number }[],
+  minGames = DUO_LEADERBOARD_MIN_GAMES,
+): DuoRecord[] {
+  return records
+    .filter((record) => record.games >= Math.max(1, minGames))
+    .map((record) => ({
+      playerIds: record.playerIds,
+      games: record.games,
+      wins: Math.min(record.games, Math.max(0, record.wins)),
+      score: wilsonLowerBound(record.wins, record.games),
+    }))
+    .sort((a, b) =>
+      b.score - a.score ||
+      b.games - a.games ||
+      a.playerIds[0].localeCompare(b.playerIds[0]) ||
+      a.playerIds[1].localeCompare(b.playerIds[1]));
 }
 
 export function sortLeaderboard(players: PlayerSnapshot[]) {
@@ -638,6 +666,16 @@ function isHabitualDuo(value: unknown): value is HabitualDuo {
     typeof value.games === "number";
 }
 
+function isDuoRecord(value: unknown): value is DuoRecord {
+  return isRecord(value) &&
+    Array.isArray(value.playerIds) &&
+    value.playerIds.length === 2 &&
+    value.playerIds.every((id) => typeof id === "string") &&
+    typeof value.games === "number" &&
+    typeof value.wins === "number" &&
+    typeof value.score === "number";
+}
+
 function isLiveGame(value: unknown): value is LiveGame {
   return isRecord(value) &&
     typeof value.platformGameId === "string" &&
@@ -696,7 +734,8 @@ export function parseLeaderboardSnapshot(serialized: string): LeaderboardSnapsho
     !Array.isArray(value.players) ||
     value.players.length < CHALLENGE_MEMBER_COUNT - 1 ||
     value.players.length > CHALLENGE_MEMBER_COUNT ||
-    !value.players.every(isPlayerSnapshot)
+    !value.players.every(isPlayerSnapshot) ||
+    (value.duos !== undefined && !(Array.isArray(value.duos) && value.duos.every(isDuoRecord)))
   ) {
     return null;
   }
@@ -730,6 +769,9 @@ export function parseLeaderboardSnapshot(serialized: string): LeaderboardSnapsho
         topChampions: selectBestChampions(player.analytics.championCounts),
       },
     })),
+    // Re-ranked rather than trusted: a payload restored from browser storage
+    // carries whatever order it was written in, and the score is cheap.
+    ...(snapshot.duos ? { duos: rankDuoRecords(snapshot.duos) } : {}),
   };
 }
 

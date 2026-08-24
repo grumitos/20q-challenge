@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DUO_LEADERBOARD_MIN_GAMES,
   calculateGoalProgress,
   calculateGoldProgress,
-  challengeGoalForLeader,
   createDemoSnapshot,
   isRemakeMatch,
   normalizeSoloQueueEntry,
@@ -13,7 +13,9 @@ import {
   papipuRespawnSeconds,
   parseLeaderboardSnapshot,
   parseLeaderboardPayload,
+  rankDuoRecords,
   shouldUseCache,
+  wilsonLowerBound,
 } from "../lib/leaderboard.ts";
 
 const rosterEntry = (championId, teamId, over = {}) => ({
@@ -183,11 +185,36 @@ test("calculates progress toward Gold IV from the ranked ladder", () => {
   assert.equal(calculateGoldProgress("PLATINUM", "IV", 0), 100);
 });
 
-test("moves the challenge goal to Platinum IV once the leader reaches Gold IV", () => {
-  assert.equal(challengeGoalForLeader({ tier: "SILVER", division: "I", leaguePoints: 99 }), "GOLD");
-  assert.equal(challengeGoalForLeader({ tier: "GOLD", division: "IV", leaguePoints: 0 }), "PLATINUM");
-  assert.equal(challengeGoalForLeader({ tier: "GOLD", division: "I", leaguePoints: 72 }), "PLATINUM");
-  assert.equal(challengeGoalForLeader({ tier: "PLATINUM", division: "IV", leaguePoints: 0 }), "PLATINUM");
+test("ranks duos by the same confidence bound that ranks champions", () => {
+  // A perfect four-game pair must not outrank a long, genuinely strong one:
+  // that is the entire reason the score is a lower bound and not a win rate.
+  const ranked = rankDuoRecords([
+    { playerIds: ["a", "b"], games: 4, wins: 4 },
+    { playerIds: ["c", "d"], games: 30, wins: 21 },
+  ]);
+
+  assert.deepEqual(ranked.map((duo) => duo.playerIds[0]), ["c", "a"]);
+  assert.equal(ranked[0].score, wilsonLowerBound(21, 30));
+});
+
+test("drops pairs that have not played enough together to be ranked", () => {
+  const records = [
+    { playerIds: ["a", "b"], games: DUO_LEADERBOARD_MIN_GAMES, wins: 2 },
+    { playerIds: ["c", "d"], games: DUO_LEADERBOARD_MIN_GAMES - 1, wins: 3 },
+  ];
+
+  assert.deepEqual(rankDuoRecords(records).map((duo) => duo.playerIds), [["a", "b"]]);
+});
+
+test("separates duos the interval cannot on the sample that proved them", () => {
+  // Same record, so the same bound: the pair with more games behind it wins,
+  // and the ids keep the last step from reshuffling between refreshes.
+  const ranked = rankDuoRecords([
+    { playerIds: ["z", "y"], games: 8, wins: 4 },
+    { playerIds: ["a", "b"], games: 16, wins: 8 },
+  ]);
+
+  assert.deepEqual(ranked.map((duo) => duo.games), [16, 8]);
 });
 
 test("recalculates progress against Platinum IV after the challenge goal advances", () => {

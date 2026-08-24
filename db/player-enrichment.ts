@@ -1,12 +1,21 @@
 import { getD1 } from ".";
-import { HABITUAL_DUO_QUERY, parseParticipants, pickHabitualDuos, type DuoTallyRow } from "../lib/habitual-duos";
-import type { HabitualDuo, LiveGame, PlayerSnapshot } from "../lib/leaderboard";
+import {
+  DUO_RECORD_QUERY,
+  HABITUAL_DUO_QUERY,
+  foldDuoRecords,
+  parseParticipants,
+  pickHabitualDuos,
+  type DuoRecordRow,
+  type DuoTallyRow,
+} from "../lib/habitual-duos";
+import { rankDuoRecords, type DuoRecord, type HabitualDuo, type LiveGame, type PlayerSnapshot } from "../lib/leaderboard";
 import { calculatePlaceDeltas } from "../lib/place-movement";
 
 /**
- * Resolves the per-player signals the leaderboard payload already had the raw
- * material for but never exposed: recent form, the habitual challenge duo,
- * place movement since the previous ranking, and any live SoloQ game.
+ * Resolves the signals the leaderboard payload already had the raw material for
+ * but never exposed: recent form, the habitual challenge duo, place movement
+ * since the previous ranking, any live SoloQ game, and the board-wide ranking
+ * of which pairs actually win together.
  *
  * Every query is best-effort — a missing migration or a slow read degrades the
  * card to its static state instead of failing the whole request.
@@ -88,6 +97,22 @@ async function readHabitualDuos(
 }
 
 /**
+ * Every same-team pairing on the board, ranked. Shares the habitual duo's
+ * window: the two read the same rosters, and one bound for both keeps a
+ * reader's cost tied to a fixed number of matches rather than to the season.
+ */
+async function readDuoRecords(
+  d1: Awaited<ReturnType<typeof getD1>>,
+  playerIds: readonly string[],
+) {
+  const rows = await d1.prepare(DUO_RECORD_QUERY)
+    .bind(JSON.stringify(playerIds), DUO_LOOKBACK_MATCHES * playerIds.length)
+    .all<DuoRecordRow>();
+
+  return rankDuoRecords(foldDuoRecords(rows.results ?? []));
+}
+
+/**
  * Place movement against the previous distinct ranking observation, so the
  * arrow reflects an actual position change rather than raw LP drift.
  */
@@ -161,27 +186,31 @@ export async function enrichPlayers(
   players: readonly PlayerSnapshot[],
   rankScoreOf: (input: Pick<PlayerSnapshot, "tier" | "division" | "leaguePoints">) => number,
   now = Date.now(),
-): Promise<PlayerSnapshot[]> {
+): Promise<{ players: PlayerSnapshot[]; duos: DuoRecord[] }> {
   let d1: Awaited<ReturnType<typeof getD1>>;
   try {
     d1 = await getD1();
   } catch {
-    return [...players];
+    return { players: [...players], duos: [] };
   }
 
   const playerIds = players.map((player) => player.id);
-  const [recentResults, habitualDuos, placeDeltas, liveGames] = await Promise.all([
+  const [recentResults, habitualDuos, placeDeltas, liveGames, duos] = await Promise.all([
     readRecentResults(d1, playerIds, now).catch(() => new Map<string, boolean[]>()),
     readHabitualDuos(d1, players).catch(() => new Map<string, HabitualDuo>()),
     readPlaceDeltas(d1, players, rankScoreOf, now).catch(() => new Map<string, number>()),
     readLiveGames(d1, playerIds, now).catch(() => new Map<string, LiveGame>()),
+    readDuoRecords(d1, playerIds).catch(() => [] as DuoRecord[]),
   ]);
 
-  return players.map((player) => ({
-    ...player,
-    recentResults: recentResults.get(player.id) ?? [],
-    habitualDuo: habitualDuos.get(player.id) ?? null,
-    placeDelta: placeDeltas.get(player.id) ?? 0,
-    liveGame: liveGames.get(player.id) ?? null,
-  }));
+  return {
+    players: players.map((player) => ({
+      ...player,
+      recentResults: recentResults.get(player.id) ?? [],
+      habitualDuo: habitualDuos.get(player.id) ?? null,
+      placeDelta: placeDeltas.get(player.id) ?? 0,
+      liveGame: liveGames.get(player.id) ?? null,
+    })),
+    duos,
+  };
 }

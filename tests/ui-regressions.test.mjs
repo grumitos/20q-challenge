@@ -39,51 +39,75 @@ test("reports roster size, live games and update time as one segmented readout",
   assert.match(css, /\.header-stats > span:last-child \{[^}]*border-radius: 0 var\(--r-sm\) var\(--r-sm\) 0/);
 });
 
-test("removes only the progress bar from the challenge-goal card", async () => {
+test("ranks everyone, so a place and the arrow beside it count the same list", async () => {
   const [page, css] = await Promise.all([readPage(), readCss()]);
 
-  // Finding 04: progressToGold was recalculated on every load and never drawn.
-  assert.match(page, /calculateGoalProgress\(/);
-  assert.doesNotMatch(page, /className="goal-track"/);
-  assert.match(page, /goalProgress/);
-  assert.doesNotMatch(css, /\.goal-track/);
+  // The board used to hold its target out of the standings, which left the
+  // place column and the movement arrow measuring two different orderings.
+  assert.match(page, /const visiblePlayers = sortLeaderboard\(players\);/);
+  assert.doesNotMatch(page, /goalVisible|challengeGoalPlayer|contenders/);
+  assert.doesNotMatch(page, /className="goal-card"/);
+  assert.doesNotMatch(css, /\.goal-card|--goal-color/);
+  assert.match(page, /className=\{`row-delta\$\{delta > 0 \? " is-up" : delta < 0 \? " is-down" : ""\}`\}/);
+  assert.match(css, /\.row-delta\.is-up \{ color: var\(--green\); \}/);
 });
 
-test("keeps the goal card as the switch that drops the target into the ranking", async () => {
+test("moves the cards when the standings move, which is what the arrows say", async () => {
   const page = await readPage();
 
-  // The target is out of the ranking by default and pressing the card puts her
-  // in, so the gap can be read against the contenders directly.
-  assert.match(page, /challengeGoalPlayer\(players\)/);
-  assert.match(page, /player\.id !== goalPlayer\?\.id/);
-  assert.match(page, /const \[goalVisible, setGoalVisible\] = useState\(false\)/);
-  assert.match(page, /const visiblePlayers = goalVisible \? sortLeaderboard\(players\) : contenders/);
-  assert.match(page, /const toggleGoal = \(\) => \{\s*captureRankingPositions\(\);/);
-  assert.match(page, /<button\s+type="button"\s+className="goal-card"/);
-  assert.match(page, /aria-pressed=\{goalVisible\}/);
+  // The FLIP capture belonged to the reveal toggle and had no other caller.
+  // A refresh that reorders the board is exactly the event it was written for.
+  assert.match(page, /const nextOrder = sortLeaderboard\(nextPayload\.data\.players\)/);
+  assert.match(page, /renderedOrder\.current !== nextOrder\) captureRankingPositions\(\)/);
+  assert.match(page, /\}, \[hasLiveData, payload\.data\.fetchedAt, syncRankingNodes\]\)/);
 });
 
-test("anchors the goal maths to the contenders so revealing the target cannot move it", async () => {
-  const page = await readPage();
-
-  // visiblePlayers[0] becomes the target herself once she is shown, which would
-  // silently redefine "progress of the leader".
-  assert.match(page, /const contenders = sortLeaderboard\(players\.filter\(\(player\) => player\.id !== goalPlayer\?\.id\)\)/);
-  assert.match(page, /challengeGoalForLeader\(contenders\[0\]\)/);
-  assert.match(page, /calculateGoalProgress\(contenders\[0\]\.tier/);
-});
-
-test("frames the goal card from the target's own tier rather than a fixed platinum", async () => {
+test("puts Los Juegos de Gaspi behind the header badge", async () => {
   const [page, css] = await Promise.all([readPage(), readCss()]);
 
-  assert.match(page, /function goalAccentStyle\(tier: RankTier\)/);
-  assert.match(page, /style=\{goalAccentStyle\(goalPlayerTier\)\}/);
-  // The heavy border is --goal-*, so it follows the tier instead of being written
-  // into the stylesheet as teal.
-  assert.match(css, /\.goal-card \{[\s\S]*?inset 0 0 0 2px var\(--goal-edge\)/);
-  assert.match(css, /\.goal-card::before \{[^}]*background: var\(--goal-color\)[^}]*box-shadow: 0 0 14px var\(--goal-color\)/);
-  assert.doesNotMatch(css, /\.goal-card \{[\s\S]*?rgb\(122 219 200/);
-  assert.match(css, /\.goal-card\[aria-pressed="true"\] \.goal-toggle::after \{[^}]*opacity: 0/);
+  assert.match(page, /className="gaspi-card" onClick=\{openGaspi\}/);
+  assert.match(page, /<strong>Los Juegos de Gaspi<\/strong>/);
+  assert.match(page, /role="dialog" aria-modal="true"/);
+  // Escape closes it, and the scroll lock is undone with it.
+  assert.match(page, /event\.key === "Escape"/);
+  assert.match(page, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(css, /\.gaspi-card \{[\s\S]*?inset 0 0 0 2px rgb\(227 188 110 \/ 42%\)/);
+  assert.match(css, /\.gaspi-title \{[^}]*font-family: "Cinzel"/);
+});
+
+test("invades the ranking's palette rather than painting over it", async () => {
+  const [page, css] = await Promise.all([readPage(), readCss()]);
+
+  // Every surface the invasion recolours is a token, and the tokens are
+  // registered as colours so the swap interpolates instead of jumping.
+  assert.match(css, /@property --bg \{ syntax: "<color>"/);
+  assert.match(css, /html\.is-invaded \{[\s\S]*?--glow-a: rgb\(227 188 110 \/ 14%\)/);
+  assert.doesNotMatch(css, /background: #12151d|background: #0a0b10|background: #0c0e14|background: #0a0c11/);
+  assert.match(page, /classList\.add\("is-invaded"\), GASPI_INVASION_DELAY_MS/);
+  assert.match(page, /classList\.remove\("is-invaded"\)/);
+});
+
+test("ranks the pairs that win together, on the champions' own criterion", async () => {
+  const [page, css, leaderboard] = await Promise.all([readPage(), readCss(), readLeaderboard()]);
+
+  // One Wilson bound serves both rankings, so a duo is judged on exactly the
+  // terms a champion disc is.
+  assert.match(leaderboard, /export function wilsonLowerBound/);
+  assert.match(leaderboard, /function championConfidenceScore\(champion: ChampionAggregate\) \{\s*return wilsonLowerBound\(champion\.wins, champion\.games\);/);
+  assert.match(page, /`duo-panel\$\{duosRevealed \? " is-in" : ""\}`/);
+  assert.match(page, /Mínimo \{DUO_LEADERBOARD_MIN_GAMES\} partidas juntos/);
+  assert.match(css, /\.duo-row\.is-top \{[^}]*border-color: rgb\(246 214 138 \/ 30%\)/);
+});
+
+test("counts a duo's record only where the two actually shared a side", async () => {
+  const duos = await readSource("lib/habitual-duos.ts");
+
+  // Two members drawn onto opposite teams share a game and never share its
+  // outcome, so the record query filters on the team read off the roster.
+  assert.match(duos, /export const DUO_RECORD_QUERY/);
+  assert.match(duos, /peer_team = own_team/);
+  assert.match(duos, /SUM\(won\) AS wins/);
+  assert.match(duos, /export function foldDuoRecords/);
 });
 
 /* ─── What the payload always carried ─── */
@@ -96,7 +120,10 @@ test("states the league-point distance that explains each placement", async () =
   assert.match(page, /leaderAdvantage\(visiblePlayers\)/);
   assert.match(page, /if \(isLeader\) return ""/);
   assert.match(page, /PL para/);
-  assert.match(css, /\.gap-pill\.is-leader/);
+  // The chip is podium furniture now, in a slot that reserves its height so the
+  // leader's card \u2014 which trails nobody, and so has no chip \u2014 stays aligned.
+  assert.match(css, /\.podium-rank \.gap-slot \{[^}]*min-height: 22px/);
+  assert.doesNotMatch(css, /\.gap-pill\.is-leader|\.gap-text\.is-leader/);
 });
 
 test("keeps the role distribution derivable even though frame 1b does not draw it", async () => {
@@ -258,7 +285,7 @@ test("labels every stacked figure once the column heading disappears", async () 
 
   // Finding 11: data-label existed but was never used in CSS, so mobile showed
   // numbers with no visible name.
-  assert.match(css, /\.row-grid \[data-label\]::before \{\s*content: attr\(data-label\)/);
+  assert.match(css, /\.row-grid \[data-label\]::before, \.duo-grid \[data-label\]::before \{\s*content: attr\(data-label\)/);
   assert.match(page, /data-label="Rendimiento"/);
   assert.match(page, /data-label="Rango"/);
   assert.match(page, /data-label="Rol"/);
@@ -295,7 +322,6 @@ test("distinguishes loading, stale data and a first-load network error", async (
 
   assert.match(page, /role="alert">No se pudo contactar con Riot/);
   assert.match(page, /payload\.meta\.notice \? <p className="status-notice" role="status"/);
-  assert.match(page, /payload\.meta\.isStale \? " \(sin refrescar\)" : ""/);
   assert.match(page, /"cargando"/);
 });
 
@@ -304,7 +330,9 @@ test("rotates a playful tab title while the page is away from focus", async () =
 
   assert.match(page, /const awayTabTitles = \[/);
   assert.match(page, /document\.addEventListener\("visibilitychange"/);
-  assert.match(page, /document\.title = "20Q Challenge";/);
+  // Coming back lands on the view that is actually on top, not always the board.
+  assert.match(page, /gaspiOpen \? GASPI_TITLE : "20Q Challenge"/);
+  assert.match(page, /document\.title = homeTitle\(\);/);
 });
 
 test("keeps the match block linked to its League of Graphs detail", async () => {
@@ -586,7 +614,7 @@ test("calls a remake a remake instead of a loss", async () => {
   // `win: false` on an aborted game is not a defeat, and Riot flags it itself.
   assert.match(leaderboard, /remake\?: boolean/);
   assert.match(page, /outcomeText = remake \? "Remake"/);
-  assert.match(css, /\.match-result\.is-remake \{ color: #a9b0c2; \}/);
+  assert.match(css, /\.match-result\.is-remake \{ color: var\(--remake-ink\); \}/);
   assert.match(css, /\.match-art\.is-remake/);
 });
 
