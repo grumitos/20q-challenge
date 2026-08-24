@@ -83,8 +83,31 @@ test("invades the ranking's palette rather than painting over it", async () => {
   assert.match(css, /@property --bg \{ syntax: "<color>"/);
   assert.match(css, /html\.is-invaded \{[\s\S]*?--glow-a: rgb\(227 188 110 \/ 14%\)/);
   assert.doesNotMatch(css, /background: #12151d|background: #0a0b10|background: #0c0e14|background: #0a0c11/);
-  assert.match(page, /classList\.add\("is-invaded"\), GASPI_INVASION_DELAY_MS/);
-  assert.match(page, /classList\.remove\("is-invaded"\)/);
+  assert.match(page, /classList\.add\("is-invaded"\),\s*\n?\s*GASPI_INVASION_DELAY_MS/);
+
+  // The invasion outlives the card that started it: coming back from Los Juegos
+  // the ranking stays gold. Only unmount undoes it, so the class must not be
+  // removed by the effect that owns the overlay's scroll lock.
+  const scrollLock = page.slice(page.indexOf("if (!gaspiOpen) return;"));
+  const lockBody = scrollLock.slice(0, scrollLock.indexOf("}, [gaspiOpen]);"));
+  assert.doesNotMatch(lockBody, /classList\.remove\("is-invaded"\)/);
+  assert.match(page, /useEffect\(\(\) => \(\) => \{[\s\S]*?classList\.remove\("is-invaded"\)[\s\S]*?\}, \[\]\)/);
+});
+
+test("keeps the header taking its background whoever is doing the scrolling", async () => {
+  const [page, css] = await Promise.all([readPage(), readCss()]);
+
+  // A sentinel does not care which box scrolls; a listener does not care
+  // whether observations are being delivered. Both run, because either one
+  // alone is a header that silently stops taking its wash.
+  assert.match(page, /window\.addEventListener\("scroll", handleScroll/);
+  assert.match(page, /new IntersectionObserver\(\s*\n?\s*\(\[entry\]\) => setIsHeaderScrolled/);
+  assert.match(page, /document\.scrollingElement\?\.scrollTop/);
+  // And the width the scrollbar occupied is given back as padding while the
+  // overlay holds scrolling, so losing it cannot jolt the layout sideways.
+  assert.match(page, /const gutter = window\.innerWidth - root\.clientWidth/);
+  assert.match(page, /if \(gutter > 0\) root\.style\.paddingRight = `\$\{gutter\}px`/);
+  assert.doesNotMatch(css, /scrollbar-gutter/);
 });
 
 test("ranks the pairs that win together, on the champions' own criterion", async () => {

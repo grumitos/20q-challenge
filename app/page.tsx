@@ -1078,6 +1078,7 @@ export default function Home() {
   const renderedFetchedAt = useRef<string | null>(null);
   const reloadBoard = useRef<() => void>(() => undefined);
   const renderedOrder = useRef<string | null>(null);
+  const invasionTimer = useRef(0);
   const scrollSentinel = useRef<HTMLSpanElement | null>(null);
   const duoPanel = useRef<HTMLElement | null>(null);
   const rankingNodes = useRef(new Map<string, HTMLElement>());
@@ -1248,28 +1249,35 @@ export default function Home() {
 
   // Which box scrolls is not always the document, and whenever it was not, the
   // header never took its contrast wash: `scrollY` stayed at zero while the
-  // page moved. A sentinel at the top of the shell answers the same question
-  // without caring who is doing the scrolling; the listener stays as the
-  // fallback for browsers without an observer.
+  // page moved. Both answers to that question run, because each covers a case
+  // the other misses — a sentinel does not care who scrolls, and a listener
+  // does not care whether observations are being delivered. They flip at the
+  // same nine pixels, so agreeing costs nothing and either one alone is a
+  // header that silently stops taking its background.
   useEffect(() => {
-    const sentinel = scrollSentinel.current;
-    if (sentinel && typeof IntersectionObserver === "function") {
-      const observer = new IntersectionObserver(
-        ([entry]) => setIsHeaderScrolled(!entry.isIntersecting),
-        { rootMargin: "-9px 0px 0px 0px", threshold: 0 },
-      );
-      observer.observe(sentinel);
-      return () => observer.disconnect();
-    }
-
-    const handleScroll = () => setIsHeaderScrolled(Math.max(
+    const readScroll = () => Math.max(
       window.scrollY || 0,
+      document.scrollingElement?.scrollTop || 0,
       document.documentElement.scrollTop || 0,
       document.body.scrollTop || 0,
-    ) > 8);
+    );
+    const handleScroll = () => setIsHeaderScrolled(readScroll() > 8);
     handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+
+    const sentinel = scrollSentinel.current;
+    const observer = sentinel && typeof IntersectionObserver === "function"
+      ? new IntersectionObserver(
+          ([entry]) => setIsHeaderScrolled(!entry.isIntersecting || readScroll() > 8),
+          { rootMargin: "-9px 0px 0px 0px", threshold: 0 },
+        )
+      : null;
+    observer?.observe(sentinel!);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll, { capture: true });
+      observer?.disconnect();
+    };
   }, []);
 
   // The duos are a second chapter, so they arrive when they are reached rather
@@ -1293,34 +1301,57 @@ export default function Home() {
     // always the first payload at all, so its arrival is what starts this.
   }, [duosRevealed, duoCount]);
 
-  // The invasion is not an overlay painted over the ranking: it mutates the
-  // palette the ranking is drawn from. It waits for the title card's own fade
-  // to have covered the board, so the swap is never seen happening, and it is
-  // undone the moment the card closes.
+  // While the card is up nothing behind it may scroll. `<html>` is the
+  // scrolling element, not `<body>`: locking only the body left the document
+  // itself scrollable underneath the fixed overlay, so the ranking's own
+  // scroll range leaked through as empty space above and below the card.
   useEffect(() => {
     if (!gaspiOpen) return;
-    // `<html>` is the scrolling element here (see `scroll-behavior` on it in
-    // globals.css), not `<body>`. Locking only the body left the document
-    // itself still scrollable underneath the fixed overlay, so the ranking's
-    // own scroll range leaked through as empty space above and below the card.
     const root = document.documentElement;
     const previousRootOverflow = root.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
+    const previousPadding = root.style.paddingRight;
+    // On a desktop with classic scrollbars, taking scrolling away takes the
+    // scrollbar with it and everything underneath jumps sideways by its width.
+    // Measured rather than assumed, because overlay scrollbars measure zero and
+    // must not be compensated for. `scrollbar-gutter` cannot do this: it only
+    // reserves the gutter while the element is still a scroll container, which
+    // is exactly what the line below stops it being.
+    const gutter = window.innerWidth - root.clientWidth;
     root.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
-    const swap = window.setTimeout(() => root.classList.add("is-invaded"), GASPI_INVASION_DELAY_MS);
+    if (gutter > 0) root.style.paddingRight = `${gutter}px`;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setGaspiOpen(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => {
-      window.clearTimeout(swap);
       window.removeEventListener("keydown", handleKey);
       root.style.overflow = previousRootOverflow;
       document.body.style.overflow = previousBodyOverflow;
-      root.classList.remove("is-invaded");
+      root.style.paddingRight = previousPadding;
     };
   }, [gaspiOpen]);
+
+  // The invasion is not an overlay painted over the ranking: it mutates the
+  // palette the ranking is drawn from, and it outlives the card that started
+  // it. Coming back from Los Juegos, the board stays gold — that is what makes
+  // it an invasion rather than a skin on one screen. It waits for the card's
+  // own fade to have covered the board, so the swap is never seen happening,
+  // and the timer is deliberately not cancelled on close: a visitor who leaves
+  // within that half second has still been through it.
+  useEffect(() => {
+    if (!gaspiOpen) return;
+    invasionTimer.current = window.setTimeout(
+      () => document.documentElement.classList.add("is-invaded"),
+      GASPI_INVASION_DELAY_MS,
+    );
+  }, [gaspiOpen]);
+
+  useEffect(() => () => {
+    window.clearTimeout(invasionTimer.current);
+    document.documentElement.classList.remove("is-invaded");
+  }, []);
 
   const openGaspi = useCallback(() => {
     playHelicopter();
