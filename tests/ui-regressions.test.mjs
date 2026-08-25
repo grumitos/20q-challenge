@@ -170,7 +170,9 @@ test("ranks the pairs that win together, on the champions' own criterion", async
   // terms a champion disc is.
   assert.match(leaderboard, /export function wilsonLowerBound/);
   assert.match(leaderboard, /function championConfidenceScore\(champion: ChampionAggregate\) \{\s*return wilsonLowerBound\(champion\.wins, champion\.games\);/);
-  assert.match(page, /`duo-panel\$\{duosRevealed \? " is-in" : ""\}`/);
+  // The duos are part of the board, not a chapter waiting to be scrolled to.
+  assert.match(page, /className="duo-panel"/);
+  assert.doesNotMatch(page, /duosRevealed|duo-panel\.is-in/);
   assert.match(page, /Mínimo \{DUO_LEADERBOARD_MIN_GAMES\} partidas juntos/);
   assert.match(css, /\.duo-row\.is-top \{[^}]*border-color: rgb\(246 214 138 \/ 30%\)/);
 });

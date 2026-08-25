@@ -51,11 +51,6 @@ const GASPI_LETTER_START_MS = 350;
 const GASPI_LETTER_STEP_MS = 70;
 const GASPI_LINES = ["LOS JUEGOS", "DE GASPI"] as const;
 
-/** The duo table reveals row by row. Capped so a long list still lands. */
-const DUO_REVEAL_START_MS = 500;
-const DUO_REVEAL_STEP_MS = 80;
-const DUO_REVEAL_MAX_STEPS = 11;
-
 const awayTabTitles = [
   "Bienvenidos a los juegos de Gaspi",
   "Papipu, Mamimu e Hijuepu",
@@ -991,10 +986,7 @@ function DuoRow({ duo, players, version, place }: {
   const winRate = duo.games > 0 ? (duo.wins / duo.games) * 100 : 0;
   const names = `${firstName(first)} + ${firstName(second)}`;
   return (
-    <li
-      className={`duo-row${place === 1 ? " is-top" : ""}`}
-      style={{ "--duo-in": `${(DUO_REVEAL_START_MS + Math.min(place - 1, DUO_REVEAL_MAX_STEPS) * DUO_REVEAL_STEP_MS) / 1_000}s` } as CSSProperties}
-    >
+    <li className={`duo-row${place === 1 ? " is-top" : ""}`}>
       <div className="duo-grid">
         <span className="duo-place"><strong>{place}</strong></span>
         <span className="duo-pair">
@@ -1089,7 +1081,6 @@ export default function Home() {
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [gaspiOpen, setGaspiOpen] = useState(false);
   const [gaspiSeen, setGaspiSeen] = useState(false);
-  const [duosRevealed, setDuosRevealed] = useState(false);
   const hasCachedData = useRef(false);
   const renderedFetchedAt = useRef<string | null>(null);
   const reloadBoard = useRef<() => void>(() => undefined);
@@ -1097,7 +1088,6 @@ export default function Home() {
   const invasionTimer = useRef(0);
   const gaspiRevealSpent = useRef(false);
   const scrollSentinel = useRef<HTMLSpanElement | null>(null);
-  const duoPanel = useRef<HTMLElement | null>(null);
   const rankingNodes = useRef(new Map<string, HTMLElement>());
   const rankingPositions = useRef(new Map<string, DOMRectReadOnly>());
   const rankingAnimations = useRef(new Map<string, Animation>());
@@ -1113,7 +1103,6 @@ export default function Home() {
   const leaderLead = leaderAdvantage(visiblePlayers);
   const liveCount = visiblePlayers.filter((player) => player.liveGame).length;
   const duos = payload.data.duos ?? [];
-  const duoCount = duos.length;
   const cardPropsFor = (player: PlayerSnapshot, index: number) => ({
     gap: index === 0 ? leaderLead : leaguePointsGap(visiblePlayers, index),
     isLeader: index === 0,
@@ -1296,27 +1285,6 @@ export default function Home() {
       observer?.disconnect();
     };
   }, []);
-
-  // The duos are a second chapter, so they arrive when they are reached rather
-  // than with the ranking. Once revealed they stay revealed.
-  useEffect(() => {
-    const panel = duoPanel.current;
-    if (!panel || duosRevealed) return;
-    if (typeof IntersectionObserver !== "function") {
-      // Nothing to observe with, so the chapter simply arrives with the board.
-      const frame = window.requestAnimationFrame(() => setDuosRevealed(true));
-      return () => window.cancelAnimationFrame(frame);
-    }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return;
-      setDuosRevealed(true);
-      observer.disconnect();
-    }, { rootMargin: "0px 0px -18% 0px", threshold: .08 });
-    observer.observe(panel);
-    return () => observer.disconnect();
-    // The panel mounts with the first payload that carries a pair, which is not
-    // always the first payload at all, so its arrival is what starts this.
-  }, [duosRevealed, duoCount]);
 
   // While the card is up nothing behind it may scroll. `<html>` is the
   // scrolling element, not `<body>`: locking only the body left the document
@@ -1614,12 +1582,7 @@ export default function Home() {
       {hasLiveData && duos.length > 0 ? (
         <>
           <hr className="section-divider" />
-          <section
-            className={`duo-panel${duosRevealed ? " is-in" : ""}`}
-            id="duos"
-            aria-labelledby="duos-title"
-            ref={duoPanel}
-          >
+          <section className="duo-panel" id="duos" aria-labelledby="duos-title">
             <h2 className="sr-only" id="duos-title">Mejores dúos</h2>
             <div className="duo-heading" aria-hidden="true">
               <span>#</span><span>Dúo</span><span>Partidas</span><span>Winrate</span><span>Ponderado</span>

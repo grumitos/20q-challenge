@@ -851,17 +851,13 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
    same Wilson lower bound that orders every player's champions.
    ═══════════════════════════════════════════ */
 
-.duo-panel { margin-top: 30px; }
-/* No caption between the two chapters — the change of shape already reads. */
-.section-divider { height: 1px; margin: 34px 0 0; border: 0; background: linear-gradient(90deg, transparent, var(--line-bright) 20%, var(--line-bright) 80%, transparent); }
-
-.duo-heading, .duo-row { opacity: 0; transform: translateY(14px); transition: opacity .55s var(--ease-rank), transform .55s var(--ease-rank); }
-.duo-panel.is-in :is(.duo-heading, .duo-row) { opacity: 1; transform: none; }
-.duo-panel.is-in .duo-heading { transition-delay: .42s; }
-/* Each row carries its own --duo-in: the delay has to follow however many
-   pairs cleared the minimum, and a fixed list of nth-child rules left every
-   row past the sixth arriving first, with no delay at all. */
-.duo-panel.is-in .duo-row { transition-delay: var(--duo-in, .5s); }
+.duo-panel { margin-top: 18px; }
+/* No caption between the two chapters — the change of shape already reads.
+   A short centred rule rather than a full-width one: it is a breath between
+   two tables, not a section break, and it used to take sixty-four pixels of
+   height to say so. The duos arrive with the ranking, so there is nothing
+   here holding them back until they are scrolled to. */
+.section-divider { width: min(420px, 60%); height: 1px; margin: 20px auto 0; border: 0; background: linear-gradient(90deg, transparent, var(--line-bright) 22%, var(--line-bright) 78%, transparent); }
 
 .duo-heading, .duo-grid { display: grid; grid-template-columns: 30px minmax(190px, 1fr) 90px minmax(220px, 1.1fr) 116px; align-items: center; column-gap: 11px; }
 .duo-heading { align-items: end; margin-top: 14px; padding: 0 14px 9px; border-bottom: 1px solid var(--line); color: var(--muted); font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
@@ -1039,14 +1035,21 @@ footer a:is(:hover, :focus-visible) { color: var(--gold); }
      underneath, so the two figures that rank it stay side by side. */
   .duo-heading { display: none; }
   .duo-list { margin-top: 12px; }
+  /* The first column is shared by the place and the game count, and it is the
+     caption under the count that sets how wide it has to be: "PARTIDAS" wants
+     fifty-five pixels and the column was twenty-six, so it wrapped onto two
+     lines and shoved the row open. `auto` lets the widest of the two decide. */
   .duo-grid {
-    grid-template-columns: 26px minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas:
       "place pair score"
       "games wr   wr";
     gap: 12px 10px;
     padding: 11px 12px 12px;
   }
+  /* The score already names itself underneath, so the column caption above it
+     was both a repetition and one pixel too wide to fit on one line. */
+  .duo-score[data-label]::before { content: none; }
   .duo-place { grid-area: place; align-self: center; }
   .duo-pair { grid-area: pair; }
   .duo-score { grid-area: score; justify-self: end; align-self: center; justify-items: end; }
