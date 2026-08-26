@@ -1599,7 +1599,6 @@ export default function Home() {
               ))}
             </ol>
             <div className="panel-footnote">
-              <span>Puntaje: límite inferior de Wilson (99%) sobre el winrate del dúo — el mismo criterio que ordena los campeones</span>
               <span>Mínimo {DUO_LEADERBOARD_MIN_GAMES} partidas juntos · parejas por debajo no listadas</span>
             </div>
           </section>
