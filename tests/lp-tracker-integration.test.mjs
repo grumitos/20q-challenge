@@ -377,6 +377,7 @@ test("gives every player their newest match before anyone gets a second", async 
   }));
   const store = fakeStore(players, observations, []);
   const downloadedMatchIds = [];
+  const recentMatchPolls = [];
 
   const result = await runTemporalLpTracker({
     store,
@@ -392,6 +393,7 @@ test("gives every player their newest match before anyone gets a second", async 
       if (url.pathname.endsWith("/ids")) {
         const puuid = decodeURIComponent(url.pathname.split("/").at(-2));
         const playerNumber = puuid.split("-").at(-1);
+        recentMatchPolls.push(playerNumber);
         return new Response(JSON.stringify([
           `LA2_${playerNumber}_latest`,
           `LA2_${playerNumber}_older_1`,
@@ -419,22 +421,21 @@ test("gives every player their newest match before anyone gets a second", async 
     },
   });
 
-  // Newest-first across the roster, never a second before everyone has had a
-  // first. This used to assert all nine landed in one run; that was the cap
-  // reaching 7.6-11.0 ms of CPU parsing on a 10 ms budget, which is what got
-  // runs terminated. The fairness ordering is the part that was right, and it
-  // still holds — the cap just takes fewer from the front of it.
-  assert.equal(downloadedMatchIds.length, MATCH_DETAILS_PER_RUN);
+  // Idle history rotates by player, so this tick pays one recent-match request
+  // and one newest detail. A later tick covers player 2, then player 3, while
+  // active or post-game players remain priority every minute.
+  assert.equal(downloadedMatchIds.length, 1);
+  assert.deepEqual(recentMatchPolls, ["1"]);
   assert.deepEqual(
     downloadedMatchIds,
-    players.slice(0, MATCH_DETAILS_PER_RUN).map((_, index) => `LA2_${index + 1}_latest`),
+    ["LA2_1_latest"],
   );
   assert.equal(downloadedMatchIds.some((matchId) => matchId.includes("_older_")), false);
   // Only the players whose detail was actually downloaded get their cursor
   // moved; the rest keep theirs and are picked up on a following tick.
   assert.deepEqual(
     store.writes.cursors.filter(({ matchId }) => matchId !== null).map(({ playerId, matchId }) => [playerId, matchId]),
-    players.slice(0, MATCH_DETAILS_PER_RUN).map((player, index) => [player.playerId, `LA2_${index + 1}_latest`]),
+    [["p1", "LA2_1_latest"]],
   );
   assert.ok(result.requestsUsed <= TRACKER_REQUEST_BUDGET);
 });

@@ -60,7 +60,8 @@ test("counts linked tracker sessions and deduplicates them with match history", 
            VALUES ('inti', '4242', 420, 'inti:2', 3000, 3000, 3000, 'active',
                    '${participants()}', 3000)`);
 
-  const rows = db.prepare(HABITUAL_DUO_QUERY).all(JSON.stringify(players.map((player) => player.id)), 400);
+  const ids = JSON.stringify(players.map((player) => player.id));
+  const rows = db.prepare(HABITUAL_DUO_QUERY).all(ids, ids, 400, ids);
 
   assert.deepEqual(pickHabitualDuos(rows, players).get("inti"), { playerId: "miqi", gameName: "miqi", games: 2 });
 });
@@ -78,7 +79,8 @@ test("a reader's duo tally crosses the worker boundary as counts, not rosters", 
              VALUES ('inti', 'LA2_${index}', ${1000 + index}, '1', 'Annie', 1, 2, 3, 1, 'MIDDLE')`);
   }
 
-  const rows = db.prepare(HABITUAL_DUO_QUERY).all(JSON.stringify(players.map((player) => player.id)), 400);
+  const ids = JSON.stringify(players.map((player) => player.id));
+  const rows = db.prepare(HABITUAL_DUO_QUERY).all(ids, ids, 400, ids);
 
   assert.equal(rows.length, 1, "two hundred games must collapse to one pairing row");
   assert.deepEqual({ ...rows[0] }, { player_id: "inti", peer_id: "miqi", games: 200 });
@@ -115,7 +117,7 @@ test("counts a duo's record only from the games they actually played together", 
   insertRankedGame(db, "LA2_LOSS", 2000, 100, { inti: false, miqi: false });
   insertRankedGame(db, "LA2_ENEMIES", 3000, 200, { inti: true, miqi: false });
 
-  const rows = db.prepare(DUO_RECORD_QUERY).all(ids, 400);
+  const rows = db.prepare(DUO_RECORD_QUERY).all(ids, 400, ids);
   const folded = foldDuoRecords(rows);
 
   assert.equal(folded.length, 1, "one unordered pair, not one row per side");
@@ -134,7 +136,7 @@ test("keeps a pair readable while one of its members is still being backfilled",
     insertRankedGame(db, `LA2_${index}`, 1000 + index, 100, { inti: index % 4 !== 0 });
   }
 
-  const ranked = rankDuoRecords(foldDuoRecords(db.prepare(DUO_RECORD_QUERY).all(ids, 400)));
+  const ranked = rankDuoRecords(foldDuoRecords(db.prepare(DUO_RECORD_QUERY).all(ids, 400, ids)));
 
   assert.equal(ranked.length, 1);
   assert.deepEqual({ games: ranked[0].games, wins: ranked[0].wins }, { games: 12, wins: 9 });
@@ -153,7 +155,7 @@ test("leaves a live tracker session out of a duo's record", async () => {
            VALUES ('inti', '4242', 420, 'inti:1', 3000, 3000, 3000, 'active',
                    '${pairParticipants()}', 3000)`);
 
-  assert.deepEqual(db.prepare(DUO_RECORD_QUERY).all(ids, 400), []);
+  assert.deepEqual(db.prepare(DUO_RECORD_QUERY).all(ids, 400, ids), []);
 });
 
 test("calculates movement from the ranked current order", () => {

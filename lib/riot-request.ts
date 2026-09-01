@@ -2,42 +2,25 @@ export type RiotFetch = (input: string | URL | Request, init?: RequestInit) => P
 
 /* ─── RIOT RATE LIMITS ───
    A personal key allows 20 requests per second and 100 per two minutes. The
-   second one binds: the tracker fires every minute, so two of its runs land
-   inside any two-minute window, and the analytics refresh lands at most once
-   (its cron is `7,37 * * * *`). The three must therefore fit under 100 together
-   — `riot-request.test.mjs` asserts they do. Overshooting does not merely slow
-   things down: 429s make each retry sleep its Retry-After, which used to burn
-   the request's wall clock and get the run killed with its lease still held. */
+   tracker and analytics lanes share the same key, so their per-run budgets are
+   deliberately smaller than the limit: two 30-request tracker ticks plus one
+   32-request analytics refresh leave eight requests for the separate backfill
+   lane. Overshooting does not merely slow things down: 429s make each retry
+   sleep its Retry-After and can hold a lease while the run is stalled. */
 
 /** 100 requests per 2 minutes, the ceiling every budget below is carved from. */
 export const RIOT_WINDOW_REQUESTS = 100;
 
-/** One tracker run: 27 for the fixed cost of polling nine players (rank,
-    spectator and recent-match ids each), the rest for match details. Two of
-    these fit a window on their own, which is the common case — the analytics
-    cron only lands in the two windows an hour containing :07 and :37. */
-export const TRACKER_REQUEST_BUDGET = 45;
+/** One tracker run: 18 rank/spectator polls are always required. Recent-match
+    pages rotate across idle players and remain every tick for live or unresolved
+    post-game work; two match details, one identity check and one enrolment fit
+    under the 30-request cap even in the worst case. */
+export const TRACKER_REQUEST_BUDGET = 30;
 
-/** One analytics refresh, sized against Cloudflare's subrequest ceiling rather
-    than Riot's — 50 per invocation on the free plan, D1 included, and the
-    tighter of the two. The arithmetic this has to satisfy, measured against a
-    real refresh rather than guessed: 18 for league and summoner across nine
-    players (the puuid is reused from cache), 9 more to scan each of them for
-    new matches, and 11 for one backfill batch — an id page plus ten match
-    details. Anything under 38 and the backfill can never fit, which is not
-    slow but stuck: set to 32 it left five, and three consecutive refreshes
-    moved `games` for a new player from 0 to 0.
-
-    A cold cache pays 27 instead of 18 for the fixed part, which this also
-    clears, so the very first refresh can complete. The backfill resumes across
-    runs, so the cap costs elapsed time, not completeness.
-
-    What this deliberately does *not* claim: that a Riot window holding two
-    tracker runs *and* a refresh fits. It does not — 114 against an allowance of
-    100, twice an hour at :07 and :37, absorbed by the requester's Retry-After
-    retry rather than pretended away with a smaller number here. Closing that
-    for real means slowing the tracker's cadence or shrinking the roster, which
-    is a product decision and does not belong in a constant. */
+/** One analytics refresh, sized under both Cloudflare's 50-subrequest Worker
+    ceiling and the shared Riot window. The VPS uses the same cap, so a tracker
+    pair plus one analytics refresh stays below 100; the small backfill lane is
+    allowed to consume the remaining headroom and resumes on the next tick. */
 export const ANALYTICS_REQUEST_BUDGET = 32;
 
 /**

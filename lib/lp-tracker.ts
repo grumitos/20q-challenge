@@ -3,7 +3,7 @@ import { calculateGoldProgress, calculateWinRate, type Division, type RankTier }
 import type { ActiveSoloQueueGame, TrackerMatch } from "./riot-tracker-api.ts";
 import { createRiotTrackerApi } from "./riot-tracker-api.ts";
 import { mapWithConcurrency, TRACKER_REQUEST_BUDGET, type RiotFetch } from "./riot-request.ts";
-import type { LpTrackerStore } from "../db/lp-tracker-store.ts";
+import type { LpTrackerStore, TrackerStoreBatchOperation } from "../db/lp-tracker-store.ts";
 import { normalizeSoloQueueMatch, RIOT_PLAYERS } from "./riot-client.ts";
 import { championsByNumericKey } from "./champion-catalog.ts";
 
@@ -106,7 +106,13 @@ type ProcessTrackerPlayerInput = AdvanceGameSessionsInput & ReconcilePlayerMatch
 const SESSION_MATCH_TOLERANCE_MS = 10 * 60 * 1_000;
 /** Caps the account lookups a single run spends catching up the roster, so a
     Riot ID that stays unresolvable cannot starve the polling budget. */
-const MAX_ENROLMENTS_PER_RUN = 3;
+const MAX_ENROLMENTS_PER_RUN = 1;
+
+/** Riot-ID lookups are only for catching renames up; they do not need to run
+    every minute because the puuid used by all gameplay endpoints survives a
+    rename. Each roster member is checked at most once per ten minutes. */
+const IDENTITY_CHECK_INTERVAL_MS = 10 * 60_000;
+const RECENT_MATCH_IDS_FULL_POLL_COUNT = 3;
 
 /**
  * How many Match-V5 details one run may download and parse.
@@ -166,16 +172,20 @@ export const MATCH_DETAILS_PER_RUN = 2;
  * rate limit's own duration by a mechanism that does not depend on this at all.
  */
 const LEASE_TTL_MS = 90_000;
+/** A successful projection proves the minute-by-minute tracker is alive. This
+    is separate from the leaderboard cache because analytics/backfill also
+    rewrite that cache and must not mask a tracker outage. */
+export const TRACKER_HEARTBEAT_TTL_MS = 90_000;
 
 /** One cron tick. Long enough that a public request cannot re-drive a run that
     wrote no cache, short enough that the scheduled tick is never the one held
     back. See where this is applied for what the loop actually was. */
 const PROJECTION_GAP_COOLDOWN_MS = 60_000;
 
-/** Comfortably past `LP_RECONCILIATION_WINDOW_MS`, so a sweep can never take an
-    observation a pending reconciliation still needs. Rows older than this are
-    unreachable: the load query keeps 32 per player and no lookup goes further
-    back. Referenced ids are excluded by the delete itself regardless of age. */
+/** The delete keeps seven days of history for diagnostics. The hot load query
+    independently reads only the last three hours, while referenced baselines
+    remain eligible regardless of age; this keeps LP windows safe without
+    ranking the whole retained history on every tick. */
 const OBSERVATION_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
 /** Hourly. The sweep is cheap but pointless to run against 9 new rows. */
@@ -197,6 +207,46 @@ function fallbackBaseline(
   return eligible.find((candidate) =>
     current.wins - candidate.wins === (won ? 1 : 0) &&
     current.losses - candidate.losses === (won ? 0 : 1)) ?? eligible[0] ?? null;
+}
+
+export function recentMatchPollCount(
+  playerId: string,
+  sessions: readonly TrackedGameSession[],
+  candidates: readonly ReconciliationCandidate[],
+  playerIndex: number,
+  rosterSize: number,
+  now: number,
+) {
+  const hasLiveOrUnresolvedWork = sessions.some((session) =>
+    session.playerId === playerId &&
+    (session.status === "active" || session.status === "ended_waiting_match")) ||
+    candidates.some((candidate) =>
+      candidate.playerId === playerId &&
+      candidate.state !== "resolved" &&
+      candidate.state !== "unavailable");
+  if (hasLiveOrUnresolvedWork || rosterSize <= 1) return RECENT_MATCH_IDS_FULL_POLL_COUNT;
+
+  // Idle players rotate through the full three-id window. Everyone else skips
+  // Match-V5 history on this tick; rank and spectator are still polled every
+  // minute, and the next rotation covers the idle player's recent games.
+  return Math.floor(now / 60_000) % rosterSize === playerIndex
+    ? RECENT_MATCH_IDS_FULL_POLL_COUNT
+    : 0;
+}
+
+async function persistStoreBatch(
+  store: LpTrackerStore,
+  operations: readonly TrackerStoreBatchOperation[],
+) {
+  if (store.batch) {
+    await store.batch(operations);
+    return;
+  }
+  for (const operation of operations) {
+    const method = store[operation.method] as unknown as
+      (...args: unknown[]) => Promise<unknown>;
+    await method(...operation.args);
+  }
 }
 
 function nextAttempt(now: number, attempts: number) {
@@ -222,10 +272,14 @@ export function advanceGameSessions(input: AdvanceGameSessionsInput) {
 
   if (input.activeGame) {
     const active = sessions.find((session) =>
-      session.platformGameId === input.activeGame?.platformGameId && session.status === "active");
+      session.platformGameId === input.activeGame?.platformGameId &&
+      session.status !== "linked" &&
+      session.status !== "expired");
     const detail = input.activeGameDetail ?? null;
     if (active) {
       active.lastSeenAt = input.now;
+      active.status = "active";
+      active.endedDetectedAt = null;
       active.updatedAt = input.now;
       if (detail) {
         active.championId = detail.championId;
@@ -494,10 +548,26 @@ export async function runTemporalLpTracker(options: {
     outcome = label;
     return result;
   };
+  const markTrackerHeartbeat = async () => {
+    try {
+      await options.store.blockLaneUntil(
+        "lp-tracker-heartbeat",
+        options.now + TRACKER_HEARTBEAT_TTL_MS,
+      );
+    } catch (error) {
+      // The tracker result is already durable; a missed heartbeat only causes
+      // the fallback to do one extra guarded attempt.
+      console.log(JSON.stringify({
+        event: "lp_tracker_heartbeat_failed",
+        runId: owner,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  };
 
   try {
     const playerIds = RIOT_PLAYERS.map(({ id }) => id);
-    const state = await options.store.loadTrackerState(playerIds);
+    const state = await options.store.loadTrackerState(playerIds, options.now);
     if (state.players.length === 0) {
       // Cold start. The roster is the authority on who should be tracked, not
       // the cached snapshot: enrolling only from the snapshot left anyone added
@@ -532,13 +602,19 @@ export async function runTemporalLpTracker(options: {
         observedAt: options.now,
         ...rank,
       }] : []);
-      await options.store.insertRankObservations(observations);
-      await options.store.updateRecentCursors(bootstrapped.map(({ player, matchId }) => ({
-        playerId: player.id,
-        matchId,
-        startedAt: null,
-        now: options.now,
-      })));
+      await persistStoreBatch(options.store, [
+        { method: "insertRankObservations", args: [observations] },
+        {
+          method: "updateRecentCursors",
+          args: [bootstrapped.map(({ player, matchId }) => ({
+            playerId: player.id,
+            matchId,
+            startedAt: null,
+            now: options.now,
+          }))],
+        },
+      ]);
+      await markTrackerHeartbeat();
       return finish("bootstrapped", {
         status: "bootstrapped" as const,
         requestsUsed: api.requestsUsed,
@@ -549,13 +625,29 @@ export async function runTemporalLpTracker(options: {
 
     const tracked = state.players;
 
-    const polled = await mapWithConcurrency(tracked, 3, async (player) => {
+    const polled = await mapWithConcurrency(tracked, 3, async (player, playerIndex) => {
+      const playerSessions = state.sessions.filter((session) => session.playerId === player.playerId);
+      const playerCandidates = state.candidates.filter((candidate) => candidate.playerId === player.playerId);
+      const recentMatchPriority = playerSessions.some((session) =>
+        session.status === "active" || session.status === "ended_waiting_match") ||
+        playerCandidates.some((candidate) =>
+          candidate.state !== "resolved" && candidate.state !== "unavailable");
+      const recentMatchCount = recentMatchPollCount(
+        player.playerId,
+        playerSessions,
+        playerCandidates,
+        playerIndex,
+        tracked.length,
+        options.now,
+      );
       const [rank, activeGame, matchIds] = await Promise.all([
         api.fetchSoloQueueEntryByPuuid(player.puuid),
         api.fetchActiveSoloQueueGameByPuuid(player.puuid, player),
-        api.fetchRecentSoloQueueMatchIds(player.puuid, 3),
+        recentMatchCount > 0
+          ? api.fetchRecentSoloQueueMatchIds(player.puuid, recentMatchCount)
+          : Promise.resolve([]),
       ]);
-      return { player, rank, activeGame, matchIds };
+      return { player, rank, activeGame, matchIds, recentMatchPriority };
     });
     const observations = polled.flatMap(({ player, rank }) => rank ? [{
       id: `${player.playerId}:${options.now}`,
@@ -563,9 +655,6 @@ export async function runTemporalLpTracker(options: {
       observedAt: options.now,
       ...rank,
     }] : []);
-    await options.store.insertRankObservations(observations);
-    observationsInserted = observations.length;
-
     // Resolve spectator champion keys once per run so a live game can be shown
     // with its champion and roster instead of only being flagged as active.
     const liveDetails = new Map<string, { championId: string; championName: string; participants: string }>();
@@ -633,7 +722,11 @@ export async function runTemporalLpTracker(options: {
       }));
     }
     const liveSessions = [...advanced.values()].flat();
-    await options.store.upsertGameSessions(liveSessions);
+    await persistStoreBatch(options.store, [
+      { method: "insertRankObservations", args: [observations] },
+      { method: "upsertGameSessions", args: [liveSessions] },
+    ]);
+    observationsInserted = observations.length;
     await renewLease();
 
     // ── Expensive phase ──
@@ -642,7 +735,10 @@ export async function runTemporalLpTracker(options: {
       ...state.sessions.flatMap((session) => session.matchId ? [session.matchId] : []),
     ]);
     const matchIdsByRecency = Array.from({ length: 3 }, (_, index) =>
-      polled.flatMap((entry) => entry.matchIds[index] ? [entry.matchIds[index]] : []),
+      polled.flatMap((entry) =>
+        (index === 0 || entry.recentMatchPriority) && entry.matchIds[index]
+          ? [entry.matchIds[index]]
+          : []),
     ).flat();
     // `matchIdsByRecency` puts every player's newest first, so this cap always
     // takes newest-first across the roster and never a second before everyone
@@ -676,14 +772,7 @@ export async function runTemporalLpTracker(options: {
       allCandidates.push(...result.candidates);
       allEvidence.push(...result.evidence);
     }
-    await options.store.upsertGameSessions(allSessions);
-    await options.store.upsertCandidates(allCandidates);
-    await options.store.writeTerminalEvidence(allEvidence);
-    sessionsUpdated = allSessions.length;
-    candidatesUpdated = allCandidates.length;
-    evidenceWritten = allEvidence.length;
-
-    await options.store.updateRecentCursors(polled.map((entry) => {
+    const cursors = polled.map((entry) => {
       const match = matches.find((candidate) => candidate.matchId === entry.matchIds[0]);
       return {
         playerId: entry.player.playerId,
@@ -691,7 +780,45 @@ export async function runTemporalLpTracker(options: {
         startedAt: match?.gameStartedAt ?? null,
         now: options.now,
       };
-    }));
+    });
+    await persistStoreBatch(options.store, [
+      { method: "upsertGameSessions", args: [allSessions] },
+      { method: "upsertCandidates", args: [allCandidates] },
+      { method: "writeTerminalEvidence", args: [allEvidence] },
+      { method: "updateRecentCursors", args: [cursors] },
+    ]);
+    sessionsUpdated = allSessions.length;
+    candidatesUpdated = allCandidates.length;
+    evidenceWritten = allEvidence.length;
+
+    // A puuid survives a Riot ID rename, so use the rotating account check to
+    // keep both the sync row and the public snapshot aligned. This runs before
+    // projection; otherwise the next analytics refresh would still receive
+    // the old name even though gameplay tracking continued correctly.
+    const rotating = tracked[Math.floor(options.now / IDENTITY_CHECK_INTERVAL_MS) % tracked.length];
+    if (rotating && api.requestsRemaining >= MAX_ENROLMENTS_PER_RUN) {
+      try {
+        const account = await api.fetchAccountByPuuid(rotating.puuid);
+        if (account && (account.gameName !== rotating.gameName || account.tagLine !== rotating.tagLine)) {
+          const previousIdentity = `${rotating.gameName}#${rotating.tagLine}`;
+          rotating.gameName = account.gameName;
+          rotating.tagLine = account.tagLine;
+          await options.store.bootstrapPlayerSyncState(
+            { players: [{ ...account, id: rotating.playerId, lastSoloQueueMatch: null }] },
+            options.now,
+          );
+          console.log(JSON.stringify({
+            event: "lp_tracker_identity_changed",
+            runId: owner,
+            playerId: rotating.playerId,
+            from: previousIdentity,
+            to: `${account.gameName}#${account.tagLine}`,
+          }));
+        }
+      } catch {
+        // Best-effort, like the enrolment below: everything above is persisted.
+      }
+    }
 
     if (state.snapshot) {
       const challengePlayersByPuuid = new Map(tracked.map((player) => [player.puuid, player.playerId]));
@@ -710,6 +837,9 @@ export async function runTemporalLpTracker(options: {
             : null;
           return observation ? {
             ...player,
+            gameName: syncPlayer?.gameName ?? player.gameName,
+            tagLine: syncPlayer?.tagLine ?? player.tagLine,
+            puuid: syncPlayer?.puuid ?? player.puuid,
             tier: observation.tier,
             division: observation.division,
             leaguePoints: observation.leaguePoints,
@@ -723,6 +853,7 @@ export async function runTemporalLpTracker(options: {
       };
       const hydrated = await options.store.hydrateLatestMatchEvidence(rankedSnapshot);
       await options.store.writeLeaderboardProjection(hydrated, options.now);
+      await markTrackerHeartbeat();
     } else {
       // No cached snapshot to project onto, so this run leaves the cache empty —
       // and `/api/leaderboard` treats an empty cache as always stale. Public and
@@ -752,34 +883,6 @@ export async function runTemporalLpTracker(options: {
       }
     }
 
-    // Nothing else ever rewrites `player_sync_state`'s identity columns, so a
-    // rename used to split the app in half: the tracker kept working, because a
-    // puuid survives a rename, while `refreshLeaderboard` looked the account up
-    // by the hardcoded Riot ID, got a 404, and showed the player as UNRANKED on
-    // the board for good. One player per run, rotating, costs a single request
-    // and brings the whole roster back in line inside ten minutes.
-    const rotating = tracked[Math.floor(options.now / 60_000) % tracked.length];
-    if (rotating && api.requestsRemaining > MAX_ENROLMENTS_PER_RUN) {
-      try {
-        const account = await api.fetchAccountByPuuid(rotating.puuid);
-        if (account && (account.gameName !== rotating.gameName || account.tagLine !== rotating.tagLine)) {
-          await options.store.bootstrapPlayerSyncState(
-            { players: [{ ...account, id: rotating.playerId, lastSoloQueueMatch: null }] },
-            options.now,
-          );
-          console.log(JSON.stringify({
-            event: "lp_tracker_identity_changed",
-            runId: owner,
-            playerId: rotating.playerId,
-            from: `${rotating.gameName}#${rotating.tagLine}`,
-            to: `${account.gameName}#${account.tagLine}`,
-          }));
-        }
-      } catch {
-        // Best-effort, like the enrolment below: everything above is persisted.
-      }
-    }
-
     // `bootstrapPlayerSyncState` only runs on a cold start and skips anyone
     // without a puuid, so a roster member added later — like yvncv#0521 — never
     // lands in `player_sync_state` and the tracker ignores them forever. Catch
@@ -787,9 +890,15 @@ export async function runTemporalLpTracker(options: {
     // spend: they join the polling loop on the next tick a minute later, and a
     // Riot ID that stays unresolvable can never starve the tracking it funds.
     const enrolled = new Set(tracked.map((player) => player.playerId));
-    const strays = RIOT_PLAYERS
-      .filter((identity) => !enrolled.has(identity.id))
-      .slice(0, Math.min(MAX_ENROLMENTS_PER_RUN, api.requestsRemaining));
+    const strayPool = RIOT_PLAYERS.filter((identity) => !enrolled.has(identity.id));
+    const enrollmentRound = Math.floor(options.now / IDENTITY_CHECK_INTERVAL_MS);
+    const strayStart = strayPool.length === 0
+      ? 0
+      : (enrollmentRound * MAX_ENROLMENTS_PER_RUN) % strayPool.length;
+    const strays = Array.from(
+      { length: Math.min(MAX_ENROLMENTS_PER_RUN, api.requestsRemaining, strayPool.length) },
+      (_, index) => strayPool[(strayStart + index) % strayPool.length]!,
+    );
     if (strays.length > 0) {
       // Best-effort, and it has to be. Everything above is already persisted by
       // this point, so letting a 429 or a 5xx here escape would mark a run that

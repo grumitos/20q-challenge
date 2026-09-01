@@ -57,6 +57,6 @@ export async function refreshSeasonBackfill(apiKey: string, now = Date.now()) {
   const result = await backfillSeasonAnalytics(cached.snapshot, apiKey, fetch, new Date(now));
   if (!result) return { status: "skipped" as const, reason: "nothing_to_backfill" as const };
 
-  await writeLeaderboardCache(result.snapshot, result.persistedMatches);
+  await writeLeaderboardCache(result.snapshot, result.persistedMatches, false);
   return { status: "completed" as const, matches: result.persistedMatches.length };
 }

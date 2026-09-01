@@ -103,7 +103,7 @@ test("loads recent rank observations fairly for every tracked player", async () 
   }
 
   const playerIds = Array.from({ length: 9 }, (_, index) => `p${index + 1}`);
-  const state = await createLpTrackerStore(d1Adapter(database)).loadTrackerState(playerIds);
+  const state = await createLpTrackerStore(d1Adapter(database)).loadTrackerState(playerIds, 300_000);
   assert.equal(state.observations.filter(({ playerId }) => playerId === "p1").length, 32);
   for (const playerId of playerIds) {
     assert.equal(state.observations.filter((observation) => observation.playerId === playerId).length, 32);
@@ -139,7 +139,7 @@ test("keeps and repairs referenced baselines beyond the 32-observation window", 
   }
 
   const store = createLpTrackerStore(d1Adapter(database));
-  const state = await store.loadTrackerState(["long-game", "delayed-rank"]);
+  const state = await store.loadTrackerState(["long-game", "delayed-rank"], 1_000);
   for (const playerId of ["long-game", "delayed-rank"]) {
     const observations = state.observations.filter((observation) => observation.playerId === playerId);
     assert.equal(observations.length, 33);

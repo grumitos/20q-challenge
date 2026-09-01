@@ -109,6 +109,8 @@ export async function readLeaderboardCache(): Promise<CacheRecord | null> {
 export async function writeLeaderboardCache(
   snapshot: LeaderboardSnapshot,
   matches: readonly PersistedSoloQueueMatch[] = [],
+  /** Backfill reuses the cache writer but does not represent a new rank poll. */
+  recordRankObservation = true,
 ) {
   const fetchedAt = Date.parse(snapshot.fetchedAt);
   if (!Number.isFinite(fetchedAt)) throw new Error("Snapshot timestamp is invalid.");
@@ -152,7 +154,8 @@ export async function writeLeaderboardCache(
     await d1.batch(immutableStatements.slice(index, index + 50));
   }
 
-  const rankObservationStatements = snapshot.players.map((player) => d1.prepare(
+  const rankObservationStatements = recordRankObservation
+    ? snapshot.players.map((player) => d1.prepare(
     `INSERT INTO rank_observations (
        id, player_id, observed_at, tier, division, league_points, wins, losses,
        latest_solo_match_id, latest_solo_match_timestamp, source
@@ -170,7 +173,8 @@ export async function writeLeaderboardCache(
     player.lastSoloQueueMatch?.matchId ?? null,
     player.lastSoloQueueMatch?.gameStartTimestamp ?? null,
     "leaderboard_refresh",
-  ));
+  ))
+    : [];
 
   const evidenceStatements = snapshot.players.flatMap((player) => {
     const match = player.lastSoloQueueMatch;

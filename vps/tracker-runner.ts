@@ -25,25 +25,24 @@ import { fetchRiotLeaderboard, RIOT_PLAYERS } from "../lib/riot-client.ts";
  * The Worker's defaults exist because of its 10 ms CPU ceiling; out here the
  * only limits that matter are Riot's, and the registered app key's are generous
  * (2,000 match details per 10 s, 3,000 spectator per 10 s, 20,000 rank reads
- * per 10 s). One detail per player per tick is all a minute can produce anyway
- * — nine players cannot finish more than nine games between ticks — so the cap
- * is the roster size, and the request budget just needs to never be the thing
- * that stops a run: fixed cost ~28 plus details plus enrolment leaves 120 as
- * "cannot bind" rather than a number to tune.
+ * per 10 s). The request budget is still shared with analytics and Cloudflare's
+ * fallback, so this runner deliberately uses the same 30-request ceiling as the
+ * Worker even though the VPS itself has more CPU and Riot capacity.
  */
-const RUNNER_MAX_REQUESTS = 120;
-const RUNNER_MATCH_DETAILS_PER_RUN = RIOT_PLAYERS.length;
+const RUNNER_MAX_REQUESTS = 30;
+const RUNNER_MATCH_DETAILS_PER_RUN = 2;
 
 /**
  * The analytics phase — champion and role ingestion — runs here too, on every
- * fifth minute. It lived only in the Worker, where the 10 ms CPU allowance
- * froze it for a month once the backlog outgrew one invocation; out here the
- * cap can be forty details per run, which drains a month in an hour or two and
- * keeps a normal evening's games minutes fresh. The Worker's own capped lane
- * stays enabled as the standby, same as the tracker's.
+ * tenth minute. It lived only in the Worker, where the 10 ms CPU allowance
+ * froze it for a month once the backlog outgrew one invocation; out here a
+ * small bounded batch keeps normal games fresh without consuming the window
+ * needed by the minute-by-minute tracker. The Worker's lane stays enabled as
+ * the standby, same as the tracker's.
  */
-const RUNNER_ANALYTICS_DETAILS_PER_RUN = 40;
-const RUNNER_ANALYTICS_MAX_REQUESTS = 200;
+const RUNNER_ANALYTICS_DETAILS_PER_RUN = 5;
+const RUNNER_ANALYTICS_MAX_REQUESTS = 32;
+const ANALYTICS_HEARTBEAT_TTL_MS = 12 * 60_000;
 
 async function runAnalyticsPhase(
   store: ReturnType<typeof createRemoteLpTrackerStore>,
@@ -58,7 +57,7 @@ async function runAnalyticsPhase(
   try {
     if (!await store.acquireLease("lp-tracker", owner, now, 90_000)) return "skipped";
     try {
-      const state = await store.loadTrackerState(RIOT_PLAYERS.map(({ id }) => id));
+      const state = await store.loadTrackerState(RIOT_PLAYERS.map(({ id }) => id), now);
       if (!state.snapshot) return "no_snapshot";
       // The callback only captures; snapshot and matches are persisted together
       // afterwards, exactly as `refreshLeaderboard` does it, so a run that dies
@@ -74,6 +73,10 @@ async function runAnalyticsPhase(
         RUNNER_ANALYTICS_DETAILS_PER_RUN,
       );
       await store.persistLeaderboardSnapshot(snapshot, matchesToPersist);
+      await store.blockLaneUntil(
+        "leaderboard-analytics-heartbeat",
+        now + ANALYTICS_HEARTBEAT_TTL_MS,
+      );
       return "completed";
     } finally {
       await store.releaseLease("lp-tracker", owner);
@@ -120,8 +123,8 @@ async function main() {
       ...("sessionsUpdated" in result ? { sessionsUpdated: result.sessionsUpdated } : {}),
     }));
 
-    // Champion/role ingestion, every fifth minute — or on demand for a drain.
-    if (new Date(startedAt).getUTCMinutes() % 5 === 0 || process.env.FORCE_ANALYTICS === "1") {
+    // Champion/role ingestion, every tenth minute — or on demand for a drain.
+    if (new Date(startedAt).getUTCMinutes() % 10 === 0 || process.env.FORCE_ANALYTICS === "1") {
       const analyticsStartedAt = Date.now();
       try {
         const outcome = await runAnalyticsPhase(store, apiKey, analyticsStartedAt);

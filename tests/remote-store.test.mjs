@@ -29,6 +29,30 @@ test("sends each store call as an allowlisted method with its arguments", async 
   assert.deepEqual(calls[0].body, { method: "acquireLease", args: ["lp-tracker", "owner-1", 1_000, 90_000] });
 });
 
+test("sends grouped store operations in one authenticated request", async () => {
+  const { calls, fetchImpl } = recordingFetch((body) => {
+    assert.deepEqual(body.operations, [
+      { method: "insertRankObservations", args: [[]] },
+      { method: "updateRecentCursors", args: [[]] },
+    ]);
+    return Response.json({ results: [null, null] });
+  });
+  const store = createRemoteLpTrackerStore({ origin: "https://example.test", secret: SECRET, fetchImpl });
+
+  await store.batch?.([
+    { method: "insertRankObservations", args: [[]] },
+    { method: "updateRecentCursors", args: [[]] },
+  ]);
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body, {
+    operations: [
+      { method: "insertRankObservations", args: [[]] },
+      { method: "updateRecentCursors", args: [[]] },
+    ],
+  });
+});
+
 test("carries the loaded tracker state back unchanged", async () => {
   const state = {
     players: [{ playerId: "p1", puuid: "puuid-1", gameName: "P1", tagLine: "LAS", recentMatchId: null }],
@@ -38,7 +62,7 @@ test("carries the loaded tracker state back unchanged", async () => {
     body.method === "loadTrackerState" ? Response.json({ result: state }) : Response.json({ result: null }));
   const store = createRemoteLpTrackerStore({ origin: "https://example.test", secret: SECRET, fetchImpl });
 
-  assert.deepEqual(await store.loadTrackerState(["p1"]), state);
+  assert.deepEqual(await store.loadTrackerState(["p1"], 1_000), state);
 });
 
 test("names a refused secret as a refused secret, not a missing route", async () => {

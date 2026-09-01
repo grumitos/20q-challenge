@@ -66,12 +66,16 @@ async function readRecentResults(d1: Awaited<ReturnType<typeof getD1>>, playerId
        SELECT player_id, won, game_start_timestamp,
               ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY game_start_timestamp DESC) AS recency
        FROM player_match_stats
-       WHERE player_id IN (SELECT value FROM json_each(?1))
-         AND game_start_timestamp > ?3
+       WHERE player_id IN (SELECT value FROM json_each(?))
+         AND game_start_timestamp > ?
      )
-     WHERE recency <= ?2
+     WHERE recency <= ?
      ORDER BY player_id, game_start_timestamp DESC`,
-  ).bind(JSON.stringify(playerIds), RECENT_RESULT_COUNT, now - RECENT_RESULT_LOOKBACK_MS).all<RecentRow>();
+  ).bind(
+    JSON.stringify(playerIds),
+    now - RECENT_RESULT_LOOKBACK_MS,
+    RECENT_RESULT_COUNT,
+  ).all<RecentRow>();
 
   for (const row of rows.results ?? []) {
     const current = byPlayer.get(row.player_id) ?? [];
@@ -90,7 +94,12 @@ async function readHabitualDuos(
   players: readonly Pick<PlayerSnapshot, "id" | "gameName">[],
 ) {
   const rows = await d1.prepare(HABITUAL_DUO_QUERY)
-    .bind(JSON.stringify(players.map((player) => player.id)), DUO_LOOKBACK_MATCHES * players.length * 2)
+    .bind(
+      JSON.stringify(players.map((player) => player.id)),
+      JSON.stringify(players.map((player) => player.id)),
+      DUO_LOOKBACK_MATCHES * players.length * 2,
+      JSON.stringify(players.map((player) => player.id)),
+    )
     .all<DuoTallyRow>();
 
   return pickHabitualDuos(rows.results ?? [], players);
@@ -106,7 +115,11 @@ async function readDuoRecords(
   playerIds: readonly string[],
 ) {
   const rows = await d1.prepare(DUO_RECORD_QUERY)
-    .bind(JSON.stringify(playerIds), DUO_LOOKBACK_MATCHES * playerIds.length)
+    .bind(
+      JSON.stringify(playerIds),
+      DUO_LOOKBACK_MATCHES * playerIds.length,
+      JSON.stringify(playerIds),
+    )
     .all<DuoRecordRow>();
 
   return rankDuoRecords(foldDuoRecords(rows.results ?? []));
@@ -135,12 +148,12 @@ async function readPlaceDeltas(
      JOIN (
        SELECT player_id, MAX(observed_at) AS observed_at
        FROM rank_observations
-       WHERE observed_at > ?1
-         AND observed_at < (SELECT MAX(observed_at) FROM rank_observations WHERE observed_at > ?1)
+       WHERE observed_at > ?
+         AND observed_at < (SELECT MAX(observed_at) FROM rank_observations WHERE observed_at > ?)
        GROUP BY player_id
      ) previous ON previous.player_id = o.player_id AND previous.observed_at = o.observed_at
-     WHERE o.observed_at > ?1`,
-  ).bind(since).all<ObservationRow>();
+     WHERE o.observed_at > ?`,
+  ).bind(since, since, since).all<ObservationRow>();
 
   const previous = rows.results ?? [];
   if (previous.length < 2) return new Map<string, number>();
@@ -154,9 +167,9 @@ async function readLiveGames(d1: Awaited<ReturnType<typeof getD1>>, playerIds: r
     `SELECT player_id, platform_game_id, game_started_at, champion_id, champion_name, participants
      FROM tracked_game_sessions
      WHERE status = 'active'
-       AND player_id IN (SELECT value FROM json_each(?1))
-       AND game_started_at > ?2
-       AND last_seen_at > ?3
+       AND player_id IN (SELECT value FROM json_each(?))
+       AND game_started_at > ?
+       AND last_seen_at > ?
      ORDER BY game_started_at ASC`,
   ).bind(
     JSON.stringify(playerIds),

@@ -1,4 +1,4 @@
-import type { LpTrackerStore } from "../db/lp-tracker-store.ts";
+import type { LpTrackerStore, TrackerStoreBatchOperation } from "../db/lp-tracker-store.ts";
 
 /**
  * `LpTrackerStore` implemented over HTTP against the Worker's `/api/cron/store`
@@ -12,10 +12,10 @@ import type { LpTrackerStore } from "../db/lp-tracker-store.ts";
  * call — a couple of milliseconds against a 10 ms allowance, and constant
  * rather than growing with how many games the roster just played.
  *
- * The cost this accepts is a network round trip per store call, roughly eight
- * per run. That is seconds on a minute cadence and irrelevant next to the Riot
- * polling the same run does, but it is why this must not be used from inside a
- * Worker, where the calls would be subrequests against a 50 request ceiling.
+ * Writes are grouped at phase boundaries, so a normal run uses only a handful
+ * of authenticated round trips instead of one per D1 method. This must still
+ * not be used from inside a Worker: even grouped calls would be subrequests
+ * against its 50-request ceiling.
  */
 export function createRemoteLpTrackerStore(options: {
   origin: string;
@@ -54,6 +54,31 @@ export function createRemoteLpTrackerStore(options: {
     }
   }
 
+  async function callBatch(operations: readonly TrackerStoreBatchOperation[]) {
+    if (operations.length === 0 || operations.length > 10) {
+      throw new RangeError("Store batches must contain between 1 and 10 operations.");
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(`${origin}/api/cron/store`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-cron-secret": options.secret },
+        body: JSON.stringify({ operations }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(response.status === 404
+          ? "Store rejected the cron secret (batch)."
+          : `Store batch failed (${response.status}).`);
+      }
+      const payload = await response.json() as { results?: unknown[] };
+      return payload.results ?? [];
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   return {
     acquireLease: (name, owner, now, ttlMs) =>
       call("acquireLease", [name, owner, now, ttlMs]) as Promise<boolean>,
@@ -61,8 +86,8 @@ export function createRemoteLpTrackerStore(options: {
       call("renewLease", [name, owner, expiresAt]) as Promise<void>,
     releaseLease: (name, owner) => call("releaseLease", [name, owner]) as Promise<void>,
     blockLaneUntil: (name, timestamp) => call("blockLaneUntil", [name, timestamp]) as Promise<void>,
-    loadTrackerState: (playerIds) =>
-      call("loadTrackerState", [playerIds]) as ReturnType<LpTrackerStore["loadTrackerState"]>,
+    loadTrackerState: (playerIds, now) =>
+      call("loadTrackerState", [playerIds, now]) as ReturnType<LpTrackerStore["loadTrackerState"]>,
     bootstrapPlayerSyncState: (snapshot, now) =>
       call("bootstrapPlayerSyncState", [snapshot, now]) as Promise<void>,
     insertRankObservations: (observations) =>
@@ -78,5 +103,6 @@ export function createRemoteLpTrackerStore(options: {
       call("writeLeaderboardProjection", [snapshot, now]) as Promise<void>,
     persistLeaderboardSnapshot: (snapshot, matches) =>
       call("persistLeaderboardSnapshot", [snapshot, matches]) as Promise<void>,
+    batch: callBatch,
   };
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { processTrackerPlayer } from "../lib/lp-tracker.ts";
+import { advanceGameSessions, processTrackerPlayer, recentMatchPollCount } from "../lib/lp-tracker.ts";
 
 const baseline = {
   id: "p1:1000",
@@ -13,6 +13,51 @@ const baseline = {
   wins: 10,
   losses: 10,
 };
+
+test("keeps the post-spectator window alive across a transient miss", () => {
+  const session = {
+    playerId: "p1",
+    platformGameId: "77",
+    queueId: 420,
+    baselineObservationId: baseline.id,
+    gameStartedAt: 1_500,
+    firstSeenAt: 2_000,
+    lastSeenAt: 3_000,
+    endedDetectedAt: 4_000,
+    matchId: null,
+    status: "ended_waiting_match",
+    championId: null,
+    championName: null,
+    participants: null,
+    updatedAt: 4_000,
+  };
+  const result = advanceGameSessions({
+    now: 5_000,
+    player: { playerId: "p1", puuid: "puuid-1", gameName: "P1", tagLine: "LAS", recentMatchId: null },
+    observation: { ...baseline, id: "p1:5000", observedAt: 5_000 },
+    sessions: [session],
+    activeGame: {
+      platformGameId: "77",
+      gameStartedAt: 1_500,
+      queueId: 420,
+      championId: "82",
+      selfIndex: 0,
+      participants: [],
+    },
+  });
+
+  assert.equal(result[0].status, "active");
+  assert.equal(result[0].endedDetectedAt, null);
+  assert.equal(result[0].lastSeenAt, 5_000);
+});
+
+test("polls full recent history for live/postgame work and rotates idle players", () => {
+  assert.equal(recentMatchPollCount("p1", [{ playerId: "p1", status: "active" }], [], 4, 9, 0), 3);
+  assert.equal(recentMatchPollCount("p1", [{ playerId: "p1", status: "ended_waiting_match" }], [], 4, 9, 0), 3);
+  assert.equal(recentMatchPollCount("p1", [], [], 0, 9, 0), 3);
+  assert.equal(recentMatchPollCount("p1", [], [], 4, 9, 0), 0);
+  assert.equal(recentMatchPollCount("p1", [], [], 1, 9, 60_000), 3);
+});
 
 test("links an ended Spectator session and resolves one matching victory", () => {
   const result = processTrackerPlayer({

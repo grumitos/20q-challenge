@@ -37,6 +37,29 @@ export type TrackerD1 = {
   batch(statements: D1Statement[]): Promise<unknown[]>;
 };
 
+export type TrackerStoreBatchMethod =
+  | "renewLease"
+  | "releaseLease"
+  | "blockLaneUntil"
+  | "bootstrapPlayerSyncState"
+  | "insertRankObservations"
+  | "upsertGameSessions"
+  | "upsertCandidates"
+  | "writeTerminalEvidence"
+  | "updateRecentCursors"
+  | "pruneRankObservations"
+  | "writeLeaderboardProjection"
+  | "persistLeaderboardSnapshot";
+
+export type TrackerStoreBatchOperation = {
+  method: TrackerStoreBatchMethod;
+  args: readonly unknown[];
+};
+
+export type TrackerStoreBatch = (
+  operations: readonly TrackerStoreBatchOperation[],
+) => Promise<unknown[]>;
+
 type SyncRow = {
   player_id: string;
   puuid: string;
@@ -111,16 +134,16 @@ export function createLpTrackerStore(db: TrackerD1) {
       const expiresAt = now + ttlMs;
       await db.prepare(
         `INSERT INTO sync_leases (name, owner, expires_at, blocked_until, updated_at)
-         VALUES (?1, ?2, ?3, 0, ?4)
+         VALUES (?, ?, ?, 0, ?)
          ON CONFLICT(name) DO UPDATE SET
            owner = excluded.owner,
            expires_at = excluded.expires_at,
            updated_at = excluded.updated_at
-         WHERE (sync_leases.expires_at <= ?4 AND sync_leases.blocked_until <= ?4)
+         WHERE (sync_leases.expires_at <= ? AND sync_leases.blocked_until <= ?)
             OR sync_leases.owner = excluded.owner`,
-      ).bind(name, owner, expiresAt, now).run();
+      ).bind(name, owner, expiresAt, now, now, now).run();
       const lease = await db.prepare(
-        "SELECT owner, expires_at, blocked_until FROM sync_leases WHERE name = ?1 LIMIT 1",
+        "SELECT owner, expires_at, blocked_until FROM sync_leases WHERE name = ? LIMIT 1",
       ).bind(name).first<{ owner: string; expires_at: number; blocked_until: number }>();
       return lease?.owner === owner && lease.expires_at === expiresAt && lease.blocked_until <= now;
     },
@@ -130,55 +153,71 @@ export function createLpTrackerStore(db: TrackerD1) {
         up writing alongside the run that now holds it. */
     async renewLease(name: string, owner: string, expiresAt: number) {
       await db.prepare(
-        "UPDATE sync_leases SET expires_at = ?3, updated_at = ?4 WHERE name = ?1 AND owner = ?2",
-      ).bind(name, owner, expiresAt, Date.now()).run();
+        "UPDATE sync_leases SET expires_at = ?, updated_at = ? WHERE name = ? AND owner = ?",
+      ).bind(expiresAt, Date.now(), name, owner).run();
     },
 
     async releaseLease(name: string, owner: string) {
       await db.prepare(
-        "UPDATE sync_leases SET owner = '', expires_at = 0, updated_at = ?3 WHERE name = ?1 AND owner = ?2",
-      ).bind(name, owner, Date.now()).run();
+        "UPDATE sync_leases SET owner = '', expires_at = 0, updated_at = ? WHERE name = ? AND owner = ?",
+      ).bind(Date.now(), name, owner).run();
     },
 
     async blockLaneUntil(name: string, timestamp: number) {
       await db.prepare(
         `INSERT INTO sync_leases (name, owner, expires_at, blocked_until, updated_at)
-         VALUES (?1, 'rate-limit', 0, ?2, ?3)
+         VALUES (?, 'rate-limit', 0, ?, ?)
          ON CONFLICT(name) DO UPDATE SET
            blocked_until = MAX(sync_leases.blocked_until, excluded.blocked_until),
            updated_at = excluded.updated_at`,
       ).bind(name, timestamp, Date.now()).run();
     },
 
-    async loadTrackerState(playerIds: readonly string[]) {
-      const placeholders = playerIds.map((_, index) => `?${index + 1}`).join(", ");
+    async loadTrackerState(playerIds: readonly string[], now: number) {
+      const placeholders = playerIds.map(() => "?").join(", ");
       if (!placeholders) return { players: [], observations: [], sessions: [], candidates: [], snapshot: null };
+      const playerIdsJson = JSON.stringify(playerIds);
+      const observationCutoff = now - 3 * 60 * 60_000;
+      const observationWindow = "observed_at >= ?";
       const [sync, observations, sessions, candidates, cache] = await Promise.all([
         db.prepare(`SELECT player_id, puuid, game_name, tag_line, recent_match_id FROM player_sync_state WHERE player_id IN (${placeholders})`).bind(...playerIds).all<SyncRow>(),
         db.prepare(
-          `SELECT id, player_id, observed_at, tier, division, league_points, wins, losses
+          `WITH referenced_observations AS (
+             SELECT baseline_observation_id AS observation_id
+             FROM tracked_game_sessions
+             WHERE player_id IN (SELECT value FROM json_each(?))
+               AND status IN ('active', 'ended_waiting_match', 'linked')
+             UNION
+             SELECT baseline_observation_id AS observation_id
+             FROM lp_reconciliation_candidates
+             WHERE player_id IN (SELECT value FROM json_each(?))
+               AND baseline_observation_id IS NOT NULL
+               AND (
+                 state NOT IN ('resolved', 'unavailable') OR (
+                   state = 'unavailable' AND failure_reason = 'no_before_snapshot'
+                 )
+               )
+           )
+           SELECT id, player_id, observed_at, tier, division, league_points, wins, losses
            FROM (
              SELECT id, player_id, observed_at, tier, division, league_points, wins, losses,
                     ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY observed_at DESC) AS observation_rank
              FROM rank_observations
-             WHERE player_id IN (${placeholders})
+             WHERE player_id IN (SELECT value FROM json_each(?))
+               AND (
+                 ${observationWindow}
+                 OR id IN (SELECT observation_id FROM referenced_observations)
+               )
            )
            WHERE observation_rank <= 32
-              OR id IN (
-                SELECT baseline_observation_id FROM tracked_game_sessions
-                WHERE player_id IN (${placeholders}) AND status IN ('active', 'ended_waiting_match', 'linked')
-                UNION
-                SELECT baseline_observation_id FROM lp_reconciliation_candidates
-                WHERE player_id IN (${placeholders})
-                  AND baseline_observation_id IS NOT NULL
-                  AND (
-                    state NOT IN ('resolved', 'unavailable') OR (
-                      state = 'unavailable' AND failure_reason = 'no_before_snapshot'
-                    )
-                  )
-              )
+              OR id IN (SELECT observation_id FROM referenced_observations)
            ORDER BY player_id, observed_at DESC`,
-        ).bind(...playerIds).all<ObservationRow>(),
+        ).bind(
+          playerIdsJson,
+          playerIdsJson,
+          playerIdsJson,
+          observationCutoff,
+        ).all<ObservationRow>(),
         db.prepare(
           `SELECT player_id, platform_game_id, queue_id, baseline_observation_id,
                   game_started_at, first_seen_at, last_seen_at, ended_detected_at,
@@ -201,7 +240,7 @@ export function createLpTrackerStore(db: TrackerD1) {
              )
            )`,
         ).bind(...playerIds).all<CandidateRow>(),
-        db.prepare("SELECT payload FROM leaderboard_cache WHERE key = ?1 LIMIT 1").bind(CACHE_KEY).first<{ payload: string }>(),
+        db.prepare("SELECT payload FROM leaderboard_cache WHERE key = ? LIMIT 1").bind(CACHE_KEY).first<{ payload: string }>(),
       ]);
       return {
         players: (sync.results ?? []).map((row): TrackerPlayerState => ({
@@ -305,7 +344,7 @@ export function createLpTrackerStore(db: TrackerD1) {
            player_id, platform_game_id, queue_id, baseline_observation_id,
            game_started_at, first_seen_at, last_seen_at, ended_detected_at,
            match_id, status, champion_id, champion_name, participants, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(player_id, platform_game_id) DO UPDATE SET
            last_seen_at = excluded.last_seen_at,
            ended_detected_at = COALESCE(tracked_game_sessions.ended_detected_at, excluded.ended_detected_at),
@@ -330,7 +369,7 @@ export function createLpTrackerStore(db: TrackerD1) {
            player_id, match_id, state, baseline_observation_id, match_started_at,
            match_ended_at, match_won, zero_candidate_observation_id, attempts,
            next_attempt_at, expires_at, failure_reason, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(player_id, match_id) DO UPDATE SET
            state = excluded.state,
            baseline_observation_id = COALESCE(lp_reconciliation_candidates.baseline_observation_id, excluded.baseline_observation_id),
@@ -362,7 +401,7 @@ export function createLpTrackerStore(db: TrackerD1) {
            player_id, match_id, status, lp_delta, before_observation_id,
            after_observation_id, failure_reason, match_started_at, match_ended_at,
            match_won, created_at, resolved_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(player_id, match_id) DO UPDATE SET
            status = excluded.status,
            lp_delta = excluded.lp_delta,
@@ -448,9 +487,9 @@ export function createLpTrackerStore(db: TrackerD1) {
     },
 
     /**
-     * Nine rows a minute is 12,960 a day, and `loadTrackerState` ranks every
-     * one of them for those players on every run — the window function cannot
-     * exit early, so the read cost grew linearly and forever with no ceiling.
+     * Nine rows a minute is 12,960 a day. The load query now limits its hot
+     * scan to three hours and keeps only referenced baselines from older
+     * history, so the window function no longer ranks the whole retained table.
      *
      * Anything an open session or an unresolved candidate still points at is
      * kept regardless of age: those ids are the "before" half of an LP delta
@@ -460,7 +499,7 @@ export function createLpTrackerStore(db: TrackerD1) {
     async pruneRankObservations(before: number) {
       const result = await db.prepare(
         `DELETE FROM rank_observations
-          WHERE observed_at < ?1
+          WHERE observed_at < ?
             AND id NOT IN (
               SELECT baseline_observation_id FROM tracked_game_sessions
                WHERE baseline_observation_id IS NOT NULL
@@ -515,4 +554,9 @@ export function createLpTrackerStore(db: TrackerD1) {
   };
 }
 
-export type LpTrackerStore = ReturnType<typeof createLpTrackerStore>;
+export type LpTrackerStore = ReturnType<typeof createLpTrackerStore> & {
+  /** Optional so lightweight in-process test stores stay compatible; the
+      remote implementation uses it to collapse several D1 operations into one
+      authenticated POST. */
+  batch?: TrackerStoreBatch;
+};

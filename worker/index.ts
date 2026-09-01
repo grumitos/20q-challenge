@@ -29,7 +29,21 @@ interface CronController {
 async function runLeaderboardRefresh(env: Env, now: number) {
   const apiKey = (env.RIOT_API_KEY ?? "").trim();
   if (!apiKey) return;
-  const store = createLpTrackerStore(await getD1());
+  // The VPS owns analytics too. Its success heartbeat is separate from the
+  // tracker cache heartbeat, so a healthy tracker cannot hide a failed
+  // analytics phase. Cloudflare remains a fallback after the heartbeat expires.
+  const d1 = await getD1();
+  const analyticsHeartbeat = await d1.prepare(
+    "SELECT blocked_until FROM sync_leases WHERE name = 'leaderboard-analytics-heartbeat' LIMIT 1",
+  ).first<{ blocked_until: number }>();
+  if (analyticsHeartbeat && analyticsHeartbeat.blocked_until > now) {
+    console.log(JSON.stringify({
+      event: "leaderboard_analytics_standby",
+      healthyUntil: analyticsHeartbeat.blocked_until,
+    }));
+    return;
+  }
+  const store = createLpTrackerStore(d1);
   const owner = crypto.randomUUID();
   // The lease is what keeps a public endpoint from being a way to make the
   // Worker hammer Riot: a second caller inside the window is turned away here.
@@ -50,6 +64,10 @@ async function runLeaderboardRefresh(env: Env, now: number) {
       // Strict: this caller drops the payload, so a swallowed failure here is a
       // refresh that silently stops happening. The endpoint turns it into a 500.
       await refreshLeaderboard(apiKey, now, true, true);
+      await store.blockLaneUntil(
+        "leaderboard-analytics-heartbeat",
+        now + ANALYTICS_HEARTBEAT_TTL_MS,
+      );
     } finally {
       await store.releaseLease("lp-tracker", owner);
     }
@@ -82,25 +100,24 @@ async function runSeasonBackfill(env: Env, now: number) {
   }
 }
 
-/** How fresh the cache must be for the Worker to stand down. Comfortably more
-    than one VPS tick (60s) plus a run (~8s), comfortably less than two ticks:
-    one missed VPS run flips the Worker back on at the next minute. */
-const STANDBY_FRESH_WITHIN_MS = 75_000;
+/** A successful analytics run suppresses fallback for one scheduled interval
+    plus two minutes; a failed VPS phase therefore hands control to Cloudflare
+    without waiting for the tracker itself to become stale. */
+const ANALYTICS_HEARTBEAT_TTL_MS = 12 * 60_000;
 
 async function runLpTracker(env: Env, now: number) {
   const apiKey = (env.RIOT_API_KEY ?? "").trim();
   if (!apiKey) return;
   const d1 = await getD1();
   // The VPS timer is the primary tracker; this lane is its automatic fallback.
-  // Without this gate both ran fully every minute — twice the Riot polling and
-  // twice the observation rows for the same answer. A fresh cache proves a
-  // healthy run finished moments ago (only a completed run writes it), so the
-  // Worker stands down; the first minute the VPS misses, the cache goes stale
-  // and this lane takes over on its own.
-  const cached = await d1.prepare("SELECT fetched_at FROM leaderboard_cache LIMIT 1")
-    .first<{ fetched_at: number }>();
-  if (cached && now - cached.fetched_at < STANDBY_FRESH_WITHIN_MS) {
-    console.log(JSON.stringify({ event: "lp_tracker_standby", cacheAgeMs: now - cached.fetched_at }));
+  // The heartbeat is separate from leaderboard_cache because analytics and
+  // backfill also rewrite that cache. Only a completed tracker projection may
+  // suppress this lane.
+  const heartbeat = await d1.prepare(
+    "SELECT blocked_until FROM sync_leases WHERE name = 'lp-tracker-heartbeat' LIMIT 1",
+  ).first<{ blocked_until: number }>();
+  if (heartbeat && heartbeat.blocked_until > now) {
+    console.log(JSON.stringify({ event: "lp_tracker_standby", healthyUntil: heartbeat.blocked_until }));
     return;
   }
   await runTemporalLpTracker({ store: createLpTrackerStore(d1), apiKey, now });
@@ -128,9 +145,16 @@ const REMOTE_STORE_METHODS = [
 ] as const;
 
 type RemoteStoreMethod = typeof REMOTE_STORE_METHODS[number];
+type RemoteStoreCall = { method: RemoteStoreMethod; args: unknown[] };
 
 function isRemoteStoreMethod(value: unknown): value is RemoteStoreMethod {
   return typeof value === "string" && (REMOTE_STORE_METHODS as readonly string[]).includes(value);
+}
+
+function isRemoteStoreCall(value: unknown): value is RemoteStoreCall {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const call = value as { method?: unknown; args?: unknown };
+  return isRemoteStoreMethod(call.method) && Array.isArray(call.args);
 }
 
 /** Constant-time-ish compare so the shared secret cannot be probed byte by byte. */
@@ -159,22 +183,33 @@ const worker = {
       } catch {
         return new Response("Bad request", { status: 400 });
       }
-      const method = (call as { method?: unknown })?.method;
-      const args = (call as { args?: unknown })?.args;
-      if (!isRemoteStoreMethod(method) || !Array.isArray(args)) {
+      const operations = (call as { operations?: unknown })?.operations;
+      if (Array.isArray(operations)) {
+        if (operations.length < 1 || operations.length > 10 || !operations.every(isRemoteStoreCall)) {
+          return new Response("Bad request", { status: 400 });
+        }
+      } else if (!isRemoteStoreCall(call)) {
         return new Response("Bad request", { status: 400 });
       }
 
       try {
         const store = createLpTrackerStore(await getD1()) as unknown as
           Record<RemoteStoreMethod, (...values: unknown[]) => Promise<unknown>>;
-        const result = await store[method](...args);
+        if (Array.isArray(operations)) {
+          const results: unknown[] = [];
+          for (const operation of operations as RemoteStoreCall[]) {
+            results.push(await store[operation.method](...operation.args));
+          }
+          return Response.json({ results: results.map((result) => result ?? null) });
+        }
+        const single = call as RemoteStoreCall;
+        const result = await store[single.method](...single.args);
         // `undefined` is not JSON, and most of these return nothing.
         return Response.json({ result: result ?? null });
       } catch (error) {
         console.log(JSON.stringify({
           event: "cron_store",
-          method,
+          method: Array.isArray(operations) ? "batch" : (call as RemoteStoreCall).method,
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
         }));

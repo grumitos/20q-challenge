@@ -92,7 +92,7 @@ export const HABITUAL_DUO_QUERY =
                     0 AS source
              FROM player_match_stats s
              JOIN ranked_matches m ON m.match_id = s.match_id
-             WHERE s.player_id IN (SELECT value FROM json_each(?1))
+             WHERE s.player_id IN (SELECT value FROM json_each(?))
 
              UNION ALL
 
@@ -102,12 +102,12 @@ export const HABITUAL_DUO_QUERY =
                     t.game_started_at AS activity_started_at,
                     1 AS source
              FROM tracked_game_sessions t
-             WHERE t.player_id IN (SELECT value FROM json_each(?1))
+             WHERE t.player_id IN (SELECT value FROM json_each(?))
                AND t.status IN ('active', 'ended_waiting_match', 'linked')
                AND t.participants IS NOT NULL
            )
            ORDER BY activity_started_at DESC
-           LIMIT ?2
+           LIMIT ?
          )
          GROUP BY player_id, activity_id
        ) AS activity
@@ -115,7 +115,7 @@ export const HABITUAL_DUO_QUERY =
      )
      WHERE peer_id IS NOT NULL
        AND peer_id <> player_id
-       AND peer_id IN (SELECT value FROM json_each(?1))
+       AND peer_id IN (SELECT value FROM json_each(?))
      GROUP BY player_id, peer_id
      ORDER BY player_id, games DESC, peer_id`;
 
@@ -155,15 +155,15 @@ export const DUO_RECORD_QUERY =
                   WHERE json_extract(own.value, '$.challengePlayerId') = s.player_id) AS own_team
          FROM player_match_stats s
          JOIN ranked_matches m ON m.match_id = s.match_id
-         WHERE s.player_id IN (SELECT value FROM json_each(?1))
+         WHERE s.player_id IN (SELECT value FROM json_each(?))
          ORDER BY s.game_start_timestamp DESC
-         LIMIT ?2
+         LIMIT ?
        ) AS mine
        JOIN json_each(mine.participants) AS participant
      )
      WHERE peer_id IS NOT NULL
        AND peer_id <> player_id
-       AND peer_id IN (SELECT value FROM json_each(?1))
+       AND peer_id IN (SELECT value FROM json_each(?))
        AND own_team IS NOT NULL
        AND peer_team = own_team
      GROUP BY player_id, peer_id
