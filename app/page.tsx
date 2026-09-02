@@ -36,8 +36,11 @@ const initialPayload: LeaderboardPayload = {
 const LEADERBOARD_STORAGE_KEY = "20q-leaderboard-payload-v1";
 const LEADERBOARD_REFRESH_MS = 60_000;
 const configuredLeaderboardApiOrigin = process.env.NEXT_PUBLIC_LEADERBOARD_API_ORIGIN?.trim().replace(/\/+$/, "");
-const LEADERBOARD_API_URL = configuredLeaderboardApiOrigin
-  ? `${configuredLeaderboardApiOrigin}/api/leaderboard`
+const productionLeaderboardApiOrigin = typeof window !== "undefined" && window.location.hostname === "20q-challenge.pages.dev"
+  ? "https://20q-api.yasmiau.com"
+  : "";
+const LEADERBOARD_API_URL = (configuredLeaderboardApiOrigin || productionLeaderboardApiOrigin)
+  ? `${configuredLeaderboardApiOrigin || productionLeaderboardApiOrigin}/api/leaderboard`
   : "/api/leaderboard";
 const PODIUM_CHAMPION_SLOTS = 5;
 const ROW_CHAMPION_SLOTS = 4;
