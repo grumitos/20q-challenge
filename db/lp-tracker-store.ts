@@ -534,7 +534,7 @@ export function createLpTrackerStore(db: TrackerD1) {
       // it through the store endpoint. A static import would break every test
       // that loads this store under Node.
       const { writeLeaderboardCache } = await import("./leaderboard-cache.ts");
-      await writeLeaderboardCache(snapshot, matches);
+      await writeLeaderboardCache(snapshot, matches, true, db);
     },
 
     async writeLeaderboardProjection(snapshot: LeaderboardSnapshot, now: number) {

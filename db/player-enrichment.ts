@@ -10,6 +10,7 @@ import {
 } from "../lib/habitual-duos";
 import { rankDuoRecords, type DuoRecord, type HabitualDuo, type LiveGame, type PlayerSnapshot } from "../lib/leaderboard";
 import { calculatePlaceDeltas } from "../lib/place-movement";
+import type { TrackerD1 } from "./lp-tracker-store";
 
 /**
  * Resolves the signals the leaderboard payload already had the raw material for
@@ -53,7 +54,7 @@ type LiveRow = {
 };
 
 /** Last five ranked results per player, ordered oldest to newest. */
-async function readRecentResults(d1: Awaited<ReturnType<typeof getD1>>, playerIds: readonly string[], now: number) {
+async function readRecentResults(d1: TrackerD1, playerIds: readonly string[], now: number) {
   const byPlayer = new Map<string, boolean[]>();
   const rows = await d1.prepare(
     // Ranked inside the query rather than in the loop below. This used to select
@@ -90,7 +91,7 @@ async function readRecentResults(d1: Awaited<ReturnType<typeof getD1>>, playerId
 
 /** Most frequent challenge-member pairing per player. */
 async function readHabitualDuos(
-  d1: Awaited<ReturnType<typeof getD1>>,
+  d1: TrackerD1,
   players: readonly Pick<PlayerSnapshot, "id" | "gameName">[],
 ) {
   const rows = await d1.prepare(HABITUAL_DUO_QUERY)
@@ -111,7 +112,7 @@ async function readHabitualDuos(
  * reader's cost tied to a fixed number of matches rather than to the season.
  */
 async function readDuoRecords(
-  d1: Awaited<ReturnType<typeof getD1>>,
+  d1: TrackerD1,
   playerIds: readonly string[],
 ) {
   const rows = await d1.prepare(DUO_RECORD_QUERY)
@@ -130,7 +131,7 @@ async function readDuoRecords(
  * arrow reflects an actual position change rather than raw LP drift.
  */
 async function readPlaceDeltas(
-  d1: Awaited<ReturnType<typeof getD1>>,
+  d1: TrackerD1,
   players: readonly PlayerSnapshot[],
   rankScoreOf: (input: Pick<PlayerSnapshot, "tier" | "division" | "leaguePoints">) => number,
   now: number,
@@ -162,7 +163,7 @@ async function readPlaceDeltas(
 }
 
 /** Active spectator sessions recorded by the temporal LP tracker. */
-async function readLiveGames(d1: Awaited<ReturnType<typeof getD1>>, playerIds: readonly string[], now: number) {
+async function readLiveGames(d1: TrackerD1, playerIds: readonly string[], now: number) {
   const rows = await d1.prepare(
     `SELECT player_id, platform_game_id, game_started_at, champion_id, champion_name, participants
      FROM tracked_game_sessions
@@ -199,10 +200,11 @@ export async function enrichPlayers(
   players: readonly PlayerSnapshot[],
   rankScoreOf: (input: Pick<PlayerSnapshot, "tier" | "division" | "leaguePoints">) => number,
   now = Date.now(),
+  database?: TrackerD1,
 ): Promise<{ players: PlayerSnapshot[]; duos: DuoRecord[] }> {
-  let d1: Awaited<ReturnType<typeof getD1>>;
+  let d1: TrackerD1;
   try {
-    d1 = await getD1();
+    d1 = database ?? await getD1();
   } catch {
     return { players: [...players], duos: [] };
   }

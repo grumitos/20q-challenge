@@ -3,9 +3,9 @@
 Ranking de SoloQ para el grupo del 20Q Challenge: rango, winrate, KDA, campeones,
 racha, dúo habitual y partida en vivo, en LAS/LA2.
 
-Es una app [vinext](https://github.com/cloudflare/vinext) (Next.js sobre Vite) que
-corre en Cloudflare Pages, con D1 como almacén y un Worker aparte que dispara los
-refrescos programados.
+Es una app [vinext](https://github.com/cloudflare/vinext) (Next.js sobre Vite):
+Cloudflare Pages sirve el frontend estático y un VPS ejecuta el tracker y la API
+con Bun y SQLite local.
 
 ## Prerequisitos
 
@@ -26,13 +26,14 @@ de demostración de `lib/leaderboard.ts` en lugar de datos reales.
 
 | Pieza | Qué hace |
 |---|---|
-| `app/` | Rutas. `page.tsx` es el ranking; `api/leaderboard/route.ts` sirve y refresca el snapshot |
-| `worker/index.ts` | Entrada de Cloudflare. Sirve la app y expone los endpoints de cron |
+| `app/` | Frontend estático; `page.tsx` consulta la API pública del VPS |
+| `vps/api-server.ts` | API Bun de lectura para `/api/leaderboard`, sobre SQLite local |
+| `vps/tracker-runner.ts` | Proceso oneshot del VPS: tracking temporal y analíticas |
 | `lib/riot-client.ts` | Refresco completo del leaderboard. `RIOT_PLAYERS` es el roster |
 | `lib/lp-tracker.ts` | Tracker temporal: observa el rango cada minuto para deducir el cambio de PL por partida |
 | `lib/lp-reconciliation.ts` | Empareja partidas con observaciones de rango para atribuir el delta de PL |
-| `db/` | Esquema Drizzle y stores de D1 |
-| `cron-worker/` | Worker aparte que dispara los dos horarios por HTTP |
+| `db/` | Esquema/migraciones SQLite compatibles con el adaptador D1 existente |
+| `cron-worker/` | Código legado de compatibilidad; no se despliega después del corte |
 
 ### Por qué el PL se deduce
 
@@ -43,16 +44,17 @@ adelante.
 
 ## Despliegue
 
-La app vive en Cloudflare **Pages**, que no tiene `scheduled`, así que los dos
-horarios los dirige `cron-worker` por HTTP:
+Pages conserva la URL pública y solo sirve archivos estáticos. El tráfico de
+datos va a `20q-api.yasmiau.com`, que Caddy acepta únicamente desde las redes de
+Cloudflare y reenvía al proceso Bun en `127.0.0.1:8200`:
 
 ```
-cron-worker (crons)  ──POST /api/cron/lp-tracker──►  Pages   cada minuto
-                     ──POST /api/cron/leaderboard─►          minutos 7 y 37
+Pages estático ──GET /api/leaderboard──►  Caddy ──► Bun API ──► SQLite
+systemd timer ───────────────────────────────► Bun tracker ──► Riot + SQLite
 ```
 
-Ambos endpoints exigen la cabecera `x-cron-secret`; sin `CRON_SECRET` configurado
-responden 404, de modo que un binding ausente cierra la puerta en vez de abrirla.
+Cloudflare ya no ejecuta lógica, cron ni lecturas/escrituras D1 para este
+proyecto. El frontend mantiene el mismo acceso `20q-challenge.pages.dev`.
 
 ### Build
 
@@ -60,29 +62,21 @@ responden 404, de modo que un binding ausente cierra la puerta en vez de abrirla
 npm run build:pages
 ```
 
-`vinext build` deja los assets en `dist/client/` y el servidor en `dist/server/`;
-`build/pages-bundle.mjs` mueve el segundo a `dist/client/_worker.js/`, que es el
-modo avanzado de Pages.
+`vinext build` deja los assets exportados en `dist/client/`. El servidor se
+conserva solo para las pruebas locales; `build/static-pages.mjs` elimina el
+bundle Worker y el manifiesto de rutas antes de publicar.
 
 - **Build command:** `npm run build:pages`
 - **Output directory:** `dist/client`
 
 ### Configuración requerida
 
-En el proyecto de Pages:
+En Pages solo se necesita el texto público
+`NEXT_PUBLIC_LEADERBOARD_API_ORIGIN=https://20q-api.yasmiau.com`.
 
-- Binding D1 `DB` → `20q-challenge-db`
-- Compatibility date: **`2026-07-26`** — la misma que `vite.config.ts` y
-  `cron-worker/wrangler.jsonc`. En Pages vive en el dashboard, fuera del repo,
-  así que este renglón es su único registro revisable; un test comprueba que los
-  tres valores no se separen.
-- Flags de compatibilidad: `nodejs_compat`, `nodejs_compat_populate_process_env`.
-  El segundo no es opcional: `app/api/leaderboard/route.ts` lee
-  `process.env.RIOT_API_KEY`, y sin el flag la app sirve el snapshot de
-  demostración para siempre, sin error.
-- Secretos: `RIOT_API_KEY`, `CRON_SECRET`
-
-En `cron-worker`: el mismo `CRON_SECRET`.
+En el VPS, `/etc/20q-tracker.env` conserva `RIOT_API_KEY` para el timer. La API
+no recibe esa key. La base local vive en
+`/var/lib/20q-tracker/20q.sqlite` con WAL y migraciones aditivas.
 
 ### Migraciones
 
@@ -90,7 +84,10 @@ En `cron-worker`: el mismo `CRON_SECRET`.
 npx wrangler d1 execute 20q-challenge-db --remote --file drizzle/0004_live_game_detail.sql
 ```
 
-Son aditivas y seguras sobre datos existentes. Genera nuevas con `npm run db:generate`.
+Las migraciones siguen siendo aditivas y sirven para SQLite y D1 durante la
+transición. Para conservar el histórico al salir de D1, importa un export SQL
+con `bun vps/import-d1-export.ts <export.sql>` antes de arrancar el nuevo
+servicio.
 
 ## Verificación
 

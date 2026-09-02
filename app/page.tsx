@@ -35,6 +35,9 @@ const initialPayload: LeaderboardPayload = {
 
 const LEADERBOARD_STORAGE_KEY = "20q-leaderboard-payload-v1";
 const LEADERBOARD_REFRESH_MS = 60_000;
+const LEADERBOARD_API_URL = process.env.NEXT_PUBLIC_LEADERBOARD_API_ORIGIN
+  ? `${process.env.NEXT_PUBLIC_LEADERBOARD_API_ORIGIN.replace(/\/+$/, "")}/api/leaderboard`
+  : "/api/leaderboard";
 const PODIUM_CHAMPION_SLOTS = 5;
 const ROW_CHAMPION_SLOTS = 4;
 
@@ -1434,7 +1437,7 @@ export default function Home() {
       if (loadInFlight) return;
       loadInFlight = true;
       try {
-        const response = await fetch("/api/leaderboard", {
+        const response = await fetch(LEADERBOARD_API_URL, {
           cache: "no-store",
           headers: { Accept: "application/json", "Cache-Control": "no-cache" },
           signal: controller.signal,

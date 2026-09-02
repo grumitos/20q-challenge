@@ -10,24 +10,24 @@
  * consistently, which is what a busy evening produces.
  *
  * Nothing about the tracker itself changes here. `runTemporalLpTracker` takes a
- * store, and this points it at `createRemoteLpTrackerStore`, so the logic stays
- * in one place and there is no second copy to drift. All this file owns is
- * configuration, a single run, and an exit code.
+ * store, and this points it at Bun SQLite, so the logic stays in one place while
+ * the VPS owns Riot polling, analytics and persistence.
  *
  * Intended to run under a systemd timer, one run per tick, no daemon. It listens
  * on nothing and holds no port.
  */
 import { runTemporalLpTracker } from "../lib/lp-tracker.ts";
-import { createRemoteLpTrackerStore } from "../lib/remote-lp-tracker-store.ts";
+import { createLpTrackerStore, type LpTrackerStore } from "../db/lp-tracker-store.ts";
+import { openBunTrackerDatabase } from "./bun-sqlite.ts";
 import { fetchRiotLeaderboard, RIOT_PLAYERS } from "../lib/riot-client.ts";
 
 /**
  * The Worker's defaults exist because of its 10 ms CPU ceiling; out here the
  * only limits that matter are Riot's, and the registered app key's are generous
  * (2,000 match details per 10 s, 3,000 spectator per 10 s, 20,000 rank reads
- * per 10 s). The request budget is still shared with analytics and Cloudflare's
- * fallback, so this runner deliberately uses the same 30-request ceiling as the
- * Worker even though the VPS itself has more CPU and Riot capacity.
+ * per 10 s). The request budget is still shared with the analytics phase, so
+ * this runner deliberately uses the same 30-request ceiling as the Worker
+ * even though the VPS itself has more CPU and Riot capacity.
  */
 const RUNNER_MAX_REQUESTS = 30;
 const RUNNER_MATCH_DETAILS_PER_RUN = 2;
@@ -37,15 +37,15 @@ const RUNNER_MATCH_DETAILS_PER_RUN = 2;
  * tenth minute. It lived only in the Worker, where the 10 ms CPU allowance
  * froze it for a month once the backlog outgrew one invocation; out here a
  * small bounded batch keeps normal games fresh without consuming the window
- * needed by the minute-by-minute tracker. The Worker's lane stays enabled as
- * the standby, same as the tracker's.
+ * needed by the minute-by-minute tracker. The VPS timer is the only production
+ * scheduler after cutover; there is no Cloudflare fallback lane.
  */
 const RUNNER_ANALYTICS_DETAILS_PER_RUN = 5;
 const RUNNER_ANALYTICS_MAX_REQUESTS = 32;
 const ANALYTICS_HEARTBEAT_TTL_MS = 12 * 60_000;
 
 async function runAnalyticsPhase(
-  store: ReturnType<typeof createRemoteLpTrackerStore>,
+  store: LpTrackerStore,
   apiKey: string,
   now: number,
 ) {
@@ -90,8 +90,7 @@ function required(name: string): string {
   const value = (process.env[name] ?? "").trim();
   if (!value) {
     // Fail loudly and immediately: a tracker that runs every minute with a
-    // missing secret would otherwise fill the journal with indistinguishable
-    // 404s from the store endpoint refusing it.
+    // missing upstream key should not fill the journal with retries.
     console.error(JSON.stringify({ event: "tracker_runner", status: "misconfigured", missing: name }));
     process.exit(78); // EX_CONFIG
   }
@@ -99,12 +98,11 @@ function required(name: string): string {
 }
 
 async function main() {
-  const origin = (process.env.SITE_ORIGIN ?? "https://20q-challenge.pages.dev").trim();
-  const secret = required("CRON_SECRET");
   const apiKey = required("RIOT_API_KEY");
   const startedAt = Date.now();
 
-  const store = createRemoteLpTrackerStore({ origin, secret });
+  const { database, d1 } = await openBunTrackerDatabase();
+  const store = createLpTrackerStore(d1);
 
   try {
     const result = await runTemporalLpTracker({
@@ -146,7 +144,6 @@ async function main() {
     // A skipped run is not a failure: another run holds the lane, which is the
     // lease doing its job. Only a thrown run is worth a non-zero exit, so the
     // timer's `OnFailure` and the journal mean what they say.
-    process.exit(0);
   } catch (error) {
     console.error(JSON.stringify({
       event: "tracker_runner",
@@ -154,7 +151,9 @@ async function main() {
       durationMs: Date.now() - startedAt,
       error: error instanceof Error ? error.message : String(error),
     }));
-    process.exit(1);
+    process.exitCode = 1;
+  } finally {
+    database.close();
   }
 }
 
