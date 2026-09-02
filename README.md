@@ -74,6 +74,9 @@ bundle Worker y el manifiesto de rutas antes de publicar.
 En Pages solo se necesita el texto público
 `NEXT_PUBLIC_LEADERBOARD_API_ORIGIN=https://20q-api.yasmiau.com`.
 
+La fecha de compatibilidad `2026-07-26` solo se conserva en las
+configuraciones legacy de desarrollo y del Worker retirado.
+
 En el VPS, `/etc/20q-tracker.env` conserva `RIOT_API_KEY` para el timer. La API
 no recibe esa key. La base local vive en
 `/var/lib/20q-tracker/20q.sqlite` con WAL y migraciones aditivas.
