@@ -84,31 +84,18 @@ test("server-renders the 20Q Challenge dashboard", async () => {
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|SkeletonPreview/i);
 });
 
-test("leaves dist/client shaped the way Pages expects to deploy it", async () => {
-  // `vinext build` empties dist/client, so a plain `npm run build` strips the
-  // worker back out of the deploy directory. That made `npm run verify` — the
-  // documented pre-flight — the one command guaranteed to leave a directory
-  // that serves 404 for every route. `npm test` now runs `build:pages`, and
-  // this asserts the result so the packaging step cannot regress silently.
+test("leaves dist/client as a static Pages bundle", async () => {
+  // Pages only serves the exported files now. The server bundle is retained in
+  // dist/server for local rendering tests, but no Worker or route manifest is
+  // allowed into the publish directory.
   const client = new URL("../dist/client/", import.meta.url);
-  await access(new URL("_worker.js/index.js", client));
-  await access(new URL("_worker.js/ssr/index.js", client));
+  await access(new URL("index.html", client));
+  await access(new URL("privacy.html", client));
+  await access(new URL("terms.html", client));
   await access(new URL("ranks/gold.png", client));
 
-  // The Workers deploy descriptor must not ride along inside the bundle: Pages
-  // takes its bindings from the project, and shipping a second opinion — one
-  // still naming the Sites placeholder database — invites the two to disagree.
-  await assert.rejects(access(new URL("_worker.js/wrangler.json", client)));
-
-  // Without this Pages routes every request through the Worker, which answered
-  // the build's own hashed assets with a 404: the site shipped as unstyled HTML
-  // with no client bundle. Each excluded path is also one fewer billable
-  // Function invocation.
-  const routes = JSON.parse(await readFile(new URL("_routes.json", client), "utf8"));
-  assert.deepEqual(routes.include, ["/*"]);
-  for (const path of ["/assets/*", "/ranks/*", "/favicon.png", "/og.jpg", "/brand-logo.webp"]) {
-    assert.ok(routes.exclude.includes(path), `${path} must be served by Pages, not the Worker`);
-  }
+  await assert.rejects(access(new URL("_worker.js/index.js", client)));
+  await assert.rejects(access(new URL("_routes.json", client)));
 
   // The stylesheet the HTML asks for has to be one of the files actually
   // shipped — a hash mismatch here is invisible until the page renders bare.
@@ -132,7 +119,9 @@ test("ships the finished product assets without starter dependencies", async () 
 
   assert.match(page, /useState/);
   assert.doesNotMatch(page, /sync-state|Datos actualizados/);
-  assert.match(page, /fetch\("\/api\/leaderboard"/);
+  assert.match(page, /const LEADERBOARD_API_URL =/);
+  assert.match(page, /NEXT_PUBLIC_LEADERBOARD_API_ORIGIN/);
+  assert.match(page, /\/api\/leaderboard/);
   assert.match(page, /const LEADERBOARD_REFRESH_MS = 60_000/);
   assert.match(page, /window\.setInterval\([\s\S]*?void loadLeaderboard\(\)[\s\S]*?LEADERBOARD_REFRESH_MS/);
   assert.match(page, /void loadLeaderboard\(\)/);
@@ -149,7 +138,7 @@ test("ships the finished product assets without starter dependencies", async () 
   assert.match(page, /`\/ranks\/\$\{tier === "UNRANKED" \? "iron" : tier\.toLowerCase\(\)\}\.png`/);
   assert.match(layout, /lang="es"/);
   assert.match(layout, /const title = "20Q Challenge"/);
-  assert.match(layout, /generateMetadata/);
+  assert.match(layout, /export const metadata/);
   assert.match(layout, /\/og\.jpg/);
   assert.match(layout, /icon: "\/favicon\.png"/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);

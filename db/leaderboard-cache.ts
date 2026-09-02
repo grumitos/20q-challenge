@@ -8,6 +8,7 @@ import {
 import seasonSeed from "../lib/season-analytics-seed.json" with { type: "json" };
 import { inferLeaguePointsChange, type PersistedSoloQueueMatch } from "../lib/riot-client";
 import type { CacheRecord } from "../lib/leaderboard-service";
+import type { TrackerD1 } from "./lp-tracker-store";
 
 type CacheRow = {
   payload: string;
@@ -34,7 +35,7 @@ function rankObservationId(playerId: string, observedAt: number) {
 
 async function reconcilePendingLpEvidence(
   snapshot: LeaderboardSnapshot,
-  d1: Awaited<ReturnType<typeof getD1>>,
+  d1: TrackerD1,
 ) {
   await Promise.all(snapshot.players.map(async (player) => {
     const match = player.lastSoloQueueMatch;
@@ -68,8 +69,8 @@ async function reconcilePendingLpEvidence(
   }));
 }
 
-export async function readLeaderboardCache(): Promise<CacheRecord | null> {
-  const d1 = await getD1();
+export async function readLeaderboardCache(database?: TrackerD1): Promise<CacheRecord | null> {
+  const d1 = database ?? await getD1();
   const row = await d1
     .prepare(
       "SELECT payload, fetched_at FROM leaderboard_cache WHERE key = ?1 LIMIT 1",
@@ -111,11 +112,12 @@ export async function writeLeaderboardCache(
   matches: readonly PersistedSoloQueueMatch[] = [],
   /** Backfill reuses the cache writer but does not represent a new rank poll. */
   recordRankObservation = true,
+  database?: TrackerD1,
 ) {
   const fetchedAt = Date.parse(snapshot.fetchedAt);
   if (!Number.isFinite(fetchedAt)) throw new Error("Snapshot timestamp is invalid.");
 
-  const d1 = await getD1();
+  const d1 = database ?? await getD1();
   await reconcilePendingLpEvidence(snapshot, d1);
   const immutableStatements = matches.flatMap((match) => [
     d1.prepare(

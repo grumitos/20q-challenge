@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
-    "build:pages": "vinext build && node build/pages-bundle.mjs",
+    "build:pages": "vinext build && node build/static-pages.mjs",
     "start": "vinext start",
     "test": "npm run build:pages && npm run test:built",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
