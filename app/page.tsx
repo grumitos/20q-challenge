@@ -35,8 +35,9 @@ const initialPayload: LeaderboardPayload = {
 
 const LEADERBOARD_STORAGE_KEY = "20q-leaderboard-payload-v1";
 const LEADERBOARD_REFRESH_MS = 60_000;
-const LEADERBOARD_API_URL = process.env.NEXT_PUBLIC_LEADERBOARD_API_ORIGIN
-  ? `${process.env.NEXT_PUBLIC_LEADERBOARD_API_ORIGIN.replace(/\/+$/, "")}/api/leaderboard`
+const configuredLeaderboardApiOrigin = process.env.NEXT_PUBLIC_LEADERBOARD_API_ORIGIN?.trim().replace(/\/+$/, "");
+const LEADERBOARD_API_URL = configuredLeaderboardApiOrigin
+  ? `${configuredLeaderboardApiOrigin}/api/leaderboard`
   : "/api/leaderboard";
 const PODIUM_CHAMPION_SLOTS = 5;
 const ROW_CHAMPION_SLOTS = 4;
