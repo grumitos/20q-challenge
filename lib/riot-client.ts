@@ -29,6 +29,7 @@ import {
 
 type PlayerIdentity = {
   id: string;
+  puuid: string;
   gameName: string;
   tagLine: string;
 };
@@ -55,15 +56,15 @@ const BACKFILL_PLAYERS_PER_REFRESH = 1;
 const ANALYTICS_MATCH_DETAILS_PER_RUN = 5;
 
 export const RIOT_PLAYERS: PlayerIdentity[] = [
-  { id: "miqi", gameName: "miqi", tagLine: "8745" },
-  { id: "wonder-boi", gameName: "Wonder Boi", tagLine: "huhu" },
-  { id: "rvn", gameName: "RVN", tagLine: "2105" },
-  { id: "inti", gameName: "INTI VIRAC0NCHA", tagLine: "20CM" },
-  { id: "papipu", gameName: "Papipu", tagLine: "HOLA" },
-  { id: "testiculos", gameName: "TESTICrULoOS", tagLine: "2140" },
-  { id: "piper-twin", gameName: "PiperTwin", tagLine: "20CM" },
-  { id: "mamimu", gameName: "Mamimu", tagLine: "HOLA" },
-  { id: "yvncv", gameName: "yvncv", tagLine: "0521" },
+  { id: "miqi", puuid: "5_8Qb1VsKIYpIro5e30W8NQaoOre5oyuamwhesY0CB2G3El99wiux-67BR9dVIgZ-fTEQx0b9JFM5A", gameName: "miqi", tagLine: "8745" },
+  { id: "wonder-boi", puuid: "NjegBn8qri0XwtL5FOBiREC6rXLePzzIS-Bx0UUBr87CZgybKnxoRsNStPaUes7Rr7MdnX0_krpP-Q", gameName: "regigig4s", tagLine: "huhu" },
+  { id: "rvn", puuid: "RNcpO-oNC3BQkAKDLoLV1w4h3Bi1t9dbG4A0P4d7jnVlBMAuEsflr13iNbOqaghL7xoecTEr-DzpsA", gameName: "RVN", tagLine: "2105" },
+  { id: "inti", puuid: "Kc-XyTyhc7MuuMGqhh3SAF15uYKy3vWXKEXR9VcliItaecBrdzJj6VoC6I-Ht6ZM0lbhvBexzQkmYA", gameName: "INTI VIRAC0NCHA", tagLine: "20CM" },
+  { id: "papipu", puuid: "X_mxNExAU31z21_hq8jyaXhP2GKMgI4LHp_Ytun9YEalix_JYeWZpfXmNbg2DOujIcgtFq36GID80Q", gameName: "Papipu", tagLine: "HOLA" },
+  { id: "testiculos", puuid: "A4Sq81SYhEZ4ki89gphMwWuw3a1lt07CIPJ0ThmZlPuBVDmyj-y6IlIYBFSwiEupcBw0xwgO9vKNVA", gameName: "TESTICrULoOS", tagLine: "2140" },
+  { id: "piper-twin", puuid: "fhnWps2btYO2zrn6oirsxKLoHI_aRoPdq6z8Nx0ZmuNRfMFPxTSlpm7e_vUWVCTlTeGsnl9QfW3C0A", gameName: "PiperTwin", tagLine: "20CM" },
+  { id: "mamimu", puuid: "XUiShyif6u6l_teu9aQ6gyMehEJuNpZnaWWsrF37BJQO771jxCEGJ8PWkrDeVw2zUviwC7_2SYG8rg", gameName: "Mamimu", tagLine: "HOLA" },
+  { id: "yvncv", puuid: "uqU31m1C4OjI3JbH39G99UbfkctLxUXHbWOfx-HuXucwizJ18vGTiCQrpWwIvNoKUB6AiCmrned-pQ", gameName: "yvncv", tagLine: "0521" },
 ];
 
 const seasonSeed = seasonSeedJson as SeasonSeed;
@@ -425,34 +426,46 @@ export async function fetchRiotPlayer(
   fetchImpl: FetchLike = fetch,
   baseline?: Pick<PlayerSnapshot, "profileIconId" | "analytics" | "lastSoloQueueMatch" | "puuid">,
 ): Promise<PlayerSnapshot> {
-  // A puuid is permanent, so resolving one we already hold buys nothing and
-  // costs a request per player per refresh. On the free plan a Worker gets 50
-  // subrequests per invocation — D1 included — and this path was spending nine
-  // of them re-answering a question whose answer cannot change. The tracker
-  // keeps the stored identity current, so a rename does not strand this.
+  // A PUUID is permanent. The roster carries it, so normal refreshes never
+  // resolve a player by nick; the account endpoint is used only to recover the
+  // current Riot ID when a player has no cached snapshot yet.
   const cachedPuuid = typeof baseline?.puuid === "string" && baseline.puuid.length > 0
     ? baseline.puuid
     : null;
-  const account = cachedPuuid ? null : record(
-    await fetchRiotJson(
-      `https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(identity.gameName)}/${encodeURIComponent(identity.tagLine)}`,
-      apiKey,
-      fetchImpl,
-    ),
-  );
-  if (!cachedPuuid && (!account || typeof account.puuid !== "string" || account.puuid.length === 0)) {
+  const configuredPuuid = typeof identity.puuid === "string" && identity.puuid.length > 0
+    ? identity.puuid
+    : null;
+  const puuid = configuredPuuid ?? cachedPuuid;
+  const account = puuid
+    ? !cachedPuuid || cachedPuuid !== puuid
+      ? record(
+          await fetchRiotJson(
+            `https://americas.api.riotgames.com/riot/account/v1/accounts/by-puuid/${encodeURIComponent(puuid)}`,
+            apiKey,
+            fetchImpl,
+          ),
+        )
+      : null
+    : record(
+        await fetchRiotJson(
+          `https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(identity.gameName)}/${encodeURIComponent(identity.tagLine)}`,
+          apiKey,
+          fetchImpl,
+        ),
+      );
+  if (!puuid && (!account || typeof account.puuid !== "string" || account.puuid.length === 0)) {
     throw new RiotApiError("INVALID_RESPONSE", "Riot no devolvió un PUUID válido.");
   }
 
-  const puuid = cachedPuuid ?? (account!.puuid as string);
+  const resolvedPuuid = puuid ?? (account!.puuid as string);
   const [entries, summonerValue] = await Promise.all([
     fetchRiotJson(
-      `https://la2.api.riotgames.com/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`,
+      `https://la2.api.riotgames.com/lol/league/v4/entries/by-puuid/${encodeURIComponent(resolvedPuuid)}`,
       apiKey,
       fetchImpl,
     ),
     fetchRiotJson(
-      `https://la2.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`,
+      `https://la2.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(resolvedPuuid)}`,
       apiKey,
       fetchImpl,
     ),
@@ -464,7 +477,7 @@ export async function fetchRiotPlayer(
     id: identity.id,
     gameName: typeof account?.gameName === "string" && account.gameName ? account.gameName : identity.gameName,
     tagLine: typeof account?.tagLine === "string" && account.tagLine ? account.tagLine : identity.tagLine,
-    puuid,
+    puuid: resolvedPuuid,
     tier: league.tier,
     division: league.division,
     leaguePoints: league.leaguePoints,
@@ -487,7 +500,9 @@ function unavailablePlayer(
 ): PlayerSnapshot {
   return {
     ...identity,
-    puuid: null,
+    // A transient NOT_FOUND must not erase the permanent key that lets the
+    // next refresh recover the account without trusting a stale Riot ID.
+    puuid: identity.puuid || null,
     tier: "UNRANKED",
     division: "",
     leaguePoints: 0,

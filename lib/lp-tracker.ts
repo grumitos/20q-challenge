@@ -578,8 +578,8 @@ export async function runTemporalLpTracker(options: {
       const players = await mapWithConcurrency(RIOT_PLAYERS, 3, async (identity) => {
         const player = snapshotById.get(identity.id);
         if (player?.puuid) return player;
-        const account = await api.fetchAccountByRiotId(identity.gameName, identity.tagLine);
-        const base = player ?? { ...identity, puuid: null, lastSoloQueueMatch: null };
+        const account = await api.fetchAccountByPuuid(identity.puuid);
+        const base = player ?? { ...identity, lastSoloQueueMatch: null };
         return account ? { ...base, ...account } : base;
       });
       const snapshot = { ...state.snapshot, players };
@@ -906,7 +906,7 @@ export async function runTemporalLpTracker(options: {
       // raise "Riot no respondió" over a board that had just refreshed fine.
       try {
         const accounts = (await mapWithConcurrency(strays, 3, async (identity) => {
-          const account = await api.fetchAccountByRiotId(identity.gameName, identity.tagLine);
+          const account = await api.fetchAccountByPuuid(identity.puuid);
           return account ? { ...account, id: identity.id, lastSoloQueueMatch: null } : null;
         })).flatMap((account) => account ? [account] : []);
         if (accounts.length > 0) {

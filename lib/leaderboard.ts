@@ -1,17 +1,17 @@
+import { peruDateParts } from "./peru-time.ts";
+
 export const CACHE_TTL_MS = 60 * 1000;
 export const CACHE_KEY = "las-2026-soloq";
 export const CHALLENGE_MEMBER_COUNT = 9;
 
-const PERU_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
-
 export function papipuRespawnSeconds(now: number) {
-  const peruTime = new Date(now - PERU_UTC_OFFSET_MS);
-  const hour = peruTime.getUTCHours();
+  const peruTime = peruDateParts(now);
+  const hour = peruTime.hour;
   if (hour >= 7 && hour < 23) return null;
 
-  const year = peruTime.getUTCFullYear();
-  const month = peruTime.getUTCMonth();
-  const day = peruTime.getUTCDate();
+  const year = peruTime.year;
+  const month = peruTime.month - 1;
+  const day = peruTime.day;
   const respawnAt = hour >= 23
     ? Date.UTC(year, month, day + 1, 12)
     : Date.UTC(year, month, day, 12);
@@ -821,7 +821,7 @@ const DEMO_PLAYERS: Array<{
   { id: "papipu", gameName: "Papipu", tagLine: "HOLA", tier: "SILVER", division: "I", leaguePoints: 96, wins: 81, losses: 65, profileIconId: 7148, role: "UTILITY", roleShare: 43, analyticsGames: 158, kda: 2.8, champions: [["Mordekaiser", "Mordekaiser"], ["Lux", "Lux"], ["Senna", "Senna"], ["Jhin", "Jhin"]] },
   { id: "rvn", gameName: "RVN", tagLine: "2105", tier: "SILVER", division: "I", leaguePoints: 25, wins: 98, losses: 98, profileIconId: 7128, role: "UTILITY", roleShare: 28, analyticsGames: 215, kda: 2, champions: [["Samira", "Samira"], ["Mordekaiser", "Mordekaiser"], ["Caitlyn", "Caitlyn"], ["Yasuo", "Yasuo"]] },
   { id: "inti", gameName: "INTI VIRAC0NCHA", tagLine: "20CM", tier: "SILVER", division: "II", leaguePoints: 11, wins: 178, losses: 192, profileIconId: 6091, role: "UTILITY", roleShare: 40, analyticsGames: 301, kda: 1.7, champions: [["Chogath", "Cho'Gath"], ["Leona", "Leona"], ["Ryze", "Ryze"], ["Illaoi", "Illaoi"]] },
-  { id: "wonder-boi", gameName: "Wonder Boi", tagLine: "huhu", tier: "SILVER", division: "III", leaguePoints: 80, wins: 176, losses: 173, profileIconId: 6486, role: "BOTTOM", roleShare: 36, analyticsGames: 352, kda: 2.2, champions: [["Varus", "Varus"], ["Jhin", "Jhin"], ["Pyke", "Pyke"], ["Pantheon", "Pantheon"]] },
+  { id: "wonder-boi", gameName: "regigig4s", tagLine: "huhu", tier: "SILVER", division: "III", leaguePoints: 80, wins: 176, losses: 173, profileIconId: 6486, role: "BOTTOM", roleShare: 36, analyticsGames: 352, kda: 2.2, champions: [["Varus", "Varus"], ["Jhin", "Jhin"], ["Pyke", "Pyke"], ["Pantheon", "Pantheon"]] },
   { id: "testiculos", gameName: "TESTICrULoOS", tagLine: "2140", tier: "SILVER", division: "III", leaguePoints: 30, wins: 26, losses: 31, profileIconId: 2076, role: "MIDDLE", roleShare: 31, analyticsGames: 58, kda: 1.8, champions: [["Xerath", "Xerath"], ["Leona", "Leona"], ["Olaf", "Olaf"], ["Malphite", "Malphite"]] },
   { id: "piper-twin", gameName: "PiperTwin", tagLine: "20CM", tier: "BRONZE", division: "I", leaguePoints: 25, wins: 38, losses: 47, profileIconId: 6874, role: "BOTTOM", roleShare: 87, analyticsGames: 91, kda: 2.6, champions: [["Tristana", "Tristana"], ["Caitlyn", "Caitlyn"], ["Ashe", "Ashe"], ["Sivir", "Sivir"]] },
   { id: "miqi", gameName: "miqi", tagLine: "8745", tier: "BRONZE", division: "III", leaguePoints: 46, wins: 49, losses: 55, profileIconId: 3152, role: "BOTTOM", roleShare: 59, analyticsGames: 108, kda: 1.7, champions: [["Jhin", "Jhin"], ["Aphelios", "Aphelios"], ["Leona", "Leona"], ["Lux", "Lux"]] },

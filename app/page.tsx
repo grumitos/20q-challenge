@@ -27,6 +27,7 @@ import {
   type RankTier,
   type RosterSlot,
 } from "../lib/leaderboard";
+import { nextPeruHourUtc, peruDateParts } from "../lib/peru-time";
 
 const initialPayload: LeaderboardPayload = {
   data: createDemoSnapshot(new Date("2026-01-01T00:00:00.000Z")),
@@ -203,12 +204,12 @@ function profileUrl(player: PlayerSnapshot) {
 }
 
 function formattedUpdate(iso: string) {
-  const lima = new Date(new Date(iso).getTime() - 5 * 60 * 60 * 1000);
+  const lima = peruDateParts(iso);
   const months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-  const day = String(lima.getUTCDate()).padStart(2, "0");
-  const hour = String(lima.getUTCHours()).padStart(2, "0");
-  const minute = String(lima.getUTCMinutes()).padStart(2, "0");
-  return `${day} ${months[lima.getUTCMonth()]}, ${hour}:${minute}`;
+  const day = String(lima.day).padStart(2, "0");
+  const hour = String(lima.hour).padStart(2, "0");
+  const minute = String(lima.minute).padStart(2, "0");
+  return `${day} ${months[lima.month - 1]}, ${hour}:${minute}`;
 }
 
 function formattedMatchAge(timestamp: number) {
@@ -598,8 +599,8 @@ function LiveSummary({ player, version, clockNow }: {
   const live = player.liveGame!;
   const elapsed = Math.max(0, Math.floor((clockNow - live.gameStartedAt) / 1000));
   const clock = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
-  const started = new Date(live.gameStartedAt - 5 * 60 * 60 * 1_000);
-  const startText = `inicio ${String(started.getUTCHours()).padStart(2, "0")}:${String(started.getUTCMinutes()).padStart(2, "0")}`;
+  const started = peruDateParts(live.gameStartedAt);
+  const startText = `inicio ${String(started.hour).padStart(2, "0")}:${String(started.minute).padStart(2, "0")}`;
 
   return (
     <>
@@ -1250,8 +1251,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!needsSecondTicks) {
-      const peruTime = new Date(clockNow - 5 * 60 * 60 * 1000);
-      const nextStart = Date.UTC(peruTime.getUTCFullYear(), peruTime.getUTCMonth(), peruTime.getUTCDate() + 1, 4);
+      const nextStart = nextPeruHourUtc(clockNow, 4);
       const timer = window.setTimeout(() => setClockNow(Date.now()), Math.max(1_000, nextStart - clockNow));
       return () => window.clearTimeout(timer);
     }
