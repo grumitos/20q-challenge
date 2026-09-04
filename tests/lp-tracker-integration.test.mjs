@@ -48,11 +48,12 @@ function riotResponse(url, detailCounter) {
   // branch the catch-all below bills the tracker's roster catch-up to
   // `detailCounter` and hands it a match payload as if it were an account.
   if (url.includes("/riot/account/v1/")) {
-    const [gameName, tagLine] = url.split("/by-riot-id/")[1].split("/");
+    const puuid = decodeURIComponent(new URL(url).pathname.split("/").at(-1));
+    const identity = RIOT_PLAYERS.find((player) => player.puuid === puuid);
     return new Response(JSON.stringify({
-      puuid: `puuid-${decodeURIComponent(gameName)}`,
-      gameName: decodeURIComponent(gameName),
-      tagLine: decodeURIComponent(tagLine),
+      puuid,
+      gameName: identity?.gameName ?? "Player",
+      tagLine: identity?.tagLine ?? "LAS",
     }), { status: 200 });
   }
   detailCounter.count += 1;
@@ -445,9 +446,9 @@ test("enrolls a roster member added after the initial bootstrap", async () => {
   // last roster entry — yvncv#0521, added once the others were already synced —
   // never reached `player_sync_state` and every run polled around them.
   const [straggler, ...synced] = [...RIOT_PLAYERS].reverse();
-  const players = synced.map((identity, index) => ({
+  const players = synced.map((identity) => ({
     playerId: identity.id,
-    puuid: `puuid-${index + 1}`,
+    puuid: identity.puuid,
     gameName: identity.gameName,
     tagLine: identity.tagLine,
     recentMatchId: null,
@@ -468,7 +469,7 @@ test("enrolls a roster member added after the initial bootstrap", async () => {
     [[straggler.id, straggler.gameName, straggler.tagLine]],
     "the missing roster member is resolved and written to player_sync_state",
   );
-  assert.equal(store.writes.enrolled[0].puuid, `puuid-${straggler.gameName}`);
+  assert.equal(store.writes.enrolled[0].puuid, straggler.puuid);
 });
 
 test("a failing account lookup cannot fail a run that already did its work", async () => {
@@ -476,9 +477,9 @@ test("a failing account lookup cannot fail a run that already did its work", asy
   // projection are all persisted. Letting a 429 there escape marked a wholly
   // successful run as `failed` and told readers "Riot no respondió".
   const [straggler, ...synced] = [...RIOT_PLAYERS].reverse();
-  const players = synced.map((identity, index) => ({
+  const players = synced.map((identity) => ({
     playerId: identity.id,
-    puuid: `puuid-${index + 1}`,
+    puuid: identity.puuid,
     gameName: identity.gameName,
     tagLine: identity.tagLine,
     recentMatchId: null,
@@ -523,9 +524,9 @@ test("bounds match details per tick so a backlog cannot spike one run", async ()
   // worth holding is the cap itself: it is what stopped a backlog being
   // downloaded in a single invocation and spiking the CPU into a 1102.
   const [, ...synced] = [...RIOT_PLAYERS].reverse();
-  const players = synced.map((identity, index) => ({
+  const players = synced.map((identity) => ({
     playerId: identity.id,
-    puuid: `puuid-${index + 1}`,
+    puuid: identity.puuid,
     gameName: identity.gameName,
     tagLine: identity.tagLine,
     recentMatchId: null,

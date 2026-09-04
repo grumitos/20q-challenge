@@ -4,12 +4,24 @@ import test from "node:test";
 import { backfillSeasonAnalytics, fetchRiotLeaderboard, fetchRiotPlayer, inferLeaguePointsChange, normalizePersistedSoloQueueMatch, normalizeSoloQueueMatch, RIOT_PLAYERS, RiotApiError } from "../lib/riot-client.ts";
 import { createDemoSnapshot } from "../lib/leaderboard.ts";
 
+const MAMIMU_PUUID = RIOT_PLAYERS.find(({ id }) => id === "mamimu").puuid;
+
+function accountForPuuidUrl(url) {
+  const puuid = decodeURIComponent(new URL(url).pathname.split("/").at(-1));
+  const identity = RIOT_PLAYERS.find((player) => player.puuid === puuid);
+  return {
+    puuid,
+    gameName: identity?.gameName ?? "Player",
+    tagLine: identity?.tagLine ?? "LAS",
+  };
+}
+
 test("tracks all nine challenge Riot IDs", () => {
   assert.deepEqual(
     RIOT_PLAYERS.map(({ gameName, tagLine }) => `${gameName}#${tagLine}`),
     [
       "miqi#8745",
-      "Wonder Boi#huhu",
+      "regigig4s#huhu",
       "RVN#2105",
       "INTI VIRAC0NCHA#20CM",
       "Papipu#HOLA",
@@ -21,14 +33,20 @@ test("tracks all nine challenge Riot IDs", () => {
   );
 });
 
-test("loads a LAS SoloQ profile using Riot ID and full-season ranked totals", async () => {
+test("keeps one persistent PUUID for every challenge player", () => {
+  const puuids = RIOT_PLAYERS.map(({ puuid }) => puuid);
+  assert.equal(new Set(puuids).size, RIOT_PLAYERS.length);
+  assert.ok(puuids.every((puuid) => typeof puuid === "string" && puuid.length > 0));
+});
+
+test("loads a LAS SoloQ profile using its PUUID and full-season ranked totals", async () => {
   const requests = [];
   const fakeFetch = async (input, init = {}) => {
     const url = String(input);
     requests.push({ url, token: new Headers(init.headers).get("X-Riot-Token") });
 
-    if (url.includes("/accounts/by-riot-id/")) {
-      return Response.json({ puuid: "puuid-1", gameName: "Wonder Boi", tagLine: "huhu" });
+    if (url.includes("/accounts/by-puuid/")) {
+      return Response.json({ puuid: "puuid-1", gameName: "regigig4s", tagLine: "huhu" });
     }
     if (url.includes("/league/v4/entries/by-puuid/")) {
       return Response.json([
@@ -42,12 +60,12 @@ test("loads a LAS SoloQ profile using Riot ID and full-season ranked totals", as
   };
 
   const player = await fetchRiotPlayer(
-    { id: "wonder-boi", gameName: "Wonder Boi", tagLine: "huhu" },
+    { id: "wonder-boi", puuid: "puuid-1", gameName: "regigig4s", tagLine: "huhu" },
     "secret-key",
     fakeFetch,
   );
 
-  assert.equal(player.gameName, "Wonder Boi");
+  assert.equal(player.gameName, "regigig4s");
   assert.equal(player.tagLine, "huhu");
   assert.equal(player.puuid, "puuid-1");
   assert.equal(player.tier, "SILVER");
@@ -57,7 +75,8 @@ test("loads a LAS SoloQ profile using Riot ID and full-season ranked totals", as
   assert.equal(player.profileIconId, 6543);
   assert.equal(player.riotIdFound, true);
 
-  assert.equal(requests[0].url, "https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Wonder%20Boi/huhu");
+  assert.equal(requests[0].url, "https://americas.api.riotgames.com/riot/account/v1/accounts/by-puuid/puuid-1");
+  assert.ok(requests.every(({ url }) => !url.includes("/accounts/by-riot-id/")));
   assert.ok(requests.some(({ url }) => url === "https://la2.api.riotgames.com/lol/league/v4/entries/by-puuid/puuid-1"));
   assert.equal(requests.length, 3);
   assert.ok(requests.every(({ token }) => token === "secret-key"));
@@ -71,7 +90,7 @@ test("automatically bootstraps season analytics for a newly added Riot ID", asyn
     const url = String(input);
     requestedUrls.push(url);
 
-    if (url.includes("/accounts/by-riot-id/")) {
+    if (url.includes("/accounts/by-puuid/")) {
       accountRequestsInFlight += 1;
       maxAccountRequestsInFlight = Math.max(maxAccountRequestsInFlight, accountRequestsInFlight);
       // Longer than the 50ms the requester spaces request starts by. Riot's
@@ -79,14 +98,7 @@ test("automatically bootstraps season analytics for a newly added Riot ID", asyn
       // each call before the next was allowed to start, and this assertion
       // would then be measuring the pacing rather than the concurrency.
       await new Promise((resolve) => setTimeout(resolve, 120));
-      const parts = new URL(url).pathname.split("/");
-      const gameName = decodeURIComponent(parts.at(-2));
-      const tagLine = decodeURIComponent(parts.at(-1));
-      const response = Response.json({
-        puuid: `puuid-${gameName.toLowerCase().replaceAll(" ", "-")}`,
-        gameName,
-        tagLine,
-      });
+      const response = Response.json(accountForPuuidUrl(url));
       accountRequestsInFlight -= 1;
       return response;
     }
@@ -98,7 +110,7 @@ test("automatically bootstraps season analytics for a newly added Riot ID", asyn
     if (url.includes("/summoner/v4/summoners/by-puuid/")) {
       return Response.json({ profileIconId: 4321 });
     }
-    if (url.includes("/matches/by-puuid/puuid-mamimu/ids")) {
+    if (url.includes(`/matches/by-puuid/${MAMIMU_PUUID}/ids`)) {
       return Response.json(["LA2_MAMIMU_1"]);
     }
     if (url.includes("/matches/by-puuid/")) {
@@ -111,7 +123,7 @@ test("automatically bootstraps season analytics for a newly added Riot ID", asyn
           gameStartTimestamp: Date.UTC(2026, 0, 10),
           gameDuration: 1_800,
           participants: [{
-            puuid: "puuid-mamimu",
+            puuid: MAMIMU_PUUID,
             championId: 103,
             championName: "Ahri",
             teamId: 100,
@@ -137,7 +149,7 @@ test("automatically bootstraps season analytics for a newly added Riot ID", asyn
   assert.equal(mamimu.analytics.games, 1);
   assert.equal(mamimu.analytics.mainRole, "MIDDLE");
   assert.equal(mamimu.lastSoloQueueMatch?.matchId, "LA2_MAMIMU_1");
-  assert.ok(requestedUrls.some((url) => url.includes("/matches/by-puuid/puuid-mamimu/ids")));
+  assert.ok(requestedUrls.some((url) => url.includes(`/matches/by-puuid/${MAMIMU_PUUID}/ids`)));
   assert.ok(requestedUrls
     .filter((url) => url.includes("/matches/by-puuid/"))
     .every((url) => new URL(url).searchParams.get("count") === "10"));
@@ -150,18 +162,12 @@ test("backfills a new player's season in rate-limit-safe batches", async () => {
   let mamimuIdRequests = 0;
   const fakeFetch = async (input) => {
     const url = String(input);
-    if (url.includes("/accounts/by-riot-id/")) {
-      const parts = new URL(url).pathname.split("/");
-      const gameName = decodeURIComponent(parts.at(-2));
-      return Response.json({
-        puuid: `puuid-${gameName.toLowerCase().replaceAll(" ", "-")}`,
-        gameName,
-        tagLine: decodeURIComponent(parts.at(-1)),
-      });
+    if (url.includes("/accounts/by-puuid/")) {
+      return Response.json(accountForPuuidUrl(url));
     }
     if (url.includes("/league/v4/entries/by-puuid/")) return Response.json([]);
     if (url.includes("/summoner/v4/summoners/by-puuid/")) return Response.json({ profileIconId: 4321 });
-    if (url.includes("/matches/by-puuid/puuid-mamimu/ids")) {
+    if (url.includes(`/matches/by-puuid/${MAMIMU_PUUID}/ids`)) {
       const params = new URL(url).searchParams;
       if (!params.has("endTime")) return Response.json([]);
       // Honour the page size the caller asked for, so the batch constant is
@@ -182,7 +188,7 @@ test("backfills a new player's season in rate-limit-safe batches", async () => {
           gameStartTimestamp: Date.UTC(2026, 6, 19) - matchIndex * 60_000,
           gameDuration: 1_800,
           participants: [{
-            puuid: "puuid-mamimu",
+            puuid: MAMIMU_PUUID,
             championId: 103,
             championName: "Ahri",
             teamId: 100,
@@ -454,14 +460,12 @@ test("checks recent matches even when a cached player still needs historical bac
 
   const fakeFetch = async (input) => {
     const url = String(input);
-    if (url.includes("/accounts/by-riot-id/")) {
-      const parts = new URL(url).pathname.split("/");
-      const gameName = decodeURIComponent(parts.at(-2));
-      return Response.json({ puuid: `puuid-${gameName.toLowerCase().replaceAll(" ", "-")}`, gameName, tagLine: decodeURIComponent(parts.at(-1)) });
+    if (url.includes("/accounts/by-puuid/")) {
+      return Response.json(accountForPuuidUrl(url));
     }
     if (url.includes("/league/v4/entries/by-puuid/")) return Response.json([]);
     if (url.includes("/summoner/v4/summoners/by-puuid/")) return Response.json({ profileIconId: 1 });
-    if (url.includes("/matches/by-puuid/puuid-mamimu/ids")) {
+    if (url.includes(`/matches/by-puuid/${MAMIMU_PUUID}/ids`)) {
       requestedMamimuIdUrls.push(url);
       return Response.json([]);
     }
@@ -506,16 +510,14 @@ test("boundary matches cannot crowd new games out of the detail cap", async () =
 
   const fakeFetch = async (input) => {
     const url = String(input);
-    if (url.includes("/accounts/by-riot-id/")) {
-      const parts = new URL(url).pathname.split("/");
-      const gameName = decodeURIComponent(parts.at(-2));
-      return Response.json({ puuid: `puuid-${gameName.toLowerCase().replaceAll(" ", "-")}`, gameName, tagLine: decodeURIComponent(parts.at(-1)) });
+    if (url.includes("/accounts/by-puuid/")) {
+      return Response.json(accountForPuuidUrl(url));
     }
     if (url.includes("/league/v4/entries/by-puuid/")) return Response.json([]);
     if (url.includes("/summoner/v4/summoners/by-puuid/")) return Response.json({ profileIconId: 1 });
     if (url.includes("/ids")) {
       const puuid = decodeURIComponent(new URL(url).pathname.split("/").at(-2));
-      const playerId = cached.players.find((player) => `puuid-${player.gameName.toLowerCase().replaceAll(" ", "-")}` === puuid)?.id ?? "unknown";
+      const playerId = RIOT_PLAYERS.find((player) => player.puuid === puuid)?.id ?? "unknown";
       // The boundary comes back first; mamimu alone also has a genuinely new game.
       const ids = [`LA2_100_${playerId}`];
       if (playerId === "mamimu") ids.push("LA2_900_new");
@@ -531,7 +533,7 @@ test("boundary matches cannot crowd new games out of the detail cap", async () =
           gameStartTimestamp: isNew ? Date.UTC(2026, 6, 18) : Date.UTC(2026, 6, 10),
           gameDuration: 1_800,
           participants: [{
-            puuid: "puuid-mamimu", championId: 222, championName: "Jinx", teamId: 100,
+            puuid: MAMIMU_PUUID, championId: 222, championName: "Jinx", teamId: 100,
             kills: 5, deaths: 1, assists: 5, win: true, teamPosition: "BOTTOM",
             riotIdGameName: "Mamimu", riotIdTagline: "HOLA",
           }],
@@ -607,9 +609,8 @@ test("follows Data Dragon's current version instead of the seed's", async () => 
     }
     if (url.includes("/league/v4/entries/by-puuid/")) return Response.json([]);
     if (url.includes("/summoner/v4/summoners/by-puuid/")) return Response.json({ profileIconId: 7188 });
-    if (url.includes("/accounts/by-riot-id/")) {
-      const parts = new URL(url).pathname.split("/");
-      return Response.json({ puuid: "puuid-x", gameName: decodeURIComponent(parts.at(-2)), tagLine: decodeURIComponent(parts.at(-1)) });
+    if (url.includes("/accounts/by-puuid/")) {
+      return Response.json(accountForPuuidUrl(url));
     }
     return Response.json([]);
   };
@@ -631,9 +632,8 @@ test("keeps the version it had when Data Dragon cannot be reached", async () => 
     if (url.includes("ddragon.leagueoflegends.com")) return new Response("nope", { status: 500 });
     if (url.includes("/league/v4/entries/by-puuid/")) return Response.json([]);
     if (url.includes("/summoner/v4/summoners/by-puuid/")) return Response.json({ profileIconId: 1 });
-    if (url.includes("/accounts/by-riot-id/")) {
-      const parts = new URL(url).pathname.split("/");
-      return Response.json({ puuid: "puuid-x", gameName: decodeURIComponent(parts.at(-2)), tagLine: decodeURIComponent(parts.at(-1)) });
+    if (url.includes("/accounts/by-puuid/")) {
+      return Response.json(accountForPuuidUrl(url));
     }
     return Response.json([]);
   };

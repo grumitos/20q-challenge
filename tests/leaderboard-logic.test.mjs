@@ -17,6 +17,7 @@ import {
   shouldUseCache,
   wilsonLowerBound,
 } from "../lib/leaderboard.ts";
+import { nextPeruHourUtc, peruDateParts } from "../lib/peru-time.ts";
 
 const rosterEntry = (championId, teamId, over = {}) => ({
   championId,
@@ -142,6 +143,14 @@ test("keeps Papipu's respawn timer synchronized to 23:00–07:00 Peru time", () 
   assert.equal(papipuRespawnSeconds(Date.UTC(2026, 6, 21, 11, 0, 0)), 3_600);
   assert.equal(papipuRespawnSeconds(Date.UTC(2026, 6, 21, 11, 59, 59)), 1);
   assert.equal(papipuRespawnSeconds(Date.UTC(2026, 6, 21, 12, 0, 0)), null);
+});
+
+test("formats and schedules clocks in Lima regardless of the host timezone", () => {
+  assert.deepEqual(peruDateParts(Date.UTC(2026, 6, 21, 4, 30)), {
+    year: 2026, month: 7, day: 20, hour: 23, minute: 30,
+  });
+  assert.equal(nextPeruHourUtc(Date.UTC(2026, 6, 21, 8, 0), 4), Date.UTC(2026, 6, 21, 9));
+  assert.equal(nextPeruHourUtc(Date.UTC(2026, 6, 21, 9, 0), 4), Date.UTC(2026, 6, 22, 9));
 });
 
 test("uses a cached snapshot only while it is inside the sixty-second window", () => {
