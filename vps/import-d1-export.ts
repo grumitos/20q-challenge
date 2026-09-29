@@ -5,7 +5,7 @@
  * only then moves that file into the live SQLite path. The running services
  * keep using the same schema migrations on normal startup.
  */
-import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rename } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Database } from "bun:sqlite";
 
@@ -33,13 +33,16 @@ const migrationCount = (await readdir(new URL("../drizzle/", import.meta.url)))
   .length;
 await mkdir(dirname(targetPath), { recursive: true });
 
+// Existence is probed with access(), never rm(): the old probe deleted the
+// live database before refusing to overwrite it.
 for (const path of [targetPath, temporaryPath]) {
   try {
-    await rm(path, { force: false });
-    throw new Error(`Refusing to overwrite existing database file: ${path}`);
+    await access(path);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+    throw error;
   }
+  throw new Error(`Refusing to overwrite existing database file: ${path}`);
 }
 
 const database = new Database(temporaryPath, { create: true });
