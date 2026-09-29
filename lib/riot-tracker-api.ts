@@ -1,5 +1,40 @@
 import { isRemakeMatch, normalizeSoloQueueEntry, type Division, type RankTier } from "./leaderboard.ts";
-import { createRiotRequester, TRACKER_REQUEST_BUDGET, type RiotFetch } from "./riot-request.ts";
+import {
+  createRiotRequester,
+  RiotRequestBudgetExceeded,
+  RiotRequestTimeout,
+  TRACKER_REQUEST_BUDGET,
+  type RiotFetch,
+} from "./riot-request.ts";
+
+export type RiotTrackerErrorKind =
+  | "unauthorized"
+  | "rate_limited"
+  | "unavailable"
+  | "request_failed"
+  | "invalid_response";
+
+export class RiotTrackerError extends Error {
+  readonly kind: RiotTrackerErrorKind;
+
+  constructor(kind: RiotTrackerErrorKind, message: string) {
+    super(message);
+    this.name = "RiotTrackerError";
+    this.kind = kind;
+  }
+}
+
+/**
+ * Failures that end the whole run rather than one player's poll. A rejected or
+ * throttled key fails every other request the same way, and polling on through
+ * a 429 is what Riot penalises; an exhausted budget is the run's own ceiling.
+ * Anything else — a 5xx, a 404, a malformed body, a timeout — is about the one
+ * request that hit it.
+ */
+export function isRunFatalRiotError(error: unknown) {
+  return error instanceof RiotRequestBudgetExceeded ||
+    (error instanceof RiotTrackerError && (error.kind === "unauthorized" || error.kind === "rate_limited"));
+}
 
 export type TrackerRank = {
   tier: RankTier;
@@ -54,8 +89,11 @@ function object(value: unknown): Record<string, unknown> | null {
 async function json(response: Response) {
   try {
     return await response.json() as unknown;
-  } catch {
-    throw new Error("Riot returned invalid JSON.");
+  } catch (error) {
+    // The request's deadline also cuts off a body that stalls mid-read; that is
+    // a timeout, not a malformed payload.
+    if (error instanceof Error && error.name === "TimeoutError") throw new RiotRequestTimeout();
+    throw new RiotTrackerError("invalid_response", "Riot returned invalid JSON.");
   }
 }
 
@@ -107,6 +145,8 @@ export function createRiotTrackerApi(options: {
   /** Only set by tests that assert on exact sleeps and need the 20-per-second
       pacing out of the way. Production always wants the default. */
   minIntervalMs?: number;
+  /** Test-only, like `minIntervalMs`: lets a hung request fail in milliseconds. */
+  timeoutMs?: number;
 }) {
   let lastBlockedUntil = 0;
   const rawFetch = options.fetchImpl ?? fetch;
@@ -115,6 +155,7 @@ export function createRiotTrackerApi(options: {
     maxRequests: options.maxRequests ?? TRACKER_REQUEST_BUDGET,
     sleep: options.sleep,
     minIntervalMs: options.minIntervalMs,
+    timeoutMs: options.timeoutMs,
     fetchImpl: async (input, init) => {
       const response = await rawFetch(input, init);
       if (response.status === 429) {
@@ -130,11 +171,13 @@ export function createRiotTrackerApi(options: {
       await discardResponseBody(response);
       return null;
     }
-    let failure: Error | null = null;
-    if (response.status === 401 || response.status === 403) failure = new Error("Riot authentication failed.");
-    else if (response.status === 429) failure = new Error("Riot rate limit retry budget exhausted.");
-    else if (response.status >= 500) failure = new Error("Riot is temporarily unavailable.");
-    else if (!response.ok) failure = new Error(`Riot request failed (${response.status}).`);
+    let failure: RiotTrackerError | null = null;
+    if (response.status === 401 || response.status === 403) failure = new RiotTrackerError("unauthorized", "Riot authentication failed.");
+    // Either the retries ran out or Riot asked for longer than a run may wait;
+    // `lastBlockedUntil` already holds the window either way.
+    else if (response.status === 429) failure = new RiotTrackerError("rate_limited", "Riot rate limit reached.");
+    else if (response.status >= 500) failure = new RiotTrackerError("unavailable", "Riot is temporarily unavailable.");
+    else if (!response.ok) failure = new RiotTrackerError("request_failed", `Riot request failed (${response.status}).`);
     if (failure) {
       await discardResponseBody(response);
       throw failure;
@@ -230,7 +273,7 @@ export function createRiotTrackerApi(options: {
         `https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?queue=420&start=0&count=${safeCount}`,
       );
       if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string" && entry.length > 0)) {
-        throw new Error("Riot returned invalid match IDs.");
+        throw new RiotTrackerError("invalid_response", "Riot returned invalid match IDs.");
       }
       return value;
     },

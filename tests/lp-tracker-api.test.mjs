@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createRiotTrackerApi, findTrackedParticipant } from "../lib/riot-tracker-api.ts";
+import { createRiotTrackerApi, findTrackedParticipant, isRunFatalRiotError, RiotTrackerError } from "../lib/riot-tracker-api.ts";
+import { RiotRequestTimeout } from "../lib/riot-request.ts";
 
 function response(status, body, headers = {}) {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -144,4 +145,75 @@ test("shares one bounded requester and exposes rate-limit blocking", async () =>
   assert.deepEqual(sleeps, [2_000]);
   assert.equal(api.requestsUsed, 2);
   assert.equal(api.lastBlockedUntil > Date.now(), true);
+});
+
+test("surfaces a long Retry-After as a rate limit that blocks the lane for the whole window", async () => {
+  // Sleeping thirty seconds inside a tick outlasted the request deadline and
+  // most of the run. The 429 comes straight back instead, the run stops, and
+  // `lastBlockedUntil` is what keeps the next ticks off Riot until it clears.
+  const sleeps = [];
+  const api = createRiotTrackerApi({
+    apiKey: "secret",
+    minIntervalMs: 0,
+    sleep: async (milliseconds) => sleeps.push(milliseconds),
+    fetchImpl: async () => response(429, {}, { "Retry-After": "30" }),
+  });
+
+  const before = Date.now();
+  await assert.rejects(api.fetchSoloQueueEntryByPuuid("p"), (error) => {
+    assert.ok(error instanceof RiotTrackerError);
+    assert.equal(error.kind, "rate_limited");
+    assert.equal(isRunFatalRiotError(error), true, "a throttled key must stop the run");
+    return true;
+  });
+  assert.deepEqual(sleeps, []);
+  assert.equal(api.requestsUsed, 1);
+  assert.ok(api.lastBlockedUntil >= before + 30_000);
+});
+
+test("a body that stalls past the deadline is a timeout, not a malformed payload", async () => {
+  const api = createRiotTrackerApi({
+    apiKey: "secret",
+    minIntervalMs: 0,
+    timeoutMs: 20,
+    fetchImpl: async (_input, init) => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("[{\"queueType\":"));
+        // Holds the event loop open the way a live socket would, until the
+        // request's own deadline cuts the body off.
+        const timer = setTimeout(() => controller.close(), 10_000);
+        init.signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          controller.error(init.signal.reason);
+        }, { once: true });
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }),
+  });
+
+  await assert.rejects(api.fetchSoloQueueEntryByPuuid("p"), (error) => {
+    assert.ok(error instanceof RiotRequestTimeout);
+    assert.equal(isRunFatalRiotError(error), false, "a timeout is about one request, not the run");
+    return true;
+  });
+});
+
+test("tells failures about one player apart from failures about the key", async () => {
+  const statuses = [500, 404, 400, 401, 403];
+  const api = createRiotTrackerApi({
+    apiKey: "secret",
+    minIntervalMs: 0,
+    fetchImpl: async () => response(statuses.shift(), {}),
+  });
+
+  const outcomes = [];
+  for (let index = 0; index < 5; index += 1) {
+    await api.fetchSoloQueueEntryByPuuid("p").catch((error) => outcomes.push([error.kind, isRunFatalRiotError(error)]));
+  }
+  assert.deepEqual(outcomes, [
+    ["unavailable", false],
+    ["request_failed", false],
+    ["request_failed", false],
+    ["unauthorized", true],
+    ["unauthorized", true],
+  ]);
 });

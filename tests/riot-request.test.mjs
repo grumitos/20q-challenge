@@ -3,12 +3,27 @@ import test from "node:test";
 import {
   ANALYTICS_REQUEST_BUDGET,
   createRiotRequester,
+  RIOT_MAX_RETRY_AFTER_MS,
   RIOT_MIN_REQUEST_INTERVAL_MS,
+  RIOT_REQUEST_TIMEOUT_MS,
   RIOT_WINDOW_REQUESTS,
   RiotRequestBudgetExceeded,
+  RiotRequestTimeout,
   TRACKER_REQUEST_BUDGET,
   WORKER_SUBREQUEST_LIMIT,
 } from "../lib/riot-request.ts";
+
+/** A reply that would arrive in ten seconds unless the request is aborted
+    first — the shape of a connection Riot accepted but is not answering. */
+function slowReply(init, body = { ok: true }) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(Response.json(body)), 10_000);
+    init.signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(init.signal.reason);
+    }, { once: true });
+  });
+}
 
 test("retries 429 responses after the exact Retry-After window", async () => {
   const sleeps = [];
@@ -39,6 +54,67 @@ test("retries 429 responses after the exact Retry-After window", async () => {
   assert.deepEqual(sleeps, [2_500]);
   assert.equal(requester.budget.requestsUsed, 2);
   assert.equal(rateLimitedResponse.bodyUsed, true);
+});
+
+test("hands back a 429 whose Retry-After outlasts the cap instead of sleeping through it", async () => {
+  // Sleeping a long Retry-After held the run past its own deadline. The caller
+  // gets the 429 and blocks its lane for the window instead.
+  const sleeps = [];
+  const requester = createRiotRequester({
+    apiKey: "secret",
+    maxRequests: 3,
+    minIntervalMs: 0,
+    sleep: async (milliseconds) => sleeps.push(milliseconds),
+    fetchImpl: async () => Response.json({}, {
+      status: 429,
+      headers: { "Retry-After": String(RIOT_MAX_RETRY_AFTER_MS / 1_000 + 25) },
+    }),
+  });
+
+  const response = await requester.fetch("https://la2.api.riotgames.com/test");
+  assert.equal(response.status, 429);
+  assert.deepEqual(sleeps, [], "a Retry-After over the cap must not be slept");
+  assert.equal(requester.budget.requestsUsed, 1, "and must not be retried");
+});
+
+test("gives up on a request Riot accepted but never answers", async () => {
+  // Without a deadline the request waited on the OS, and one hung connection
+  // could spend the whole 90 seconds systemd gives a tracker run.
+  assert.ok(RIOT_REQUEST_TIMEOUT_MS < 90_000 / 5, "several attempts must fit in one run");
+  let signal;
+  const requester = createRiotRequester({
+    apiKey: "secret",
+    maxRequests: 1,
+    minIntervalMs: 0,
+    timeoutMs: 20,
+    fetchImpl: (_input, init) => {
+      signal = init.signal;
+      return slowReply(init);
+    },
+  });
+
+  const startedAt = Date.now();
+  await assert.rejects(requester.fetch("https://la2.api.riotgames.com/test"), RiotRequestTimeout);
+  assert.ok(Date.now() - startedAt < 5_000, "the deadline, not the reply, must end the wait");
+  assert.equal(signal.aborted, true);
+});
+
+test("keeps a caller's own abort signal working alongside the deadline", async () => {
+  const controller = new AbortController();
+  const requester = createRiotRequester({
+    apiKey: "secret",
+    maxRequests: 1,
+    minIntervalMs: 0,
+    fetchImpl: (_input, init) => {
+      queueMicrotask(() => controller.abort(new Error("caller gave up")));
+      return slowReply(init);
+    },
+  });
+
+  await assert.rejects(
+    requester.fetch("https://la2.api.riotgames.com/test", { signal: controller.signal }),
+    /caller gave up/,
+  );
 });
 
 test("stops before exceeding the per-execution request budget", async () => {
