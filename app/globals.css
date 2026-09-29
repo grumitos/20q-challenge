@@ -68,6 +68,8 @@
   --gutter: clamp(16px, 4.5vw, 64px);
   --topbar-h: 60px;
   --ease: cubic-bezier(.22, 1, .36, 1);
+  /* Symmetric, for a colour that fades in and out rather than lands at once. */
+  --ease-soft: cubic-bezier(.4, 0, .2, 1);
   --fast: 150ms;
 
   color-scheme: dark;
@@ -285,19 +287,23 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .pcard__splash {
   width: 100%; height: 100%;
   object-fit: cover; object-position: 50% 25%;
-  /* Muted at rest; the card brings its art back to full colour on hover. */
-  filter: grayscale(.45) saturate(.8) brightness(.58);
+  /* Muted at rest; the card brings its art back to full colour on hover.
+     Every rule below spells out the same four functions, in the same sequence:
+     a filter list is only interpolated when both ends have the same functions,
+     and any other pair changes in one step, which is how this used to snap. */
+  filter: grayscale(.45) sepia(0) saturate(.8) brightness(.58);
   transform: scale(1.01);
-  transition: transform .8s var(--ease), filter .8s var(--ease);
+  transition: transform .8s var(--ease), filter .7s var(--ease-soft);
+  will-change: filter, transform;
 }
 /* Hover only where it is real: a tap would leave a touch screen's :hover stuck
    on one card while another is the one on screen. Touch screens mark that
    one instead (`is-featured`, see the podium). */
 @media (hover: hover) {
-  .pcard:hover .pcard__splash { transform: scale(1.04); filter: saturate(1) brightness(.7); }
+  .pcard:hover .pcard__splash { transform: scale(1.04); filter: grayscale(0) sepia(0) saturate(1) brightness(.7); }
 }
-.pcard.is-featured .pcard__splash { transform: scale(1.04); filter: saturate(1) brightness(.7); }
-html.is-invaded .pcard__splash { filter: sepia(.35) saturate(.8) brightness(.58); }
+.pcard.is-featured .pcard__splash { transform: scale(1.04); filter: grayscale(0) sepia(0) saturate(1) brightness(.7); }
+html.is-invaded .pcard__splash { filter: grayscale(0) sepia(.35) saturate(.8) brightness(.58); }
 
 .place-chip {
   --medal: var(--medal-1);

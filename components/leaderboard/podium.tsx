@@ -27,6 +27,9 @@ import {
 
 export const PODIUM_CHAMPION_SLOTS = 5;
 
+/** How much more of itself another card needs on screen to take the featured colour. */
+const FEATURE_SWITCH_MARGIN = 1.15;
+
 type PodiumProps = {
   standings: readonly PlayerSnapshot[];
   version: string;
@@ -47,20 +50,30 @@ function useFeaturedCard(grid: RefObject<HTMLDivElement | null>, active: boolean
     const container = grid.current;
     if (!active || !container || !window.matchMedia("(hover: none)").matches) return;
     let frame = 0;
+    let current: string | null = null;
     const update = () => {
       frame = 0;
       const top = document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0;
-      let best: string | null = null;
-      let bestArea = 0;
+      const areas = new Map<string, number>();
       for (const card of container.querySelectorAll<HTMLElement>(".pcard[data-ranking-id]")) {
         const rect = card.getBoundingClientRect();
         const visibleHeight = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, top);
-        const area = Math.max(0, visibleHeight) * rect.width;
+        areas.set(card.dataset.rankingId ?? "", Math.max(0, visibleHeight) * rect.width);
+      }
+      let best: string | null = null;
+      let bestArea = 0;
+      for (const [id, area] of areas) {
         if (area > bestArea) {
           bestArea = area;
-          best = card.dataset.rankingId ?? null;
+          best = id;
         }
       }
+      // The card already featured keeps it until another clearly has more on
+      // screen, so two cards at about the same height do not trade the colour
+      // back and forth while the page is nudged.
+      const currentArea = current === null ? 0 : areas.get(current) ?? 0;
+      if (currentArea > 0 && bestArea < currentArea * FEATURE_SWITCH_MARGIN) best = current;
+      current = best;
       setFeatured(best);
     };
     const schedule = () => {
