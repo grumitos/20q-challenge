@@ -259,7 +259,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .unreachable button:hover, .duos__more:hover { background: var(--raised); }
 
 /* ── Podium ─────────────────────────────── */
-.podium__grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 16px; align-items: stretch; }
+.podium__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 
 /* The dot grid is the card's surface, as it is the row detail's; the rank plate
    stays a plain well so the number on it reads first. */
