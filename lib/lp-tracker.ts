@@ -558,6 +558,9 @@ export async function runTemporalLpTracker(options: {
       own — a 5xx, a 404, a malformed body, a timeout. A skipped player is left
       exactly as it was, so the next tick simply polls them again. */
   const playerFailures: Array<{ playerId: string; error: unknown }> = [];
+  /** Match details that failed on their own. The match stays unknown, so the
+      next tick that lists it asks for it again. */
+  const matchFailures: Array<{ matchId: string; error: unknown }> = [];
   /** A failure about the key or the run rather than one player: it aborts the
       tick, and once it is set the other workers stop starting new players. */
   let runFailure: unknown = null;
@@ -803,8 +806,20 @@ export async function runTemporalLpTracker(options: {
     const requestedIds = [...new Set(matchIdsByRecency)]
       .filter((matchId) => !knownMatchIds.has(matchId))
       .slice(0, Math.min(matchDetailsPerRun, api.requestsRemaining));
-    const matches = (await mapWithConcurrency(requestedIds, 3, (matchId) => api.fetchMatchById(matchId)))
-      .filter((match): match is TrackerMatch => match !== null);
+    const matches = (await mapWithConcurrency(requestedIds, 3, async (matchId) => {
+      if (runFailure !== null) return null;
+      try {
+        return await api.fetchMatchById(matchId);
+      } catch (error) {
+        // The same split as the polls: a key-wide failure ends the tick, while
+        // anything about this one match only leaves it for a later tick. The
+        // cheap half above is already written either way.
+        if (isRunFatalRiotError(error)) runFailure ??= error;
+        else matchFailures.push({ matchId, error });
+        return null;
+      }
+    })).filter((match): match is TrackerMatch => match !== null);
+    if (runFailure !== null) throw runFailure;
     await renewLease();
 
     const allSessions: TrackedGameSession[] = [];
@@ -992,6 +1007,7 @@ export async function runTemporalLpTracker(options: {
       candidatesUpdated,
       evidenceWritten,
       playerErrors: playerFailures.length,
+      matchErrors: matchFailures.length,
       durationMs: Date.now() - startedAt,
     });
   } catch (error) {
@@ -1024,6 +1040,13 @@ export async function runTemporalLpTracker(options: {
       ...(playerFailures.length > 0 ? {
         playerErrorDetails: playerFailures.map(({ playerId, error }) => ({
           playerId,
+          error: error instanceof Error ? error.message : String(error),
+        })),
+      } : {}),
+      matchErrors: matchFailures.length,
+      ...(matchFailures.length > 0 ? {
+        matchErrorDetails: matchFailures.map(({ matchId, error }) => ({
+          matchId,
           error: error instanceof Error ? error.message : String(error),
         })),
       } : {}),

@@ -9,12 +9,18 @@ export type ChampionIdentity = { id: string; name: string };
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+/** Data Dragon is a CDN that answers in well under a second; this bounds the
+    rare request that hangs instead, headers and body alike, so it cannot spend
+    a tracker tick's whole 90 seconds. */
+export const DATA_DRAGON_TIMEOUT_MS = 8_000;
+
 let cached: { version: string; byKey: Map<string, ChampionIdentity> } | null = null;
 let inFlight: Promise<Map<string, ChampionIdentity>> | null = null;
 
-async function loadCatalog(version: string, fetchImpl: FetchLike): Promise<Map<string, ChampionIdentity>> {
+async function loadCatalog(version: string, fetchImpl: FetchLike, timeoutMs: number): Promise<Map<string, ChampionIdentity>> {
   const response = await fetchImpl(
     `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`,
+    { signal: AbortSignal.timeout(timeoutMs) },
   );
   if (!response.ok) throw new Error(`Data Dragon champion list failed: ${response.status}`);
   const payload: unknown = await response.json();
@@ -39,10 +45,12 @@ async function loadCatalog(version: string, fetchImpl: FetchLike): Promise<Map<s
 export async function championsByNumericKey(
   version: string,
   fetchImpl: FetchLike = fetch,
+  /** Test-only: lets a hung request fail in milliseconds. */
+  timeoutMs = DATA_DRAGON_TIMEOUT_MS,
 ): Promise<Map<string, ChampionIdentity>> {
   if (cached?.version === version) return cached.byKey;
   if (!inFlight) {
-    inFlight = loadCatalog(version, fetchImpl)
+    inFlight = loadCatalog(version, fetchImpl, timeoutMs)
       .then((byKey) => {
         cached = { version, byKey };
         return byKey;
