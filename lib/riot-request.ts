@@ -38,6 +38,26 @@ export const WORKER_SUBREQUEST_LIMIT = 50;
     can clear sixty a second. */
 export const RIOT_MIN_REQUEST_INTERVAL_MS = 50;
 
+/** One attempt's ceiling. The VPS timer gives a whole run 90 seconds
+    (`TimeoutStartSec`), and a connection Riot accepts but never answers used to
+    wait on the OS instead, so one hung request could spend all of it. Riot
+    answers in well under a second when it answers at all. */
+export const RIOT_REQUEST_TIMEOUT_MS = 8_000;
+
+/** The longest Retry-After worth sleeping through inside a run. A longer one is
+    handed back as the 429 it is: sleeping it would outlast the request timeout
+    and much of the run, and the tracker already blocks its lane for the full
+    window (`blockLaneUntil`), which keeps the next ticks off Riot without
+    anybody waiting. */
+export const RIOT_MAX_RETRY_AFTER_MS = 5_000;
+
+export class RiotRequestTimeout extends Error {
+  constructor() {
+    super("Riot request timed out.");
+    this.name = "RiotRequestTimeout";
+  }
+}
+
 export class RiotRequestBudgetExceeded extends Error {
   readonly limit: number;
 
@@ -94,6 +114,10 @@ export function createRiotRequester(options: {
   /** Floor between two request starts. Defaults to Riot's 20-per-second cap. */
   minIntervalMs?: number;
   now?: () => number;
+  /** Per attempt, headers and body both. Defaults to `RIOT_REQUEST_TIMEOUT_MS`. */
+  timeoutMs?: number;
+  /** Defaults to `RIOT_MAX_RETRY_AFTER_MS`. */
+  maxRetryAfterMs?: number;
 }) {
   const apiKey = options.apiKey.trim();
   if (!apiKey) throw new TypeError("Riot API key is required.");
@@ -103,6 +127,8 @@ export function createRiotRequester(options: {
   const maxRateLimitRetries = options.maxRateLimitRetries ?? 2;
   const minIntervalMs = options.minIntervalMs ?? RIOT_MIN_REQUEST_INTERVAL_MS;
   const now = options.now ?? Date.now;
+  const timeoutMs = options.timeoutMs ?? RIOT_REQUEST_TIMEOUT_MS;
+  const maxRetryAfterMs = options.maxRetryAfterMs ?? RIOT_MAX_RETRY_AFTER_MS;
 
   // Claimed before awaiting, so concurrent callers queue behind each other
   // instead of all reading the same "next free" instant and firing together.
@@ -124,11 +150,26 @@ export function createRiotRequester(options: {
         await claimSlot();
         const headers = new Headers(init?.headers);
         headers.set("X-Riot-Token", apiKey);
-        const response = await fetchImpl(input, { ...init, headers });
+        // The signal stays attached to the response, so a body that stalls
+        // after the headers arrive is cut off by the same deadline.
+        const timeout = AbortSignal.timeout(timeoutMs);
+        let response: Response;
+        try {
+          response = await fetchImpl(input, {
+            ...init,
+            headers,
+            signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
+          });
+        } catch (error) {
+          if (timeout.aborted) throw new RiotRequestTimeout();
+          throw error;
+        }
         if (response.status !== 429 || rateLimitRetries >= maxRateLimitRetries) return response;
+        const retryAfterMs = retryAfterMilliseconds(response);
+        if (retryAfterMs > maxRetryAfterMs) return response;
         rateLimitRetries += 1;
         await discardResponseBody(response);
-        await sleep(retryAfterMilliseconds(response));
+        await sleep(retryAfterMs);
       }
     },
   };

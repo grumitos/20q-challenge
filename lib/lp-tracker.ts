@@ -1,7 +1,7 @@
 import { LP_RECONCILIATION_WINDOW_MS, reconcileRankedMatch } from "./lp-reconciliation.ts";
 import { calculateGoldProgress, calculateWinRate, type Division, type RankTier } from "./leaderboard.ts";
 import type { ActiveSoloQueueGame, TrackerMatch } from "./riot-tracker-api.ts";
-import { createRiotTrackerApi } from "./riot-tracker-api.ts";
+import { createRiotTrackerApi, isRunFatalRiotError, RiotTrackerError } from "./riot-tracker-api.ts";
 import { mapWithConcurrency, TRACKER_REQUEST_BUDGET, type RiotFetch } from "./riot-request.ts";
 import type { LpTrackerStore, TrackerStoreBatchOperation } from "../db/lp-tracker-store.ts";
 import { normalizeSoloQueueMatch, RIOT_PLAYERS } from "./riot-client.ts";
@@ -16,6 +16,8 @@ export type TrackerPlayerState = {
   gameName: string;
   tagLine: string;
   recentMatchId: string | null;
+  /** When a tick last polled this player (`player_sync_state.last_tracker_at`). */
+  lastTrackerAt?: number | null;
 };
 
 export type TrackerObservation = {
@@ -188,8 +190,13 @@ const PROJECTION_GAP_COOLDOWN_MS = 60_000;
     ranking the whole retained history on every tick. */
 const OBSERVATION_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
-/** Hourly. The sweep is cheap but pointless to run against 9 new rows. */
-const OBSERVATION_SWEEP_EVERY_TICKS = 60;
+/** Hourly. The sweep is cheap but pointless to run against 9 new rows.
+    Measured by elapsed time, not by the clock: the sweep claims its own lane
+    for an hour and never releases it, so the first tick after that hour runs
+    the next one. `minute % 60 === 0` needed a tick inside one exact minute,
+    which 60–70 s ticks miss about one hour in twelve. */
+const OBSERVATION_SWEEP_INTERVAL_MS = 60 * 60_000;
+const OBSERVATION_SWEEP_LANE = "lp-tracker-observation-sweep";
 
 function participantResult(match: TrackerMatch, puuid: string) {
   return match.participants.find((participant) => participant.puuid === puuid)?.won;
@@ -216,6 +223,8 @@ export function recentMatchPollCount(
   playerIndex: number,
   rosterSize: number,
   now: number,
+  /** This player's previous poll, when known (`TrackerPlayerState.lastTrackerAt`). */
+  previousPollAt: number | null = null,
 ) {
   const hasLiveOrUnresolvedWork = sessions.some((session) =>
     session.playerId === playerId &&
@@ -226,12 +235,25 @@ export function recentMatchPollCount(
       candidate.state !== "unavailable");
   if (hasLiveOrUnresolvedWork || rosterSize <= 1) return RECENT_MATCH_IDS_FULL_POLL_COUNT;
 
-  // Idle players rotate through the full three-id window. Everyone else skips
-  // Match-V5 history on this tick; rank and spectator are still polled every
-  // minute, and the next rotation covers the idle player's recent games.
-  return Math.floor(now / 60_000) % rosterSize === playerIndex
-    ? RECENT_MATCH_IDS_FULL_POLL_COUNT
-    : 0;
+  // Idle players rotate through the full three-id window, one minute slot
+  // each. Everyone else skips Match-V5 history on this tick; rank and
+  // spectator are still polled every minute, and the next rotation covers the
+  // idle player's recent games.
+  //
+  // The timer's ticks drift 60–70 s apart, so one tick can land two minutes
+  // after the previous and the slot in between used to belong to nobody —
+  // that player simply waited another full rotation. Every slot since this
+  // player's previous poll is honoured instead, so each slot is served by the
+  // first tick at or after it. Unknown history covers the current slot only.
+  const slot = Math.floor(now / 60_000);
+  const previousSlot = previousPollAt === null ? slot - 1 : Math.floor(previousPollAt / 60_000);
+  const slotsDue = Math.min(slot - previousSlot, rosterSize);
+  for (let offset = 0; offset < slotsDue; offset += 1) {
+    if (((slot - offset) % rosterSize + rosterSize) % rosterSize === playerIndex) {
+      return RECENT_MATCH_IDS_FULL_POLL_COUNT;
+    }
+  }
+  return 0;
 }
 
 async function persistStoreBatch(
@@ -532,6 +554,29 @@ export async function runTemporalLpTracker(options: {
   let evidenceWritten = 0;
   let outcome = "incomplete";
   let failure: string | null = null;
+  /** Players skipped this tick because one of their requests failed on its
+      own — a 5xx, a 404, a malformed body, a timeout. A skipped player is left
+      exactly as it was, so the next tick simply polls them again. */
+  const playerFailures: Array<{ playerId: string; error: unknown }> = [];
+  /** A failure about the key or the run rather than one player: it aborts the
+      tick, and once it is set the other workers stop starting new players. */
+  let runFailure: unknown = null;
+  /** Sorts one player's settled requests. True when every request succeeded
+      and the player can be used this tick. */
+  const settlePlayer = (playerId: string, results: readonly PromiseSettledResult<unknown>[]) => {
+    const errors = results.flatMap((result) => result.status === "rejected" ? [result.reason as unknown] : []);
+    if (errors.length === 0) return true;
+    const fatal = errors.find(isRunFatalRiotError);
+    if (fatal !== undefined) runFailure ??= fatal;
+    else playerFailures.push({ playerId, error: errors[0] });
+    return false;
+  };
+  /** A key-wide failure aborts the tick as before; so does a tick in which
+      every player failed, which is an outage and must still read as one. */
+  const throwIfTickFailed = (playersPolled: number) => {
+    if (runFailure !== null) throw runFailure;
+    if (playersPolled === 0 && playerFailures.length > 0) throw playerFailures[0]!.error;
+  };
   /** Pushes the lane's expiry out, so the short TTL bounds how long a *dead* run
       holds it without bounding how long a live one may take. Best-effort: losing
       a renewal costs a skipped tick, and throwing here would cost the run. */
@@ -585,17 +630,21 @@ export async function runTemporalLpTracker(options: {
       const snapshot = { ...state.snapshot, players };
       await options.store.bootstrapPlayerSyncState(snapshot, options.now);
 
-      const bootstrapped = await mapWithConcurrency(
+      const bootstrapped = (await mapWithConcurrency(
         players.filter((player): player is typeof player & { puuid: string } => Boolean(player.puuid)),
         3,
         async (player) => {
-          const [rank, matchIds] = await Promise.all([
+          if (runFailure !== null) return null;
+          const [rank, matchIds] = await Promise.allSettled([
             api.fetchSoloQueueEntryByPuuid(player.puuid),
             api.fetchRecentSoloQueueMatchIds(player.puuid, 1),
           ]);
-          return { player, rank, matchId: matchIds[0] ?? null };
+          if (!settlePlayer(player.id, [rank, matchIds]) ||
+              rank.status === "rejected" || matchIds.status === "rejected") return null;
+          return { player, rank: rank.value, matchId: matchIds.value[0] ?? null };
         },
-      );
+      )).flatMap((entry) => entry ? [entry] : []);
+      throwIfTickFailed(bootstrapped.length);
       const observations = bootstrapped.flatMap(({ player, rank }) => rank ? [{
         id: `${player.id}:${options.now}`,
         playerId: player.id,
@@ -619,13 +668,15 @@ export async function runTemporalLpTracker(options: {
         status: "bootstrapped" as const,
         requestsUsed: api.requestsUsed,
         observationsInserted: observations.length,
+        playerErrors: playerFailures.length,
         durationMs: Date.now() - startedAt,
       });
     }
 
     const tracked = state.players;
 
-    const polled = await mapWithConcurrency(tracked, 3, async (player, playerIndex) => {
+    const polled = (await mapWithConcurrency(tracked, 3, async (player, playerIndex) => {
+      if (runFailure !== null) return null;
       const playerSessions = state.sessions.filter((session) => session.playerId === player.playerId);
       const playerCandidates = state.candidates.filter((candidate) => candidate.playerId === player.playerId);
       const recentMatchPriority = playerSessions.some((session) =>
@@ -639,16 +690,22 @@ export async function runTemporalLpTracker(options: {
         playerIndex,
         tracked.length,
         options.now,
+        player.lastTrackerAt ?? null,
       );
-      const [rank, activeGame, matchIds] = await Promise.all([
+      const [rank, activeGame, matchIds] = await Promise.allSettled([
         api.fetchSoloQueueEntryByPuuid(player.puuid),
         api.fetchActiveSoloQueueGameByPuuid(player.puuid, player),
         recentMatchCount > 0
           ? api.fetchRecentSoloQueueMatchIds(player.puuid, recentMatchCount)
           : Promise.resolve([]),
       ]);
-      return { player, rank, activeGame, matchIds, recentMatchPriority };
-    });
+      // All or nothing per player: a spectator answer that never arrived must
+      // not be read as "no game", which would close a live session.
+      if (!settlePlayer(player.playerId, [rank, activeGame, matchIds]) ||
+          rank.status === "rejected" || activeGame.status === "rejected" || matchIds.status === "rejected") return null;
+      return { player, rank: rank.value, activeGame: activeGame.value, matchIds: matchIds.value, recentMatchPriority };
+    })).flatMap((entry) => entry ? [entry] : []);
+    throwIfTickFailed(polled.length);
     const observations = polled.flatMap(({ player, rank }) => rank ? [{
       id: `${player.playerId}:${options.now}`,
       playerId: player.playerId,
@@ -871,16 +928,16 @@ export async function runTemporalLpTracker(options: {
     // Retention. `loadTrackerState` keeps at most 32 observations per player
     // anyway, so anything past the reconciliation window is unreachable data
     // that the load query still has to rank on every single run.
-    if (Math.floor(options.now / 60_000) % OBSERVATION_SWEEP_EVERY_TICKS === 0) {
-      try {
+    try {
+      if (await options.store.acquireLease(OBSERVATION_SWEEP_LANE, owner, options.now, OBSERVATION_SWEEP_INTERVAL_MS)) {
         await options.store.pruneRankObservations(options.now - OBSERVATION_RETENTION_MS);
-      } catch (error) {
-        console.log(JSON.stringify({
-          event: "lp_tracker_prune_failed",
-          runId: owner,
-          error: error instanceof Error ? error.message : String(error),
-        }));
       }
+    } catch (error) {
+      console.log(JSON.stringify({
+        event: "lp_tracker_prune_failed",
+        runId: owner,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
 
     // `bootstrapPlayerSyncState` only runs on a cold start and skips anyone
@@ -934,6 +991,7 @@ export async function runTemporalLpTracker(options: {
       sessionsUpdated,
       candidatesUpdated,
       evidenceWritten,
+      playerErrors: playerFailures.length,
       durationMs: Date.now() - startedAt,
     });
   } catch (error) {
@@ -942,7 +1000,9 @@ export async function runTemporalLpTracker(options: {
     // this log line the only place a real failure — an unapplied migration, a
     // D1 error — can be told apart from a quiet Riot outage.
     failure = error instanceof Error ? error.message : String(error);
-    outcome = "failed";
+    // Still thrown like any failure; the label is what tells a throttled key,
+    // whose lane is now blocked until `blockedUntil`, apart from an outage.
+    outcome = error instanceof RiotTrackerError && error.kind === "rate_limited" ? "rate_limited" : "failed";
     throw error;
   } finally {
     if (api.lastBlockedUntil > options.now) await options.store.blockLaneUntil(leaseName, api.lastBlockedUntil);
@@ -960,6 +1020,14 @@ export async function runTemporalLpTracker(options: {
       sessionsUpdated,
       candidatesUpdated,
       evidenceWritten,
+      playerErrors: playerFailures.length,
+      ...(playerFailures.length > 0 ? {
+        playerErrorDetails: playerFailures.map(({ playerId, error }) => ({
+          playerId,
+          error: error instanceof Error ? error.message : String(error),
+        })),
+      } : {}),
+      ...(outcome === "rate_limited" ? { blockedUntil: api.lastBlockedUntil } : {}),
       ...(failure ? { error: failure } : {}),
     }));
   }

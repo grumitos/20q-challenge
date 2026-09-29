@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import {
+  ANALYTICS_HEARTBEAT_TTL_MS,
+  ANALYTICS_INTERVAL_MS,
+  ANALYTICS_RETRY_DELAY_MS,
+  analyticsPhaseDue,
+} from "../vps/analytics-schedule.ts";
+
 const readSource = async (path) =>
   (await readFile(new URL(path, import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 
@@ -55,4 +62,70 @@ test("one compatibility date, not three", async () => {
     readme.includes(dates[0]),
     `the README must record the compatibility date in use (${dates[0]})`,
   );
+});
+
+test("runs VPS analytics about every ten minutes however the timer's ticks drift", () => {
+  // `getUTCMinutes() % 10 === 0` needed a tick inside one exact minute. The
+  // systemd timer's ticks drift 60–70 s apart, which left ~130 runs a day
+  // instead of ~144. The rule is elapsed time since the last successful run,
+  // read back from the heartbeat that run stamped.
+  const gaps = [61_000, 67_000, 70_000, 64_000, 69_000, 62_000, 66_000, 60_000, 68_000, 65_000];
+  const start = Date.UTC(2026, 8, 29, 0, 0, 20);
+  let heartbeat = null;
+  const runs = [];
+  let minuteRuleRuns = 0;
+  for (let tick = 0, now = start; now < start + 24 * 60 * 60_000; now += gaps[tick % gaps.length], tick += 1) {
+    if (new Date(now).getUTCMinutes() % 10 === 0) minuteRuleRuns += 1;
+    if (!analyticsPhaseDue(now, heartbeat)) continue;
+    runs.push(now);
+    heartbeat = Math.max(heartbeat ?? 0, now + ANALYTICS_HEARTBEAT_TTL_MS);
+  }
+
+  // Never sooner than the interval and never more than one tick after it, so
+  // the daily count follows the ticks (135–151) instead of losing windows.
+  const spacing = runs.slice(1).map((at, index) => at - runs[index]);
+  assert.ok(Math.min(...spacing) >= ANALYTICS_INTERVAL_MS, "never twice inside one interval");
+  assert.ok(Math.max(...spacing) < ANALYTICS_INTERVAL_MS + 70_000, "never more than one tick late");
+  assert.ok(
+    runs.length > minuteRuleRuns,
+    `${runs.length} runs a day, against ${minuteRuleRuns} for the minute rule under the same drift`,
+  );
+});
+
+test("retries VPS analytics on the next tick after a skip and after a delay after a failure", () => {
+  const lastSuccess = Date.UTC(2026, 8, 29, 12);
+  const heartbeat = lastSuccess + ANALYTICS_HEARTBEAT_TTL_MS;
+  assert.equal(analyticsPhaseDue(lastSuccess + 9 * 60_000, heartbeat), false);
+  // A skipped run stamps nothing, so every following tick is due.
+  assert.equal(analyticsPhaseDue(lastSuccess + ANALYTICS_INTERVAL_MS, heartbeat), true);
+  assert.equal(analyticsPhaseDue(lastSuccess + ANALYTICS_INTERVAL_MS + 65_000, heartbeat), true);
+  // Nothing recorded yet means nothing has run.
+  assert.equal(analyticsPhaseDue(lastSuccess, null), true);
+
+  // A failed run blocks the retry lane, and the ticks inside the delay pass.
+  const failedAt = lastSuccess + ANALYTICS_INTERVAL_MS;
+  const retryBlockedUntil = failedAt + ANALYTICS_RETRY_DELAY_MS;
+  assert.equal(analyticsPhaseDue(failedAt + 65_000, heartbeat, retryBlockedUntil), false);
+  assert.equal(analyticsPhaseDue(retryBlockedUntil, heartbeat, retryBlockedUntil), true);
+  assert.equal(analyticsPhaseDue(failedAt + 65_000, null, retryBlockedUntil), false);
+});
+
+test("keeps a failing VPS analytics phase to one run per two-minute Riot window", () => {
+  // Riot allows 100 requests every two minutes. Tracker ticks may spend 30
+  // each and an analytics run 32, so two analytics runs in one window is over.
+  const gaps = [61_000, 67_000, 70_000, 64_000, 69_000, 62_000, 66_000, 60_000, 68_000, 65_000];
+  const start = Date.UTC(2026, 8, 29, 0, 0, 20);
+  const heartbeat = start; // The last success is twelve minutes old.
+  let retryBlockedUntil = null;
+  const runs = [];
+  for (let tick = 0, now = start; now < start + 60 * 60_000; now += gaps[tick % gaps.length], tick += 1) {
+    if (!analyticsPhaseDue(now, heartbeat, retryBlockedUntil)) continue;
+    runs.push(now);
+    // Every run fails, as through a Riot outage.
+    retryBlockedUntil = Math.max(retryBlockedUntil ?? 0, now + ANALYTICS_RETRY_DELAY_MS);
+  }
+
+  const spacing = runs.slice(1).map((at, index) => at - runs[index]);
+  assert.ok(runs.length > 10, `${runs.length} attempts in an hour of failures`);
+  assert.ok(Math.min(...spacing) > 2 * 60_000, "never two failing runs inside one two-minute window");
 });

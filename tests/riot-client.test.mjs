@@ -556,6 +556,125 @@ test("boundary matches cannot crowd new games out of the detail cap", async () =
   assert.ok(mamimu.analytics.lastGameStartTimestamp > Date.UTC(2026, 6, 10), "the cutoff must advance");
 });
 
+/**
+ * A roster whose analytics cutoffs all sit on LA2_1000, with mamimu
+ * `pendingGames` games behind (LA2_1001, LA2_1002, ...). Riot lists ids newest
+ * first and `startTime` is inclusive, so her boundary comes back every time.
+ */
+function mamimuBacklog(pendingGames) {
+  const startOf = (n) => Date.UTC(2026, 6, 10) + n * 3_600_000;
+  const snapshot = createDemoSnapshot(new Date("2026-07-19T00:00:00Z"));
+  for (const player of snapshot.players) {
+    // Cached puuids, so every run spends exactly two rank requests per player.
+    player.puuid = RIOT_PLAYERS.find(({ id }) => id === player.id).puuid;
+    player.analytics.backfillStatus = "complete";
+    player.analytics.backfillBeforeTimestamp = 0;
+    player.analytics.lastGameStartTimestamp = startOf(0);
+    player.analytics.lastMatchId = "LA2_1000";
+  }
+  const log = { requests: 0, details: [] };
+  const fetchImpl = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === "ddragon.leagueoflegends.com") return new Response(null, { status: 404 });
+    log.requests += 1;
+    if (url.pathname.includes("/accounts/by-puuid/")) return Response.json(accountForPuuidUrl(url));
+    if (url.pathname.includes("/league/v4/entries/by-puuid/")) return Response.json([]);
+    if (url.pathname.includes("/summoner/v4/summoners/by-puuid/")) return Response.json({ profileIconId: 1 });
+    if (url.pathname.endsWith("/ids")) {
+      if (decodeURIComponent(url.pathname.split("/").at(-2)) !== MAMIMU_PUUID) return Response.json([]);
+      const since = Number(url.searchParams.get("startTime")) * 1_000;
+      const start = Number(url.searchParams.get("start"));
+      const count = Number(url.searchParams.get("count"));
+      const listed = Array.from({ length: pendingGames + 1 }, (_, n) => n)
+        .filter((n) => startOf(n) >= since)
+        .reverse()
+        .map((n) => `LA2_${1000 + n}`);
+      return Response.json(listed.slice(start, start + count));
+    }
+    const matchId = decodeURIComponent(url.pathname.split("/").at(-1));
+    log.details.push(matchId);
+    return Response.json({
+      info: {
+        queueId: 420,
+        gameStartTimestamp: startOf(Number(matchId.split("_").at(-1)) - 1000),
+        gameDuration: 1_800,
+        participants: [{
+          puuid: MAMIMU_PUUID, championId: 222, championName: "Jinx", teamId: 100,
+          kills: 5, deaths: 1, assists: 5, win: true, teamPosition: "BOTTOM",
+          riotIdGameName: "Mamimu", riotIdTagline: "HOLA",
+        }],
+      },
+    });
+  };
+  return { snapshot, fetchImpl, log };
+}
+
+test("a backlog larger than one run's budget drains across consecutive runs", async () => {
+  // Twelve games behind, mamimu needs a second id page: 18 rank requests and
+  // ten listings leave four of the 32 for five scheduled details. The fifth
+  // threw, the run kept nothing, the cutoff never moved, and every later run
+  // drew the identical list — the latent `leaderboard_analytics_capped` loop.
+  const { snapshot: initial, fetchImpl, log } = mamimuBacklog(12);
+  let snapshot = initial;
+  const mamimu = () => snapshot.players.find(({ id }) => id === "mamimu");
+  const startingGames = mamimu().analytics.games;
+  const ingestedPerRun = [];
+  const persisted = [];
+
+  for (let run = 0; run < 3; run += 1) {
+    const before = mamimu().analytics.games;
+    log.requests = 0;
+    snapshot = await fetchRiotLeaderboard(
+      "secret-key", fetchImpl, new Date(Date.UTC(2026, 6, 19, 0, run * 10)), snapshot,
+      (matches) => { persisted.push(...matches.map(({ matchId }) => matchId)); },
+      32, 5,
+    );
+    assert.ok(log.requests <= 32, `run ${run + 1} spent ${log.requests} of 32 requests`);
+    ingestedPerRun.push(mamimu().analytics.games - before);
+  }
+
+  assert.deepEqual(ingestedPerRun, [4, 5, 3], "each run keeps what its budget could fetch");
+  assert.equal(mamimu().analytics.games, startingGames + 12);
+  assert.equal(mamimu().analytics.lastMatchId, "LA2_1012");
+  const everyGame = Array.from({ length: 12 }, (_, index) => `LA2_${1001 + index}`);
+  assert.deepEqual(persisted, everyGame, "every pending game persisted once, oldest first, none skipped");
+  assert.deepEqual(log.details, everyGame, "and no detail downloaded twice");
+});
+
+test("a listing the budget cuts short is listed again, never ingested from its newest end", async () => {
+  // Riot lists ids newest first, so a first page with no budget left for the
+  // second holds mamimu's ten newest games and neither of her two oldest.
+  // Ingesting from it would move her cutoff past those two for good.
+  const { snapshot: initial, fetchImpl, log } = mamimuBacklog(12);
+  const mamimu = (snapshot) => snapshot.players.find(({ id }) => id === "mamimu");
+  const lines = [];
+  const realLog = console.log;
+  console.log = (line) => lines.push(line);
+  let snapshot;
+  try {
+    // 18 rank requests and eight listings leave one request, which is held
+    // back for a detail — so her second page is never asked for.
+    snapshot = await fetchRiotLeaderboard(
+      "secret-key", fetchImpl, new Date("2026-07-19T00:00:00Z"), initial, undefined, 27, 5,
+    );
+  } finally {
+    console.log = realLog;
+  }
+
+  assert.equal(mamimu(snapshot).analytics.lastMatchId, "LA2_1000", "the cutoff must not pass games it never listed");
+  assert.equal(mamimu(snapshot).analytics.games, mamimu(initial).analytics.games);
+  assert.deepEqual(log.details, []);
+  const capped = lines.map((line) => JSON.parse(line)).find((entry) => entry.event === "leaderboard_analytics_capped");
+  assert.ok(capped?.truncatedPlayers >= 1, "a run the budget cut short must say so");
+
+  // Given room for both pages, the same backlog drains from its oldest end.
+  const next = await fetchRiotLeaderboard(
+    "secret-key", fetchImpl, new Date("2026-07-19T00:10:00Z"), snapshot, undefined, 32, 5,
+  );
+  assert.equal(mamimu(next).analytics.lastMatchId, "LA2_1004");
+  assert.deepEqual(log.details, ["LA2_1001", "LA2_1002", "LA2_1003", "LA2_1004"]);
+});
+
 test("keeps a same-match PL delta pending instead of persisting a synthetic zero", () => {
   const state = {
     tier: "SILVER",

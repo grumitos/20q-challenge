@@ -15,6 +15,7 @@ import {
   ANALYTICS_REQUEST_BUDGET,
   createRiotRequester,
   RiotRequestBudgetExceeded,
+  type RiotRequestBudget,
 } from "./riot-request.ts";
 import seasonSeedJson from "./season-analytics-seed.json" with { type: "json" };
 import { preserveDefinitiveEvidence, reconcileRankedMatch, toLpChangeEvidence } from "./lp-reconciliation.ts";
@@ -54,6 +55,12 @@ const BACKFILL_PLAYERS_PER_REFRESH = 1;
     above `BACKFILL_BATCH_SIZE`, whose batch must never be capped out of its own
     run. The remainder is newer than the cutoff and picked up next run. */
 const ANALYTICS_MATCH_DETAILS_PER_RUN = 5;
+/** Requests the forward scan leaves unspent for match details. Several
+    backlogged players each need a second id page, and without a reserve those
+    pages could spend the whole budget: no detail fetched, no cutoff moved, and
+    the next run drawing the identical list. One detail a run is slow, but it is
+    progress. */
+const FORWARD_SCAN_DETAIL_RESERVE = 1;
 
 export const RIOT_PLAYERS: PlayerIdentity[] = [
   { id: "miqi", puuid: "5_8Qb1VsKIYpIro5e30W8NQaoOre5oyuamwhesY0CB2G3El99wiux-67BR9dVIgZ-fTEQx0b9JFM5A", gameName: "miqi", tagLine: "8745" },
@@ -522,7 +529,14 @@ async function fetchSeasonMatchIds(
   startTime: number,
   apiKey: string,
   fetchImpl: FetchLike,
-  options: { count?: number; endTime?: number; maxPages?: number } = {},
+  options: {
+    count?: number;
+    endTime?: number;
+    maxPages?: number;
+    /** When set, the listing stops short instead of spending the requests
+        reserved for match details, or failing on an exhausted budget. */
+    budget?: RiotRequestBudget;
+  } = {},
 ) {
   const count = options.count ?? 100;
   const maxPages = options.maxPages ?? Number.POSITIVE_INFINITY;
@@ -530,12 +544,23 @@ async function fetchSeasonMatchIds(
   let start = 0;
   let page = 0;
   for (;;) {
+    // `truncated` means Riot had more to list. It lists newest first, so what
+    // is missing is the *oldest* part of the window.
+    if (options.budget && options.budget.remaining <= FORWARD_SCAN_DETAIL_RESERVE) {
+      return { matchIds, truncated: true };
+    }
     const endTime = options.endTime === undefined ? "" : `&endTime=${options.endTime}`;
-    const value = await fetchRiotJson(
-      `https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?queue=420&startTime=${startTime}${endTime}&start=${start}&count=${count}`,
-      apiKey,
-      fetchImpl,
-    );
+    let value: unknown;
+    try {
+      value = await fetchRiotJson(
+        `https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?queue=420&startTime=${startTime}${endTime}&start=${start}&count=${count}`,
+        apiKey,
+        fetchImpl,
+      );
+    } catch (error) {
+      if (options.budget && error instanceof RiotRequestBudgetExceeded) return { matchIds, truncated: true };
+      throw error;
+    }
     if (!Array.isArray(value) || !value.every((matchId) => typeof matchId === "string")) {
       throw new RiotApiError("INVALID_RESPONSE", "Riot no devolvió IDs de partidas válidos.");
     }
@@ -544,7 +569,7 @@ async function fetchSeasonMatchIds(
     if (value.length < count || page >= maxPages) break;
     start += count;
   }
-  return matchIds;
+  return { matchIds, truncated: false };
 }
 
 async function refreshSeasonAnalytics(
@@ -569,6 +594,14 @@ async function refreshSeasonAnalytics(
       only bound that matters is Riot's, and a month-long backlog at five per
       run would take days that forty per run drains in an hour or two. */
   matchDetailsPerRun = ANALYTICS_MATCH_DETAILS_PER_RUN,
+  /**
+   * The run's request budget, passed by the forward lane only. With it, running
+   * out stops the work where it is instead of throwing it all away: listings
+   * stop short, details are scheduled only as far as the budget reaches, and
+   * whatever was gathered is ingested. The backfill lane walks history newest
+   * first, which a partial batch would punch holes in, so it keeps failing whole.
+   */
+  budget?: RiotRequestBudget,
 ) {
   const cutoffs = new Map(players.map((player) => [player.id, {
     timestamp: player.analytics.lastGameStartTimestamp,
@@ -612,15 +645,15 @@ async function refreshSeasonAnalytics(
       // failed identically. That is the trap this file already learned once.
       const shouldBackfill = mode === "backfill" && backfillPlayerIds.has(player.id) &&
         typeof backfillStart === "number" && typeof backfillBefore === "number" && backfillBefore > backfillStart;
-      const forwardIds = mode === "backfill" ? [] : await fetchSeasonMatchIds(
+      const forward = mode === "backfill" ? { matchIds: [], truncated: false } : await fetchSeasonMatchIds(
         player.puuid,
         Math.floor((cutoff?.timestamp || SEASON_START_TIMESTAMP_MS) / 1000),
         apiKey,
         fetchImpl,
-        { count: FORWARD_MATCH_BATCH_SIZE, maxPages: 2 },
+        { count: FORWARD_MATCH_BATCH_SIZE, maxPages: 2, budget },
       );
       const backfillIds = shouldBackfill
-        ? await fetchSeasonMatchIds(
+        ? (await fetchSeasonMatchIds(
           player.puuid,
           Math.floor(backfillStart / 1000),
           apiKey,
@@ -630,11 +663,21 @@ async function refreshSeasonAnalytics(
             endTime: Math.floor((backfillBefore - 1) / 1000),
             maxPages: 1,
           },
-        )
+        )).matchIds
         : [];
-      return { playerId: player.id, forwardIds, backfillIds };
+      // A listing the budget cut short is missing this player's *oldest*
+      // pending matches, so ingesting anything it did list would move the
+      // cutoff past them for good. Their ids sit this run out: the cutoff stays
+      // where it is and the next run lists them again.
+      return {
+        playerId: player.id,
+        forwardIds: forward.truncated ? [] : forward.matchIds,
+        forwardTruncated: forward.truncated,
+        backfillIds,
+      };
     },
   );
+  const truncatedPlayers = playerMatchIds.filter((request) => request.forwardTruncated).length;
   for (const request of playerMatchIds) {
     requestedMatchesByPlayer.set(request.playerId, {
       forwardIds: new Set(request.forwardIds),
@@ -669,22 +712,54 @@ async function refreshSeasonAnalytics(
     }
     return true;
   };
-  const requestedDetailIds = [...matchIds]
+  const pendingDetailIds = [...matchIds]
     .filter((matchId) => !boundaryOnly(matchId))
-    .sort((left, right) => Number(left.split("_").at(-1)) - Number(right.split("_").at(-1)))
-    .slice(0, matchDetailsPerRun);
-  const matches = await mapWithConcurrency(
+    .sort((left, right) => Number(left.split("_").at(-1)) - Number(right.split("_").at(-1)));
+  // Never more than the budget can still pay for: scheduling past it used to
+  // throw on the last detail and discard the whole run, so a backlog bigger
+  // than one run could never drain.
+  const detailSlots = budget ? Math.min(matchDetailsPerRun, budget.remaining) : matchDetailsPerRun;
+  const requestedDetailIds = pendingDetailIds.slice(0, detailSlots);
+  const fetched = await mapWithConcurrency(
     requestedDetailIds,
     RIOT_REQUEST_CONCURRENCY,
-    async (matchId) => ({
-      matchId,
-      match: record(await fetchRiotJson(
-        `https://americas.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(matchId)}`,
-        apiKey,
-        fetchImpl,
-      )),
-    }),
+    async (matchId) => {
+      try {
+        return {
+          matchId,
+          match: record(await fetchRiotJson(
+            `https://americas.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(matchId)}`,
+            apiKey,
+            fetchImpl,
+          )),
+        };
+      } catch (error) {
+        // The list is sized to the budget, so only a 429 retry can land here.
+        if (budget && error instanceof RiotRequestBudgetExceeded) return null;
+        throw error;
+      }
+    },
   );
+  // Ingested up to the first gap only. The list is oldest first, so that is
+  // what stops a cutoff from jumping over a match this run did not get.
+  const matches: Array<{ matchId: string; match: Record<string, unknown> | null }> = [];
+  for (const entry of fetched) {
+    if (!entry) break;
+    matches.push(entry);
+  }
+  if (budget && (
+    truncatedPlayers > 0 ||
+    matches.length < Math.min(matchDetailsPerRun, pendingDetailIds.length)
+  )) {
+    console.log(JSON.stringify({
+      event: "leaderboard_analytics_capped",
+      limit: budget.limit,
+      truncatedPlayers,
+      matchDetails: matches.length,
+      pendingDetails: pendingDetailIds.length,
+      note: "season analytics resume on the next refresh",
+    }));
+  }
 
   const persistedMatches: PersistedSoloQueueMatch[] = [];
 
@@ -850,20 +925,20 @@ export async function fetchRiotLeaderboard(
     },
   );
 
-  // Running out of budget mid-backfill is an ordinary outcome, not a failure:
-  // the backfill is designed to resume across runs, so whatever analytics this
-  // run did gather are kept and the rest waits for the next one.
-  let persistedMatches: PersistedSoloQueueMatch[] = [];
-  try {
-    persistedMatches = await refreshSeasonAnalytics(players, apiKey, fetchImpl, "forward", matchDetailsPerRun);
-  } catch (error) {
-    if (!(error instanceof RiotRequestBudgetExceeded)) throw error;
-    console.log(JSON.stringify({
-      event: "leaderboard_analytics_capped",
-      limit: error.limit,
-      note: "season backfill resumes on the next refresh",
-    }));
-  }
+  // Running out of budget is an ordinary outcome, not a failure. This used to
+  // catch the budget error around the whole ingestion, which kept the ranks
+  // but threw away every match the run had fetched — so once one player had
+  // more pending games than a run could afford, the cutoff never moved and
+  // every run drew the identical list. The budget now bounds the work from
+  // inside, and whatever was ingested is persisted with its cutoffs.
+  const persistedMatches = await refreshSeasonAnalytics(
+    players,
+    apiKey,
+    fetchImpl,
+    "forward",
+    matchDetailsPerRun,
+    requester.budget,
+  );
   await persistMatches?.(persistedMatches);
 
   for (const player of players) {

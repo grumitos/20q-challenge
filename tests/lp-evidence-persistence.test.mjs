@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import { createLpTrackerStore } from "../db/lp-tracker-store.ts";
+import { ANALYTICS_HEARTBEAT_LANE, readAnalyticsHeartbeat } from "../vps/analytics-schedule.ts";
 
 function d1Adapter(database) {
   function statement(sql, values = []) {
@@ -264,6 +265,39 @@ test("the sweep drops stale observations but never one still being reconciled", 
   // A resolved candidate's baseline has done its job and is free to go.
   assert.equal(kept.includes("stale-resolved-candidate"), false);
   assert.equal(kept.includes("stale-unreferenced"), false);
+
+  database.close();
+});
+
+test("the VPS analytics cadence reads back the heartbeat its last success stamped", async () => {
+  const database = new DatabaseSync(":memory:");
+  await applyMigrations(database);
+  const d1 = d1Adapter(database);
+  const store = createLpTrackerStore(d1);
+
+  assert.equal(await readAnalyticsHeartbeat(d1), null, "no run yet");
+  await store.blockLaneUntil(ANALYTICS_HEARTBEAT_LANE, 5_000_000);
+  // Another lane's block must not read as an analytics success.
+  await store.blockLaneUntil("lp-tracker-heartbeat", 9_000_000);
+  assert.equal(await readAnalyticsHeartbeat(d1), 5_000_000);
+
+  database.close();
+});
+
+test("loads each player's previous poll time, which the idle rotation catches up from", async () => {
+  const database = new DatabaseSync(":memory:");
+  await applyMigrations(database);
+  const store = createLpTrackerStore(d1Adapter(database));
+  // `last_tracker_at` is what `updateRecentCursors` stamps on every polled
+  // player; p2 has never been polled.
+  database.exec(`
+    INSERT INTO player_sync_state (player_id, puuid, game_name, tag_line, last_tracker_at, created_at, updated_at) VALUES
+      ('p1', 'puuid-1', 'P1', 'LAS', 7200000, 1, 1), ('p2', 'puuid-2', 'P2', 'LAS', NULL, 1, 1)
+  `);
+
+  const state = await store.loadTrackerState(["p1", "p2"], 7_260_000);
+  const byId = Object.fromEntries(state.players.map((player) => [player.playerId, player.lastTrackerAt]));
+  assert.deepEqual(byId, { p1: 7_200_000, p2: null });
 
   database.close();
 });
