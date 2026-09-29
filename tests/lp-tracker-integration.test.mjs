@@ -3,8 +3,9 @@ import test from "node:test";
 
 import { MATCH_DETAILS_PER_RUN, runTemporalLpTracker } from "../lib/lp-tracker.ts";
 import { RIOT_PLAYERS } from "../lib/riot-client.ts";
-import { TRACKER_REQUEST_BUDGET } from "../lib/riot-request.ts";
+import { RiotRequestBudgetExceeded, TRACKER_REQUEST_BUDGET } from "../lib/riot-request.ts";
 import { resetChampionCatalog } from "../lib/champion-catalog.ts";
+import { createDemoSnapshot } from "../lib/leaderboard.ts";
 
 /** Enough of Data Dragon's champion list to resolve the keys these tests use. */
 const CHAMPION_CATALOG = {
@@ -733,4 +734,158 @@ test("sweeps stale observations hourly, not on every tick", async () => {
     fetchImpl: (input) => Promise.resolve(riotResponse(String(input), { count: 0 })),
   });
   assert.deepEqual(quiet.writes.pruned, []);
+});
+
+/** Runs the tracker with its structured log captured, whether it resolves or throws. */
+async function runLogged(options) {
+  const lines = [];
+  const realLog = console.log;
+  console.log = (line) => lines.push(line);
+  let result;
+  let error;
+  try {
+    result = await runTemporalLpTracker(options);
+  } catch (caught) {
+    error = caught;
+  } finally {
+    console.log = realLog;
+  }
+  const entries = lines.map((line) => JSON.parse(line));
+  return { result, error, run: entries.find((entry) => entry.event === "lp_tracker_run") };
+}
+
+function twoPlayerTick(extraSessions = []) {
+  const players = ["p1", "p2"].map((playerId, index) => ({
+    playerId, puuid: `puuid-${index + 1}`, gameName: playerId.toUpperCase(), tagLine: "LAS", recentMatchId: null,
+  }));
+  const observations = players.map((player) => ({
+    id: `${player.playerId}:1000`, playerId: player.playerId, observedAt: 1_000,
+    tier: "SILVER", division: "I", leaguePoints: 90, wins: 10, losses: 10,
+  }));
+  return fakeStore(players, observations, extraSessions);
+}
+
+/** `riotResponse`, except the rank lookup of the given puuids answers `status`. */
+function failingRank(statusByPuuid, headers = {}) {
+  return (input) => {
+    const url = String(input);
+    const failing = Object.entries(statusByPuuid)
+      .find(([puuid]) => url.includes("/league/v4/") && url.endsWith(`/${puuid}`));
+    return Promise.resolve(failing
+      ? new Response("{}", { status: failing[1], headers })
+      : riotResponse(url, { count: 0 }));
+  };
+}
+
+test("one player's Riot 5xx skips that player and keeps everyone else's tick", async () => {
+  // Seven ticks in a week died on a single "Riot is temporarily unavailable."
+  // with nothing inserted for anyone. Only the player whose request failed
+  // should lose the tick — and their live session must be left alone: a poll
+  // that never completed is not evidence that the game ended.
+  const liveSession = {
+    playerId: "p2", platformGameId: "88", queueId: 420, baselineObservationId: "p2:1000",
+    gameStartedAt: 3_000, firstSeenAt: 3_000, lastSeenAt: 4_000, endedDetectedAt: null,
+    matchId: null, status: "active", updatedAt: 4_000,
+  };
+  const store = twoPlayerTick([liveSession]);
+
+  const { result, error, run } = await runLogged({
+    store, apiKey: "secret", now: 5_000, owner: "run-one-5xx",
+    fetchImpl: failingRank({ "puuid-2": 503 }),
+  });
+
+  assert.equal(error, undefined);
+  assert.equal(result.status, "completed");
+  assert.equal(result.playerErrors, 1);
+  assert.deepEqual(store.writes.observations.map(({ playerId }) => playerId), ["p1"]);
+  assert.deepEqual(store.writes.sessions.filter(({ playerId }) => playerId === "p2"), [], "the live session must not be touched");
+  assert.deepEqual([...new Set(store.writes.cursors.map(({ playerId }) => playerId))], ["p1"]);
+  assert.equal(run.status, "completed");
+  assert.equal(run.observationsInserted, 1);
+  assert.equal(run.playerErrors, 1);
+  assert.deepEqual(run.playerErrorDetails, [{ playerId: "p2", error: "Riot is temporarily unavailable." }]);
+});
+
+test("a tick in which every player fails is still a failed run", async () => {
+  const store = twoPlayerTick();
+
+  const { error, run } = await runLogged({
+    store, apiKey: "secret", now: 5_000, owner: "run-all-5xx",
+    fetchImpl: failingRank({ "puuid-1": 500, "puuid-2": 502 }),
+  });
+
+  assert.match(error?.message ?? "", /temporarily unavailable/);
+  assert.equal(run.status, "failed");
+  assert.equal(run.playerErrors, 2);
+  assert.equal(run.observationsInserted, 0);
+  assert.deepEqual(store.writes.observations, []);
+});
+
+test("a rejected key still aborts the whole tick", async () => {
+  // A 401 is about the key, so every other player would fail the same way.
+  const store = twoPlayerTick();
+
+  const { error, run } = await runLogged({
+    store, apiKey: "secret", now: 5_000, owner: "run-401",
+    fetchImpl: failingRank({ "puuid-1": 401 }),
+  });
+
+  assert.match(error?.message ?? "", /authentication failed/);
+  assert.equal(run.status, "failed");
+  assert.deepEqual(store.writes.observations, [], "nothing is persisted from an aborted tick");
+});
+
+test("an exhausted request budget still aborts the whole tick", async () => {
+  const store = twoPlayerTick();
+
+  const { error, run } = await runLogged({
+    store, apiKey: "secret", now: 5_000, owner: "run-no-budget-left", maxRequests: 1,
+    fetchImpl: (input) => Promise.resolve(riotResponse(String(input), { count: 0 })),
+  });
+
+  assert.ok(error instanceof RiotRequestBudgetExceeded);
+  assert.equal(run.status, "failed");
+  assert.deepEqual(store.writes.observations, []);
+});
+
+test("a throttled key ends the tick as rate_limited and blocks the lane for Riot's window", async () => {
+  const store = twoPlayerTick();
+  const blocked = [];
+  store.blockLaneUntil = async (lane, until) => blocked.push({ lane, until });
+  const before = Date.now();
+
+  const { error, run } = await runLogged({
+    store, apiKey: "secret", now: 5_000, owner: "run-429",
+    fetchImpl: failingRank({ "puuid-1": 429 }, { "Retry-After": "30" }),
+  });
+
+  assert.match(error?.message ?? "", /rate limit/);
+  assert.equal(run.status, "rate_limited");
+  assert.ok(run.blockedUntil >= before + 30_000);
+  assert.deepEqual(blocked.map(({ lane }) => lane), ["lp-tracker"]);
+  assert.ok(blocked[0].until >= before + 30_000, "the lane stays shut for the whole Retry-After");
+  assert.ok(Date.now() - before < 10_000, "and nobody slept through it");
+});
+
+test("the cold-start bootstrap keeps the players it could poll", async () => {
+  const store = fakeStore([], [], []);
+  const snapshot = createDemoSnapshot(new Date(0));
+  for (const player of snapshot.players) {
+    player.puuid = RIOT_PLAYERS.find(({ id }) => id === player.id)?.puuid ?? null;
+  }
+  store.loadTrackerState = async () => ({ players: [], observations: [], sessions: [], candidates: [], snapshot });
+  const [unlucky] = RIOT_PLAYERS;
+
+  const { result, error, run } = await runLogged({
+    store, apiKey: "secret", now: 5_000, owner: "run-bootstrap-5xx",
+    fetchImpl: failingRank({ [unlucky.puuid]: 500 }),
+  });
+
+  assert.equal(error, undefined);
+  assert.equal(result.status, "bootstrapped");
+  assert.equal(result.playerErrors, 1);
+  assert.equal(store.writes.observations.length, RIOT_PLAYERS.length - 1);
+  assert.equal(store.writes.observations.some(({ playerId }) => playerId === unlucky.id), false);
+  assert.equal(store.writes.cursors.some(({ playerId }) => playerId === unlucky.id), false);
+  assert.deepEqual(run.playerErrorDetails, [{ playerId: unlucky.id, error: "Riot is temporarily unavailable." }]);
 });

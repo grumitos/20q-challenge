@@ -119,6 +119,7 @@ async function main() {
       requestsUsed: result.requestsUsed,
       ...("observationsInserted" in result ? { observationsInserted: result.observationsInserted } : {}),
       ...("sessionsUpdated" in result ? { sessionsUpdated: result.sessionsUpdated } : {}),
+      ...("playerErrors" in result ? { playerErrors: result.playerErrors } : {}),
     }));
 
     // Champion/role ingestion, every tenth minute — or on demand for a drain.
