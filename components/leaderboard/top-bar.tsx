@@ -27,7 +27,7 @@ export function TopBar({ updatedAt, stale, liveCount, onRefresh, onOpenGaspi }: 
           <a href="#duos">Dúos</a>
         </nav>
         <span className="topbar__spacer" />
-        <span className={`topbar__status${stale ? " is-stale" : ""}`} role="status">
+        <span className={`topbar__status${stale ? " is-stale" : ""}`}>
           <i className="status-dot" aria-hidden="true" />
           <span className="topbar__status-label">{statusLabel}</span>
           <b className="mono">{updatedAt ?? "--:--"}</b>
