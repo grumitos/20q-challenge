@@ -39,24 +39,6 @@ export const ROLE_LABELS: Record<PlayerRole, string> = {
   UNKNOWN: "Sin rol",
 };
 
-const TIER_ORDER: RankTier[] = [
-  "IRON",
-  "BRONZE",
-  "SILVER",
-  "GOLD",
-  "PLATINUM",
-  "EMERALD",
-  "DIAMOND",
-  "MASTER",
-  "GRANDMASTER",
-  "CHALLENGER",
-];
-const DIVISIONS = ["IV", "III", "II", "I"] as const;
-/** Master and above have no divisions: LP simply keeps counting. */
-const APEX_TIERS: RankTier[] = ["MASTER", "GRANDMASTER", "CHALLENGER"];
-
-type RankFields = Pick<PlayerSnapshot, "tier" | "division" | "leaguePoints">;
-
 export function rankLabel(player: Pick<PlayerSnapshot, "tier" | "division">) {
   return player.division ? `${TIER_LABELS[player.tier]} ${player.division}` : TIER_LABELS[player.tier];
 }
@@ -66,54 +48,22 @@ export function rankAsset(tier: RankTier) {
   return `/ranks/${tier === "UNRANKED" ? "iron" : tier.toLowerCase()}.png`;
 }
 
-export function isApexTier(tier: RankTier) {
-  return APEX_TIERS.includes(tier);
-}
-
-/** How far into the current division, as a 0–100 bar; null where there is no division. */
-export function divisionProgress(player: RankFields) {
-  if (player.tier === "UNRANKED" || isApexTier(player.tier)) return null;
-  return Math.max(0, Math.min(100, player.leaguePoints));
-}
-
-/** "73 PL para Platino III", or the promotion into the next tier from division I. */
-export function nextDivisionText(player: RankFields) {
-  if (player.tier === "UNRANKED") return "Sin partidas clasificadas";
-  if (isApexTier(player.tier)) return "Sin divisiones en este rango";
-  const missing = Math.max(0, 100 - player.leaguePoints);
-  const divisionIndex = DIVISIONS.indexOf(player.division as (typeof DIVISIONS)[number]);
-  if (divisionIndex < 0) return "";
-  if (divisionIndex < DIVISIONS.length - 1) {
-    return `${missing} PL para ${TIER_LABELS[player.tier]} ${DIVISIONS[divisionIndex + 1]}`;
-  }
-  const nextTier = TIER_ORDER[TIER_ORDER.indexOf(player.tier) + 1];
-  if (!nextTier) return "";
-  return isApexTier(nextTier)
-    ? `${missing} PL para ${TIER_LABELS[nextTier]}`
-    : `${missing} PL para ${TIER_LABELS[nextTier]} IV`;
-}
-
 /** The part of a Riot ID a person is actually called by: "INTI VIRAC0NCHA" → "INTI". */
 export function firstName(gameName: string) {
   return gameName.trim().split(/\s+/)[0] ?? gameName;
 }
 
 /**
- * The league-point distance that explains a placement. The leader states the
- * lead over the runner-up; everyone else states the distance to the player
- * directly above. `short` drops the unit for the narrowest layouts.
+ * The league-point distance that explains a placement: the distance to the
+ * player directly above. The leader has none to state, since being first says
+ * it. `short` drops the unit for the narrowest layouts.
  */
 export function gapText(players: readonly PlayerSnapshot[], index: number, short = false) {
   const player = players[index];
   if (!player) return "";
   if (player.tier === "UNRANKED") return "Sin partidas clasificadas";
+  if (index === 0) return "";
   const unit = short ? "" : " PL";
-  if (index === 0) {
-    const runnerUp = players[1];
-    if (!runnerUp || runnerUp.tier === "UNRANKED") return "";
-    const lead = Math.max(0, rankScore(player) - rankScore(runnerUp));
-    return `+${lead}${unit} sobre ${firstName(runnerUp.gameName)}`;
-  }
   const above = players[index - 1];
   if (!above || above.tier === "UNRANKED") return "";
   const gap = Math.max(0, rankScore(above) - rankScore(player));

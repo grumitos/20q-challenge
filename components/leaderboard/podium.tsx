@@ -5,9 +5,7 @@ import {
   ROLE_LABELS,
   bestChampionViews,
   championSplashUrl,
-  divisionProgress,
   gapText,
-  nextDivisionText,
   profileUrl,
   rankLabel,
 } from "../../lib/ui-format";
@@ -127,7 +125,6 @@ function PodiumCard({ player, place, gap, shortGap, version, roster, now, respaw
 }) {
   const champions = player.riotIdFound ? bestChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS) : [];
   const splash = champions[0];
-  const progress = divisionProgress(player);
   const role = player.riotIdFound ? player.analytics.mainRole : "UNKNOWN";
   const dead = respawnSeconds !== null;
   const games = player.wins + player.losses;
@@ -185,12 +182,6 @@ function PodiumCard({ player, place, gap, shortGap, version, roster, now, respaw
                 ) : null}
               </div>
             </div>
-            {progress !== null ? (
-              <span className="lp-bar" role="img" aria-label={`${progress} de 100 PL en la división`}>
-                <i className={tierClass(player.tier)} style={{ width: `${progress}%` }} />
-              </span>
-            ) : null}
-            <span className="plate__next">{nextDivisionText(player)}</span>
           </div>
 
           <dl className="plate__stats">
@@ -261,8 +252,6 @@ function PodiumSkeleton({ place }: { place: number }) {
                 <span className="sk sk-line" style={{ width: 54, height: 26 }} />
               </div>
             </div>
-            <span className="lp-bar" />
-            <span className="sk sk-line" style={{ width: 120, height: 9 }} />
           </div>
           <div className="plate__stats">
             {Array.from({ length: 4 }, (_, index) => <span key={index} className="sk sk-line" style={{ width: 110, height: 10 }} />)}
