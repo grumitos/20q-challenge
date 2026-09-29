@@ -1,5 +1,12 @@
 # Handoff de UI — registro histórico (26 jul 2026)
 
+> **Superado por el rediseño de septiembre de 2026.** `app/page.tsx`,
+> `app/globals.css` y los componentes de `components/leaderboard/` se
+> reescribieron desde cero; las clases, medidas y columnas que se citan abajo ya
+> no existen. El contrato vivo son `tests/ui-format.test.mjs` (formato de datos)
+> y `tests/ui-regressions.test.mjs` (comportamiento: podio, Papipu, Gaspi,
+> títulos de pestaña, polling y accesibilidad).
+
 > **Estado: cerrado.** Las tareas 1–9 de abajo están todas aplicadas. El
 > documento se conserva como registro de por qué se tomó cada decisión, **no**
 > como lista de trabajo pendiente.

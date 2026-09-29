@@ -51,35 +51,18 @@ test("server-renders the 20Q Challenge dashboard", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="es">/i);
   assert.match(html, /<title>20Q Challenge<\/title>/i);
-  assert.doesNotMatch(html, /<title>[^<]*(?:—|SoloQ 2026)[^<]*<\/title>/i);
   assert.match(html, /20Q Challenge/);
-  assert.doesNotMatch(html, /20Q \/ LAS|>Clasificación</i);
   assert.match(html, /Abrir LOS JUEGOS DE GASPI/i);
   assert.match(html, /Top 3 del ranking/);
-  assert.match(html, />Rol</);
-  assert.doesNotMatch(html, /Rol principal/);
-  assert.doesNotMatch(html, /del historial/i);
-  assert.match(html, />Rango</);
-  assert.match(html, /class="podium-champions champions"/);
-  assert.match(html, /Última partida/i);
-  assert.doesNotMatch(html, /Campeones más jugados/);
-  assert.match(html, /KDA/);
-  assert.doesNotMatch(html, /Datos actualizados|sync-state/);
-  assert.match(html, /leaderboard-panel is-loading/);
-  assert.match(html, /class="sk-bone/);
-  assert.match(html, /class="podium-card place-1 is-pending"/);
-  assert.match(html, /class="leaderboard-row is-pending"/);
-  assert.match(html, /class="champion-portrait sk-slot"/);
-  assert.doesNotMatch(html, /is-skeleton/);
-  assert.doesNotMatch(html, /pattern-grid/);
-  assert.doesNotMatch(html, /class="hatch"/);
-  // The loading view carries no crest of its own: with the goal card gone,
-  // nothing on the first frame knows a tier yet, so the emblem is a slot.
-  assert.match(html, /class="rank-slot sk-slot"/);
-  assert.match(html, /class="lp-unit/);
+  assert.match(html, /Resto de la clasificación/);
+  assert.match(html, /Ir al ranking/);
+  // The first frame is the loading view, built from the real frames.
+  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /class="pcard place-1 is-pending"/);
+  assert.match(html, /class="srow is-pending"/);
+  assert.match(html, /Cargando/);
   assert.match(html, /href="\/privacy"/);
   assert.match(html, /href="\/terms"/);
-  assert.doesNotMatch(html, /\/_vinext\/image\?url=%2Franks/i);
   assert.match(html, /is not endorsed by Riot Games/i);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|SkeletonPreview/i);
 });
@@ -106,112 +89,23 @@ test("leaves dist/client as a static Pages bundle", async () => {
 });
 
 test("ships the finished product assets without starter dependencies", async () => {
-  // Several of these assertions span line breaks, which a CRLF checkout — the
-  // default on Windows — would fail for reasons unrelated to the code.
   const readSource = async (path) =>
     (await readFile(new URL(path, import.meta.url), "utf8")).replace(/\r\n/g, "\n");
-  const [page, layout, css, packageJson] = await Promise.all([
+  const [page, layout, packageJson] = await Promise.all([
     readSource("../app/page.tsx"),
     readSource("../app/layout.tsx"),
-    readSource("../app/globals.css"),
     readSource("../package.json"),
   ]);
 
-  assert.match(page, /useState/);
-  assert.doesNotMatch(page, /sync-state|Datos actualizados/);
-  assert.match(page, /const LEADERBOARD_API_URL =/);
-  assert.match(page, /NEXT_PUBLIC_LEADERBOARD_API_ORIGIN/);
   assert.match(page, /\/api\/leaderboard/);
-  assert.match(page, /const LEADERBOARD_REFRESH_MS = 60_000/);
-  assert.match(page, /window\.setInterval\([\s\S]*?void loadLeaderboard\(\)[\s\S]*?LEADERBOARD_REFRESH_MS/);
-  assert.match(page, /void loadLeaderboard\(\)/);
-  assert.match(page, /El marcador se actualiza automáticamente aproximadamente cada minuto/);
-  assert.match(page, /Mínimo \{DUO_LEADERBOARD_MIN_GAMES\} partidas juntos/);
-  assert.match(page, /aria-busy=/);
-  assert.match(page, /leagueofgraphs\.com\/summoner\/las/);
-  assert.match(page, /const visiblePlayers = sortLeaderboard\(players\)/);
-  assert.match(page, /function MatchSummary/);
-  assert.match(page, /function LiveSummary/);
-  assert.match(page, /is-peer/);
-  assert.match(page, /matchDetailsUrl/);
-  assert.match(page, /src="\/brand-logo\.webp"/);
-  assert.match(page, /`\/ranks\/\$\{tier === "UNRANKED" \? "iron" : tier\.toLowerCase\(\)\}\.png`/);
+  assert.match(page, /NEXT_PUBLIC_LEADERBOARD_API_ORIGIN/);
   assert.match(layout, /lang="es"/);
   assert.match(layout, /const title = "20Q Challenge"/);
   assert.match(layout, /export const metadata/);
   assert.match(layout, /\/og\.jpg/);
   assert.match(layout, /icon: "\/favicon\.png"/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.match(css, /a:focus-visible/);
-  assert.match(css, /@media \(max-width: 520px\)/);
-  assert.match(css, /\.site-header\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)/i);
-  assert.match(css, /\.site-header\s*\{[^}]*border-bottom:\s*1px\s+solid\s+var\(--line\)/i);
-  assert.doesNotMatch(css, /\.brand\s*\{[^}]*border-right\s*:/i);
-  assert.match(css, /\.gaspi-card\s*\{[^}]*display:\s*grid/i);
-  assert.match(css, /\.podium-card\.place-1\s*\{[^}]*linear-gradient/i);
-  assert.match(css, /\.podium-card\.place-2\s*\{[^}]*linear-gradient/i);
-  assert.match(css, /\.podium-card\.place-3\s*\{[^}]*linear-gradient/i);
-  assert.match(page, /className="podium-splash is-aligned"/);
-  assert.match(page, /crossOrigin="anonymous"/);
-  assert.match(page, /function championLoadingAsset\(champion/);
-  assert.match(page, /img\/champion\/loading\//);
-  assert.doesNotMatch(page, /function championCenteredAsset|img\/champion\/centered\//);
-  assert.match(css, /\.podium-splash\s*\{[\s\S]*?object-fit:\s*cover/i);
-  assert.match(css, /\.podium-splash\s*\{[\s\S]*?object-position:\s*50%\s*0%/i);
-  assert.match(css, /\.podium-splash\s*\{[\s\S]*?width:\s*100%;\s*height:\s*100%/i);
-  assert.doesNotMatch(css, /\.lp-bar\s*>?\s*\{/i);
-  assert.doesNotMatch(css, /\.goal-track\s*\{/i);
-  assert.match(css, /\.wr-bar\s*\{/i);
-  assert.match(css, /\.tier-gold\s*\{/i);
-  assert.doesNotMatch(css, /\.row-player::(?:before|after)/i);
-  assert.match(css, /\.row-player:is\(:hover,\s*:focus-visible\)\s*>\s*img[^}]*transform:\s*scale\(1\.03\)/i);
-  assert.match(css, /\.podium-identity:is\(:hover,\s*:focus-visible\)\s+strong\s*\{\s*color:\s*var\(--gold\)/i);
-  assert.doesNotMatch(css, /\.leaderboard-panel\.is-loading\s*>\s*:not\(\.pattern-grid\)\s*\{[^}]*visibility:\s*hidden/i);
-  assert.doesNotMatch(css, /\.leaderboard-panel\.is-loading\s+\.podium-card::before/i);
-  assert.doesNotMatch(css, /\.leaderboard-panel\.is-loading\s+\.leaderboard-row::before/i);
-  assert.match(css, /@keyframes\s+sk-sweep/i);
-  assert.match(css, /@keyframes\s+podium-enter/i);
-  assert.match(css, /@keyframes\s+row-enter/i);
-  assert.doesNotMatch(css, /\.hatch/i);
-  // The heading and the rows share one track list, which is what keeps the
-  // columns aligned. Asserting it whole, once: the two overlapping fragments
-  // this replaced pinned 186px and 430px and had both been wrong since the
-  // spacing commit, so the suite was red on main without saying anything useful.
-  assert.match(
-    css,
-    /\.table-heading,\s*\.row-grid\s*\{[\s\S]*?grid-template-columns:\s*30px\s+minmax\(150px,\s*1fr\)\s+203px\s+minmax\(180px,\s*1fr\)\s+44px\s+150px\s+413px/i,
-  );
-  assert.match(css, /\.site-header::before\s*\{[^}]*width:\s*100vw/i);
-  assert.match(css, /\.site-header\.is-scrolled::before\s*\{[^}]*opacity:\s*1/i);
-  assert.match(css, /\.app-shell\s*\{[^}]*padding:\s*0\s+0\s+24px/i);
-  assert.match(page, /slots=\{PODIUM_CHAMPION_SLOTS\} className="podium-champions champions" showGames/);
-  assert.match(page, /slots=\{ROW_CHAMPION_SLOTS\} className="row-champions champions"/);
-  assert.match(page, /const PODIUM_CHAMPION_SLOTS = 5/);
-  assert.match(page, /const ROW_CHAMPION_SLOTS = 4/);
-  assert.match(page, /Array\.from\(\{ length: 10 \}/);
-  assert.doesNotMatch(page, /role="progressbar"[^>]*Progreso hacia la próxima división/i);
-  assert.match(page, /className="lp-unit"/);
-  assert.match(page, /className="wr-bar"/);
-  assert.doesNotMatch(page, /sk-role-block|sk-match-roster/);
-  assert.match(css, /\.podium-champions\s*\{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/i);
-  assert.match(css, /\.podium-strip/);
-  assert.match(page, /className="match-row"/);
-  assert.match(css, /\.roster\s*>\s*span\.is-peer/);
-  assert.doesNotMatch(css, /\.leaderboard-panel::after/);
-  assert.match(css, /\.rank-emblem\.tier-bronze\s*\{[^}]*--rank-scale:\s*1\.21/i);
-  assert.match(css, /\.table-heading\s*\{[^}]*font-size:\s*10px/i);
-  assert.match(css, /\.podium-identity\s*>\s*span\s*\{[^}]*text-align:\s*left/i);
-  // The emblem track reserves --rank-box (64px), not the 42px the image itself
-  // occupies: .rank-emblem scales per tier via `transform`, which never enters
-  // layout, so an Iron crest paints 63px wide over a 42px box and used to push
-  // the rank label off the column's shared axis.
-  assert.match(css, /\.row-rank\s*\{[^}]*grid-template-columns:\s*46px\s+minmax\(0,\s*1fr\)/i);
-  assert.match(css, /\.podium-strip\s*\{[^}]*border-top:\s*1px\s+solid/i);
-  assert.match(css, /mask-image:\s*linear-gradient\(180deg[^;]*transparent\s+86%\)/i);
-  assert.match(page, /className="gaspi-card-label">Torneo<\/span>/);
-  assert.match(page, /className="role-share">\{player\.analytics\.roleShare\}%/);
-  assert.match(css, /\.podium-rank\s*\{[^}]*column-gap:\s*8px/i);
-  assert.match(css, /\.podium-lp\s*\{[^}]*display:\s*inline-flex[^}]*gap:\s*7px/i);
+  assert.match(layout, /family=Geist\+Mono/);
+  assert.match(layout, /family=Instrument\+Sans/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 
   await Promise.all(

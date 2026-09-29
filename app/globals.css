@@ -1,1252 +1,924 @@
 /* ═══════════════════════════════════════════
-   20Q CHALLENGE — DESIGN SYSTEM
-   Audit frame 1b: real hierarchy below the podium,
-   every field the payload already carried, and a
-   loading state built from the live cards.
+   20Q CHALLENGE — rediseño de septiembre 2026
+   Grafito neutro, un solo par de tintas de datos
+   (azul victoria, rojo derrota) y el oro reservado
+   para el #1 y para Los Juegos de Gaspi.
    ═══════════════════════════════════════════ */
 
+/* Registered so Los Juegos can repaint the page by interpolating the palette
+   instead of jumping: the invasion mutates these, it paints nothing on top. */
+@property --bg { syntax: "<color>"; inherits: true; initial-value: #0b0c0e; }
+@property --surface { syntax: "<color>"; inherits: true; initial-value: #111215; }
+@property --surface-2 { syntax: "<color>"; inherits: true; initial-value: #0f1013; }
+@property --inset { syntax: "<color>"; inherits: true; initial-value: #0e0f11; }
+@property --raised { syntax: "<color>"; inherits: true; initial-value: #17181c; }
+@property --line { syntax: "<color>"; inherits: true; initial-value: #1e1f24; }
+@property --line-soft { syntax: "<color>"; inherits: true; initial-value: #1b1c20; }
+@property --line-strong { syntax: "<color>"; inherits: true; initial-value: #2a2b31; }
+@property --track { syntax: "<color>"; inherits: true; initial-value: #1c1d22; }
+@property --text { syntax: "<color>"; inherits: true; initial-value: #ededef; }
+@property --text-2 { syntax: "<color>"; inherits: true; initial-value: #b3b4ba; }
+@property --text-3 { syntax: "<color>"; inherits: true; initial-value: #8b8c94; }
+@property --win { syntax: "<color>"; inherits: true; initial-value: #5b9dff; }
+@property --dot { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 5%); }
+
 :root {
-  --bg: #07080c;
-  --panel: #0d0f16;
-  --card: #0e1017;
-  --strip: #0b0d13;
-  --surface: #151824;
-  --line: #20242f;
-  --line-bright: #262b38;
-  --line-dim: #1a1d26;
-  --text: #eef0f6;
-  --text-2: #c9cddb;
-  --muted: #9aa0b4;
-  --muted-2: #8b91a6;
-  --faint: #3a4157;
+  --bg: #0b0c0e;
+  --surface: #111215;
+  --surface-2: #0f1013;
+  --inset: #0e0f11;
+  --raised: #17181c;
+  --line: #1e1f24;
+  --line-soft: #1b1c20;
+  --line-strong: #2a2b31;
+  --track: #1c1d22;
+  --text: #ededef;
+  --text-2: #b3b4ba;
+  --text-3: #8b8c94;
+  --text-4: #5e5f66;
+  --win: #5b9dff;
+  --win-soft: color-mix(in srgb, var(--win) 28%, transparent);
+  --loss: #f2626b;
+  --gold: #d9b26a;
+  --gold-ink: #e9dcbc;
+  --medal-1: #e7c77f;
+  --medal-2: #d5dae1;
+  --medal-3: #d39b6e;
+  --dot: rgb(255 255 255 / 5%);
+  --stitch: #2c2d33;
 
-  /* Surfaces and inks that used to be written as literals wherever they were
-     needed. They are tokens now because the Juegos invasion repaints the whole
-     view by mutating this palette, and a literal is a patch it cannot reach. */
-  --pill: #12151d;
-  --pill-hover: #171b25;
-  --dim: #0a0c11;
-  --dead: #0c0e14;
-  --dead-2: #0a0b10;
-  --role-ink: #868ca0;
-  --remake-ink: #a9b0c2;
-  --self-ring: #7f879b;
-  --glow-a: rgb(142 92 234 / 15%);
-  --glow-b: rgb(224 180 94 / 7%);
-  --header-wash: rgb(7 8 12 / 88%);
+  --tier-iron: #948a86;
+  --tier-bronze: #cb9168;
+  --tier-silver: #a9b6c6;
+  --tier-gold: #d9b26a;
+  --tier-platinum: #5cc8b5;
+  --tier-emerald: #3fbf7f;
+  --tier-diamond: #7e9bff;
+  --tier-master: #c07bff;
+  --tier-grandmaster: #ff6b6b;
+  --tier-challenger: #f2d38a;
 
-  --green: #5fd39b;
-  --green-deep: #4bb887;
-  --red: #ec7b88;
-  --red-bright: #ff6472;
-  --red-soft: #ff8a94;
-  --gold: #f6d68a;
-  --gold-deep: #e0b45e;
-  --silver: #d3dcec;
-  --silver-deep: #98a3ba;
-  --bronze: #d69a6a;
-  --bronze-deep: #9c6840;
-  --teal: #7adbc8;
+  --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-display: "Cinzel", Georgia, serif;
 
-  --sk-bg: rgb(255 255 255 / 5%);
-  --sk-shine: rgb(255 255 255 / 10%);
-  --r-sm: 3px;
-  --r-md: 4px;
-  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
-  --ease-expo: cubic-bezier(.16, 1, .3, 1);
-  /* Ranking movement has its own curve: it overshoots less than --ease-expo, so
-     a card travelling the height of the podium still settles precisely. */
-  --ease-rank: cubic-bezier(.22, 1, .28, 1);
-  --hover-fast: 150ms;
-  --hover-duration: 240ms;
-  --hover-ease: cubic-bezier(.2, .8, .25, 1);
+  --r-card: 16px;
+  --r-plate: 12px;
+  --r-chip: 8px;
+  --gutter: clamp(16px, 4.5vw, 64px);
+  --topbar-h: 60px;
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --fast: 150ms;
+
+  color-scheme: dark;
+  transition: --bg 1.2s var(--ease), --surface 1.2s var(--ease), --surface-2 1.2s var(--ease),
+    --inset 1.2s var(--ease), --raised 1.2s var(--ease), --line 1.2s var(--ease),
+    --line-soft 1.2s var(--ease), --line-strong 1.2s var(--ease), --track 1.2s var(--ease),
+    --text 1.2s var(--ease), --text-2 1.2s var(--ease), --text-3 1.2s var(--ease),
+    --win 1.2s var(--ease), --dot 1.2s var(--ease);
 }
 
-/* Registered as colours so the swap below interpolates instead of jumping:
-   Los Juegos does not paint an overlay on top of the ranking, it mutates the
-   palette underneath it, and the whole view repaints in one move from the 20Q
-   night blue to the tournament's gold. */
-@property --bg { syntax: "<color>"; inherits: true; initial-value: #07080c; }
-@property --panel { syntax: "<color>"; inherits: true; initial-value: #0d0f16; }
-@property --card { syntax: "<color>"; inherits: true; initial-value: #0e1017; }
-@property --strip { syntax: "<color>"; inherits: true; initial-value: #0b0d13; }
-@property --surface { syntax: "<color>"; inherits: true; initial-value: #151824; }
-@property --line { syntax: "<color>"; inherits: true; initial-value: #20242f; }
-@property --line-bright { syntax: "<color>"; inherits: true; initial-value: #262b38; }
-@property --line-dim { syntax: "<color>"; inherits: true; initial-value: #1a1d26; }
-@property --text { syntax: "<color>"; inherits: true; initial-value: #eef0f6; }
-@property --text-2 { syntax: "<color>"; inherits: true; initial-value: #c9cddb; }
-@property --muted { syntax: "<color>"; inherits: true; initial-value: #9aa0b4; }
-@property --muted-2 { syntax: "<color>"; inherits: true; initial-value: #8b91a6; }
-@property --faint { syntax: "<color>"; inherits: true; initial-value: #3a4157; }
-@property --pill { syntax: "<color>"; inherits: true; initial-value: #12151d; }
-@property --pill-hover { syntax: "<color>"; inherits: true; initial-value: #171b25; }
-@property --dim { syntax: "<color>"; inherits: true; initial-value: #0a0c11; }
-@property --dead { syntax: "<color>"; inherits: true; initial-value: #0c0e14; }
-@property --dead-2 { syntax: "<color>"; inherits: true; initial-value: #0a0b10; }
-@property --role-ink { syntax: "<color>"; inherits: true; initial-value: #868ca0; }
-@property --remake-ink { syntax: "<color>"; inherits: true; initial-value: #a9b0c2; }
-@property --self-ring { syntax: "<color>"; inherits: true; initial-value: #7f879b; }
-@property --glow-a { syntax: "<color>"; inherits: true; initial-value: rgb(142 92 234 / 15%); }
-@property --glow-b { syntax: "<color>"; inherits: true; initial-value: rgb(224 180 94 / 7%); }
-@property --header-wash { syntax: "<color>"; inherits: true; initial-value: rgb(7 8 12 / 88%); }
-
+/* Los Juegos de Gaspi: once the card has been opened the whole board turns to
+   the tournament's gold, and stays that way until the page is reloaded. */
 html.is-invaded {
-  --bg: #0a0906;
-  --panel: #110e09;
-  --card: #121008;
-  --strip: #0d0b07;
-  --surface: #1a1611;
-  --line: #272117;
-  --line-bright: #322a1d;
-  --line-dim: #1f1a12;
-  --text: #f0ebe3;
-  --text-2: #d8ccb9;
-  --muted: #aa9678;
-  --muted-2: #8f8069;
-  --faint: #4a4234;
-  --pill: #16120c;
-  --pill-hover: #1d1810;
-  --dim: #0c0a07;
-  --dead: #0e0c08;
-  --dead-2: #0b0a07;
-  --role-ink: #948a76;
-  --remake-ink: #b3a893;
-  --self-ring: #93887a;
-  --glow-a: rgb(227 188 110 / 14%);
-  --glow-b: rgb(148 128 100 / 22%);
-  --header-wash: rgb(10 9 6 / 88%);
+  --bg: #0c0a08;
+  --surface: #14110c;
+  --surface-2: #110f0b;
+  --inset: #100d0a;
+  --raised: #1c1710;
+  --line: #282219;
+  --line-soft: #221d15;
+  --line-strong: #362f24;
+  --track: #241f16;
+  --text: #f2e8d1;
+  --text-2: #c7b99b;
+  --text-3: #a29475;
+  --win: #e2bd6b;
+  --dot: rgb(217 178 106 / 8%);
+  --stitch: #372f24;
 }
 
-/* Two surfaces take the invasion at half strength rather than in full, by
-   mixing their way back toward the cold value on their own subtree — the
-   tokens inherit, so tempering one here tempers it for everything drawn
-   inside. Enough tone to belong to the gold board, not enough to spoil what
-   they carry. The percentage is how far each one goes.
+*, *::before, *::after { box-sizing: border-box; }
 
-   The podium card gets the lightest touch, because it is not really a surface:
-   it is the backing for a photograph. The splash is Riot's art at 24% over
-   whatever is behind it, and behind full warm brown the champion turns to mud.
-   Half-way lands on a near-neutral black — no blue cast fighting the gold, no
-   brown cast muddying the art. The medal gradients over it are gold in the
-   cold palette already, so the card keeps its place colour either way.
-
-   The status readout can take more, being chrome rather than a frame around
-   artwork, but not all of it: it is hairline borders around a near-black fill,
-   and at that weight the full warm palette reads as a smudge rather than as a
-   panel, right beside the gold badge that has to be the loudest thing in the
-   header. */
-html.is-invaded .podium-card {
-  --card: color-mix(in srgb, #121008 50%, #0e1017);
+html {
+  background: var(--bg);
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--topbar-h) + 16px);
+  -webkit-text-size-adjust: 100%;
 }
-html.is-invaded .header-stats > span {
-  --panel: color-mix(in srgb, #110e09 65%, #0d0f16);
-  --line: color-mix(in srgb, #272117 65%, #20242f);
-  --line-bright: color-mix(in srgb, #322a1d 65%, #262b38);
-  --muted-2: color-mix(in srgb, #8f8069 65%, #8b91a6);
-  --text-2: color-mix(in srgb, #d8ccb9 65%, #c9cddb);
-  --text: color-mix(in srgb, #f0ebe3 65%, #eef0f6);
-}
-
-/* ─── RESET ─── */
-* { box-sizing: border-box; }
-
-/* Tailwind was imported here but never used — not one utility class in the
-   whole app, only its preflight, which this file already duplicated for
-   box-sizing, body margins, links, lists and images. These three rules are the
-   remainder it was quietly providing: without them the browser defaults put an
-   em of margin back on every paragraph and blew the headings up to 2em. */
-h1, h2, h3, h4, h5, h6 { margin: 0; font-size: inherit; font-weight: inherit; }
-p, figure, blockquote, dl, dd { margin: 0; }
-html { overflow-x: hidden; background: var(--bg); color-scheme: dark; scroll-behavior: smooth; }
 
 body {
   margin: 0;
-  min-width: 320px;
-  /* `clip`, not `hidden`. `hidden` made this a scroll container, and a scroll
-     container is what `position: sticky` resolves against — so the header was
-     pinning itself to a box that never scrolls (the document does) and rode up
-     out of view with the rest of the page. `clip` contains overflow the same
-     way without becoming one. Anything old enough not to know `clip` still has
-     the viewport-level clip on `html` above. */
-  overflow-x: clip;
+  min-height: 100vh;
+  background: var(--bg);
   color: var(--text);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.4;
   -webkit-font-smoothing: antialiased;
-  background:
-    radial-gradient(ellipse 60% 40% at 50% -6%, var(--glow-a), transparent),
-    radial-gradient(ellipse 40% 26% at 92% 0%, var(--glow-b), transparent),
-    var(--bg);
-  background-attachment: fixed;
+  text-rendering: optimizeLegibility;
 }
 
-a { color: inherit; touch-action: manipulation; text-decoration: none; }
-a:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 2px; }
 img { display: block; max-width: 100%; }
-::selection { background: rgb(246 214 138 / 28%); color: var(--text); }
-
-.skip-link { position: fixed; top: 8px; left: 8px; z-index: 100; padding: 10px 16px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; border-radius: var(--r-sm); transform: translateY(-200%); transition: transform .2s var(--ease-expo); }
-.skip-link:focus { transform: translateY(0); }
-.sr-only { position: absolute; overflow: hidden; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; clip: rect(0 0 0 0); white-space: nowrap; }
-.unavailable-value { color: var(--red); font-size: 10px; opacity: .85; }
-
-/* Tier accents */
-.tier-iron { color: #a89e94; }
-.tier-bronze { color: var(--bronze); }
-.tier-silver { color: var(--silver); }
-.tier-gold { color: var(--gold); }
-.tier-platinum { color: var(--teal); }
-.tier-emerald { color: #6fd69a; }
-.tier-diamond { color: #8fb8f5; }
-.tier-master { color: #c3a1ff; }
-.tier-grandmaster { color: #f08080; }
-.tier-challenger { color: #f5d97e; }
-.tier-unranked { color: var(--muted-2); }
-
-/* Rank emblem framing: each tier's art sits differently in its canvas. */
-.rank-emblem { --rank-scale: 1; --rank-shift-y: 0%; object-fit: contain; transform: translateY(var(--rank-shift-y)) scale(var(--rank-scale)); transform-origin: center; }
-.rank-emblem.tier-iron { --rank-scale: 1.5; --rank-shift-y: -14.5%; }
-.rank-emblem.tier-bronze { --rank-scale: 1.21; --rank-shift-y: -7.5%; }
-.rank-emblem.tier-silver { --rank-scale: 1.1; --rank-shift-y: -4%; }
-.rank-emblem.tier-gold { --rank-scale: 1.14; --rank-shift-y: 3%; }
-.rank-emblem.tier-platinum { --rank-scale: 1.07; --rank-shift-y: 3.8%; }
-.rank-emblem.tier-emerald { --rank-scale: .96; --rank-shift-y: 3.2%; }
-.rank-emblem.tier-diamond { --rank-scale: .96; --rank-shift-y: -2.4%; }
-.rank-emblem.tier-master { --rank-scale: .97; --rank-shift-y: 1.1%; }
-.rank-emblem.tier-grandmaster { --rank-scale: .96; --rank-shift-y: -.8%; }
-.rank-emblem.tier-challenger { --rank-scale: .96; --rank-shift-y: 6.8%; }
-/* UNRANKED borrows the Iron crest; draining it stops it reading as a real placement. */
-.rank-emblem.is-unranked { filter: grayscale(1) brightness(.9) opacity(.4); }
-
-@keyframes live-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.78); } }
-/* The in-game sweep used to be a white rectangle crossing at a constant rate,
-   which read as a loading bar rather than as a game in progress. It is a warm
-   band with a bright core now: it fades in, crosses, fades out, and leaves a
-   pause before the next pass, while the panel around it breathes. */
-@keyframes live-sweep { 0%, 12% { transform: translateX(-140%) skewX(-14deg); opacity: 0; } 22% { opacity: 1; } 56% { opacity: 1; } 68%, 100% { transform: translateX(380%) skewX(-14deg); opacity: 0; } }
-@keyframes live-breathe { 0%, 100% { border-color: rgb(236 123 136 / 24%); } 50% { border-color: rgb(236 123 136 / 52%); } }
-@keyframes live-bar { 0%, 100% { box-shadow: 0 0 4px rgb(255 100 114 / 0%); } 50% { box-shadow: 0 0 12px rgb(255 100 114 / 55%); } }
-@keyframes live-art { 0%, 100% { box-shadow: 0 0 10px rgb(236 123 136 / 16%); } 50% { box-shadow: 0 0 18px rgb(236 123 136 / 42%); } }
-
-/* ═══════════════════════════════════════════
-   LAYOUT + HEADER
-   ═══════════════════════════════════════════ */
-
-.app-shell { position: relative; width: min(1260px, calc(100% - 48px)); margin: 0 auto; padding: 0 0 24px; }
-/* The header's scrolled state is read off this rather than off `scrollY`: the
-   page is not always the box that scrolls, and whenever it was not, the header
-   never picked up its contrast wash. */
-.scroll-sentinel { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
-
-.site-header {
-  position: sticky;
-  top: 0;
-  z-index: 60;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 24px;
-  min-height: 62px;
-  padding: 13px 0;
-  isolation: isolate;
-  border-bottom: 1px solid var(--line);
+button { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--win);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
-.site-header::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 50%;
-  z-index: 0;
-  width: 100vw;
-  background: var(--header-wash);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  box-shadow: 0 10px 24px rgb(0 0 0 / 18%);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-50%);
-  transition: opacity .24s ease;
-}
-.site-header.is-scrolled::before { opacity: 1; }
-.site-header > * { position: relative; z-index: 1; }
+::selection { background: color-mix(in srgb, var(--win) 35%, transparent); }
 
-/* The mark is the refresh control: it only ever updates the board. */
-.brand { display: inline-flex; align-items: center; gap: 12px; width: max-content; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.brand:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: var(--r-sm); }
-.brand-logo { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 8px; object-fit: cover; box-shadow: 0 0 0 1px rgb(246 214 138 / 22%); transition: box-shadow var(--hover-duration) var(--hover-ease), transform var(--hover-duration) var(--hover-ease); }
-.brand:is(:hover, :focus-visible) .brand-logo { box-shadow: 0 0 0 1px rgb(246 214 138 / 55%), 0 0 18px -2px rgb(246 214 138 / 40%); transform: rotate(-4deg) scale(1.05); }
-.brand > span { display: grid; gap: 2px; min-width: 0; }
-.brand strong { font-family: var(--display); font-size: 15px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
-.brand-mark { color: var(--gold); }
-.brand small { color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
-
-/* Segmented status readout */
-.header-stats { display: flex; align-items: center; }
-.header-stats > span {
-  padding: 6px 13px;
-  border: 1px solid var(--line);
-  border-right: 0;
-  background: var(--panel);
-  color: var(--muted-2);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: .12em;
-  text-transform: uppercase;
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.tier-iron { color: var(--tier-iron); }
+.tier-bronze { color: var(--tier-bronze); }
+.tier-silver { color: var(--tier-silver); }
+.tier-gold { color: var(--tier-gold); }
+.tier-platinum { color: var(--tier-platinum); }
+.tier-emerald { color: var(--tier-emerald); }
+.tier-diamond { color: var(--tier-diamond); }
+.tier-master { color: var(--tier-master); }
+.tier-grandmaster { color: var(--tier-grandmaster); }
+.tier-challenger { color: var(--tier-challenger); }
+.tier-unranked { color: var(--text-3); }
+.muted { color: var(--text-3); }
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
   white-space: nowrap;
-}
-.header-stats > span:first-child { border-radius: var(--r-sm) 0 0 var(--r-sm); color: var(--text-2); }
-.header-stats > span:last-child { border-right: 1px solid var(--line); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
-.header-stats > span.is-live { color: var(--red-soft); }
-.header-stats .live-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--red-bright); animation: live-pulse 1.4s ease-in-out infinite; }
-
-/* ─── GASPI CARD ───
-   The doorway to Los Juegos de Gaspi, and the only warm thing in a cold view.
-   It replaced the goal card: the target it named is a competitor like anyone
-   else now, so it is read off the ranking instead of framed beside it. */
-.gaspi-card {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  justify-self: end;
-  gap: 11px;
-  width: max-content;
-  min-height: 54px;
-  overflow: hidden;
-  padding: 8px 13px 8px 15px;
   border: 0;
-  border-radius: var(--r-md);
-  background:
-    linear-gradient(112deg, rgb(227 188 110 / 15%), rgb(227 188 110 / 5%) 58%, transparent 84%),
-    #0f0d08;
-  box-shadow:
-    inset 0 0 0 2px rgb(227 188 110 / 42%),
-    inset 0 1px 0 rgb(255 236 191 / 16%),
-    0 0 0 4px rgb(227 188 110 / 7%),
-    0 0 26px -6px rgb(227 188 110 / 45%);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background var(--hover-duration) var(--hover-ease),
-    box-shadow var(--hover-duration) var(--hover-ease),
-    transform var(--hover-duration) var(--hover-ease);
 }
-.gaspi-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--gold); box-shadow: 0 0 14px var(--gold); }
-.gaspi-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(104deg, transparent 34%, rgb(255 236 191 / 22%) 50%, transparent 66%);
-  opacity: 0;
-  pointer-events: none;
+.skip-link {
+  position: fixed; top: 10px; left: 10px; z-index: 100;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+  transform: translateY(-160%);
+  transition: transform var(--fast) var(--ease);
 }
-.gaspi-card:is(:hover, :focus-visible) {
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 0 0 2px rgb(227 188 110 / 78%),
-    inset 0 1px 0 rgb(255 236 191 / 22%),
-    0 0 0 5px rgb(227 188 110 / 12%),
-    0 0 34px -4px rgb(227 188 110 / 62%);
-}
-.gaspi-card:is(:hover, :focus-visible)::after { animation: goal-sheen 900ms var(--ease-expo); }
-.gaspi-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
-.gaspi-card:active { transform: translateY(0) scale(.994); }
-@keyframes goal-sheen { from { opacity: .9; transform: translateX(-70%); } to { opacity: 0; transform: translateX(70%); } }
+.skip-link:focus-visible { transform: none; }
 
-.gaspi-card-label { color: var(--gold); font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
-.gaspi-card-body { display: grid; gap: 3px; min-width: 0; }
-.gaspi-card-body strong { font-family: "Cinzel", var(--display), serif; font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
-.gaspi-card-body small { color: var(--gold-deep); font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
-.gaspi-card-arrow { color: var(--gold); font-size: 13px; transition: transform var(--hover-duration) var(--hover-ease); }
-.gaspi-card:is(:hover, :focus-visible) .gaspi-card-arrow { transform: translateX(3px); }
-
-.status-notice {
-  margin: 16px 0 -2px;
-  padding: 11px 16px;
-  border: 1px solid rgb(246 214 138 / 20%);
-  border-radius: var(--r-sm);
-  background: rgb(246 214 138 / 5%);
-  color: var(--gold);
-  font-size: 12px;
-}
-
-.leaderboard-panel { position: relative; margin-top: 22px; }
-.leaderboard-panel.is-loading { min-height: 760px; }
-#clasificacion { scroll-margin-top: 88px; }
-
-/* ═══════════════════════════════════════════
-   SHARED PARTS
-   ═══════════════════════════════════════════ */
-
-.role-block { display: grid; justify-items: center; gap: 3px; }
-.role-icon { display: block; width: 24px; height: 24px; color: var(--role-ink); }
-.role-share { color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
-
-/* Winrate bar: tall enough to compare across rows, marked at the 50% line. */
-.wr-bar { position: relative; display: flex; height: 6px; overflow: hidden; border-radius: 2px; background: rgb(236 123 136 / 34%); }
-.wr-bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--green-deep), var(--green)); transition: width .6s var(--ease-expo); }
-.wr-bar::after { content: ""; position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: rgb(255 255 255 / 40%); }
-
-.streak { display: flex; align-items: center; gap: 7px; }
-.streak-label { color: var(--muted-2); font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
-.streak-dots { display: flex; gap: 3px; }
-.streak-dots > i { display: block; width: 14px; height: 4px; border-radius: 1px; background: rgb(236 123 136 / 55%); }
-.streak-dots > i.is-win { background: var(--green); }
-.streak-dots > i.is-empty { background: var(--line-bright); }
-.podium-form .streak-label { letter-spacing: .08em; }
-.podium-form .streak-dots > i { width: 13px; }
-
-.duo-text { overflow: hidden; color: var(--gold); font-family: var(--mono); font-size: 10px; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
-.duo-text.is-none { color: var(--muted-2); }
-
-.gap-text { color: var(--muted); font-family: var(--mono); font-size: 10px; white-space: nowrap; }
-
-/* Champion discs: the winrate is text, readable without a pointer. The band is
-   its own list — no wrapper between it and the discs — so a set shorter than its
-   slots centres in the track instead of hugging the left edge of an empty one. */
-.champions { display: flex; justify-content: center; gap: 3px; min-width: 0; }
-.champions.is-empty { display: grid; place-items: center; color: var(--muted-2); font-family: var(--mono); font-size: 11px; }
-.champion { display: grid; justify-items: center; gap: 3px; }
-.champion-portrait { display: block; overflow: hidden; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: var(--surface); transition: border-color var(--hover-fast) ease, transform var(--hover-duration) var(--hover-ease); }
-.champion-portrait > img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.06); }
-.champion:hover .champion-portrait { transform: translateY(-2px); border-color: var(--line-bright); }
-.champion.is-strong .champion-portrait { border-color: rgb(95 211 155 / 45%); }
-.champion.is-weak .champion-portrait { border-color: rgb(236 123 136 / 35%); }
-.champion-wr { color: var(--text-2); font-family: var(--mono); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.champion.is-strong .champion-wr { color: var(--green); }
-.champion.is-weak .champion-wr { color: var(--red); }
-.champion-games { color: var(--muted-2); font-family: var(--mono); font-size: 10px; }
-/* Four 34px discs on a 4px gutter fill the 150px column exactly; a shorter set
-   keeps the pitch and centres, rather than hugging an empty left edge. */
-.row-champions { gap: 4px; }
-.row-champions .champion-portrait { width: 34px; height: 34px; }
-
-/* ─── THE TEN PARTICIPANTS ───
-   Two rows of five: the player's team above, the enemy team below, one role per
-   column. The 20px cell on a 3px row gutter is the rhythm of the two text lines
-   beside it, so row 1 sits on the result line and row 2 on the KDA line. */
-.roster {
-  display: grid;
-  grid-template-columns: repeat(5, var(--roster-cell, 20px));
-  grid-auto-rows: var(--roster-cell, 20px);
-  gap: var(--roster-row-gap, 3px) 2px;
-  justify-self: end;
-}
-.roster > span { display: block; overflow: hidden; width: var(--roster-cell, 20px); height: var(--roster-cell, 20px); border: 1px solid var(--line-bright); border-radius: 2px; background: var(--surface); }
-/* Teams read apart before any single champion does: cool frames above, warm below. */
-.roster > span.is-ally { border-color: #2c3648; }
-.roster > span.is-foe { border-color: #3d2a30; }
-.roster > span.is-empty { border-style: dashed; border-color: var(--line-dim); background: none; }
-.roster > span.is-self { border-color: var(--self-ring); }
-.roster > span.is-peer { border-color: var(--gold-deep); box-shadow: 0 0 0 1px rgb(224 180 94 / 32%); }
-.roster img { width: 100%; height: 100%; object-fit: cover; }
-
-.profile-placeholder { display: grid; place-items: center; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: var(--surface); color: var(--muted-2); font-size: 16px; }
-
-/* ─── MATCH MODULE ───
-   Two lines, never one long one. Line 1 carries the result and the LP against
-   the clock; line 2 the KDA against the company. Both are exactly 20px so the
-   participant grid can lock to them. */
-.match-art { position: relative; display: block; overflow: hidden; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: var(--surface); }
-.match-art.is-win { border-color: rgb(95 211 155 / 40%); }
-.match-art.is-loss { border-color: rgb(236 123 136 / 34%); }
-.match-art.is-remake { border-color: var(--faint); filter: saturate(.55); }
-.match-art.is-live { border-color: rgb(236 123 136 / 58%); animation: live-art 2.8s ease-in-out infinite; }
-.match-art > img { width: 100%; height: 100%; object-fit: cover; }
-
-.match-body { display: grid; grid-template-rows: var(--match-line, 20px) var(--match-line, 20px); gap: var(--roster-row-gap, 3px); min-width: 0; }
-.match-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
-.match-outcome { display: flex; align-items: center; gap: 8px; }
-.match-result { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
-.match-result.is-win { color: var(--green); }
-.match-result.is-loss { color: var(--red); }
-.match-result.is-remake { color: var(--remake-ink); }
-.match-lp { flex: none; font-family: var(--mono); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.match-lp.is-positive { color: var(--green); }
-.match-lp.is-negative { color: var(--red); }
-.match-lp.is-pending { color: var(--gold); }
-.match-lp.is-remake { color: var(--muted); }
-/* A match from last month must not carry the same weight as one from an hour ago. */
-.match-when { flex: none; color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.match-when.is-stale { color: var(--muted-2); opacity: .8; }
-.match-score { display: flex; align-items: baseline; gap: 3px; font-family: var(--display); font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1; }
-.match-score i { color: var(--muted-2); font-size: 10px; font-style: normal; }
-.match-score .deaths { color: var(--red); }
-.match-score .assists { color: var(--text-2); }
-.match-kda { margin-left: 5px; color: var(--muted); font-family: var(--mono); font-size: 10px; font-weight: 400; white-space: nowrap; }
-.match-empty { display: grid; place-items: center; min-height: 54px; color: var(--muted-2); font-family: var(--mono); font-size: 10px; }
-.match-line .duo-text { flex: 0 1 auto; text-align: right; }
-
-/* Live game: the same two lines, in a different state. */
-.live-badge { display: flex; align-items: center; gap: 7px; }
-.live-badge > i { display: block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--red-bright); animation: live-pulse 1.4s ease-in-out infinite; }
-.live-badge > strong { color: var(--red-soft); font-size: 11px; font-weight: 700; letter-spacing: .1em; white-space: nowrap; text-transform: uppercase; }
-.live-clock { min-width: 0; }
-.live-clock > b { color: var(--text); font-family: var(--display); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1; }
-
-/* ═══════════════════════════════════════════
-   PODIUM
-   ═══════════════════════════════════════════ */
-
-.podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-
-.podium-card {
-  position: relative;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  overflow: hidden;
-  min-height: 386px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--card);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 18px 44px rgb(0 0 0 / 30%);
-  transition: border-color var(--hover-duration) var(--hover-ease), box-shadow var(--hover-duration) var(--hover-ease), transform var(--hover-duration) var(--hover-ease);
-}
-.podium-card:not(.is-pending):is(:hover, :focus-within) { transform: translateY(-3px); box-shadow: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 26px 58px rgb(0 0 0 / 40%); }
-
-/* The frame carries the fade, not the image: the gradient then tracks the card's
-   height instead of the height of whatever portrait Riot happens to ship. */
-.podium-splash-frame {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  -webkit-mask-image: linear-gradient(180deg, rgb(0 0 0 / 95%) 0%, rgb(0 0 0 / 40%) 48%, transparent 86%);
-  mask-image: linear-gradient(180deg, rgb(0 0 0 / 95%) 0%, rgb(0 0 0 / 40%) 48%, transparent 86%);
-}
-/* Riot's loading-screen portrait: the only champion art already composed
-   vertically. It is 308x560 against a card nearer 410x455, so sizing it off
-   either single axis leaves the other one short — by height it came out 269px
-   wide in a 409px frame and bared 70px of card down each side. `cover` is the
-   only fit that holds at every breakpoint. The crop is anchored to the top so
-   the splash starts at the card edge; the frame's mask fades the lower crop. */
-.podium-splash {
-  position: absolute;
-  inset: 0;
+.shell {
   width: 100%;
-  height: 100%;
-  max-width: none;
-  object-fit: cover;
-  object-position: 50% 0%;
-  opacity: .24;
-  filter: saturate(.85) contrast(.96);
-  transition: opacity var(--hover-duration) var(--hover-ease), filter var(--hover-duration) var(--hover-ease);
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: var(--gutter);
 }
-.podium-card:not(.is-pending):is(:hover, :focus-within) .podium-splash { opacity: .38; filter: saturate(1) contrast(1); }
-.podium-crest { position: absolute; top: 0; right: 0; left: 0; height: 3px; pointer-events: none; transition: filter var(--hover-duration) var(--hover-ease); }
-.podium-card:not(.is-pending):is(:hover, :focus-within) .podium-crest { filter: brightness(1.3) saturate(1.15); }
-.podium-notch { position: absolute; top: 0; left: 0; width: 74px; height: 74px; clip-path: polygon(0 0, 100% 0, 0 100%); pointer-events: none; }
 
-/* The LP a podium card trails the one above it, as a chip on the rank block —
-   only on 2nd and 3rd, since the leader trails nobody. The slot is reserved on
-   all three so the card that has no chip does not ride up against the others. */
-.gap-pill { display: inline-flex; align-items: center; width: max-content; padding: 3px 7px; border: 1px solid var(--line-bright); border-radius: 2px; background: var(--pill); color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .04em; white-space: nowrap; }
-.podium-rank .gap-slot { display: flex; align-items: center; min-height: 22px; }
-
-/* Medal treatment per place */
-.podium-card.place-1 { border-color: rgb(224 180 94 / 34%); background: linear-gradient(168deg, rgb(224 180 94 / 9%) 0%, transparent 40%), var(--card); }
-.podium-card.place-1 .podium-crest { background: linear-gradient(90deg, transparent, var(--gold) 18%, var(--gold-deep) 82%, transparent); }
-.podium-card.place-1 .podium-notch { background: linear-gradient(135deg, rgb(246 214 138 / 26%), transparent 70%); }
-.podium-card.place-1 .podium-place { color: var(--gold); }
-.podium-card.place-1 .podium-avatar { border-color: rgb(246 214 138 / 45%); }
-.podium-card.place-1 .podium-strip { background: linear-gradient(90deg, rgb(224 180 94 / 8%), transparent 60%), var(--strip); }
-.podium-card.place-1 .podium-strip::before { background: var(--gold-deep); }
-
-.podium-card.place-2 { border-color: rgb(211 220 236 / 24%); background: linear-gradient(168deg, rgb(211 220 236 / 6%) 0%, transparent 38%), var(--card); }
-.podium-card.place-2 .podium-crest { background: linear-gradient(90deg, transparent, var(--silver) 18%, var(--silver-deep) 82%, transparent); }
-.podium-card.place-2 .podium-notch { background: linear-gradient(135deg, rgb(211 220 236 / 20%), transparent 70%); }
-.podium-card.place-2 .podium-place { color: var(--silver); }
-.podium-card.place-2 .podium-avatar { border-color: rgb(211 220 236 / 40%); }
-.podium-card.place-2 .podium-strip { background: linear-gradient(90deg, rgb(211 220 236 / 6%), transparent 60%), var(--strip); }
-.podium-card.place-2 .podium-strip::before { background: var(--silver-deep); }
-
-.podium-card.place-3 { border-color: rgb(214 154 106 / 26%); background: linear-gradient(168deg, rgb(214 154 106 / 6%) 0%, transparent 38%), var(--card); }
-.podium-card.place-3 .podium-crest { background: linear-gradient(90deg, transparent, var(--bronze) 18%, var(--bronze-deep) 82%, transparent); }
-.podium-card.place-3 .podium-notch { background: linear-gradient(135deg, rgb(214 154 106 / 20%), transparent 70%); }
-.podium-card.place-3 .podium-place { color: var(--bronze); }
-.podium-card.place-3 .podium-avatar { border-color: rgb(214 154 106 / 40%); }
-.podium-card.place-3 .podium-strip { background: linear-gradient(90deg, rgb(214 154 106 / 6%), transparent 60%), var(--strip); }
-.podium-card.place-3 .podium-strip::before { background: var(--bronze-deep); }
-
-.podium-body { position: relative; display: flex; flex-direction: column; padding: 16px 16px 0; }
-
-.podium-header { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding-bottom: 13px; border-bottom: 1px solid rgb(255 255 255 / 9%); }
-.podium-place { justify-self: start; font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: -.05em; line-height: .8; text-shadow: 0 2px 10px rgb(0 0 0 / 50%); }
-.podium-identity { display: flex; align-items: center; justify-self: start; gap: 11px; min-width: 0; border-radius: var(--r-sm); }
-.podium-avatar { flex: 0 0 auto; width: 50px; height: 50px; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: var(--surface); object-fit: cover; transition: border-color var(--hover-fast) var(--hover-ease), transform var(--hover-duration) var(--hover-ease); }
-.podium-identity:is(:hover, :focus-visible) .podium-avatar { transform: scale(1.03); }
-.podium-identity > span { min-width: 0; text-align: left; }
-.podium-identity strong { display: block; overflow: hidden; font-size: 14.5px; font-weight: 650; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; transition: color var(--hover-fast) var(--hover-ease); }
-.podium-identity .podium-tag { margin-left: 5px; color: var(--muted); font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0; }
-.podium-identity:is(:hover, :focus-visible) strong { color: var(--gold); }
-.podium-identity small { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--muted); font-family: var(--mono); font-size: 10px; }
-.podium-identity small .sep { color: var(--faint); }
-.podium-identity small .games { color: var(--muted-2); }
-
-.podium-rank { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 8px; padding: 14px 0 10px; }
-.podium-rank > img { justify-self: center; width: 104px; height: 104px; filter: drop-shadow(0 10px 22px rgb(0 0 0 / 55%)); }
-.podium-rank > span { display: grid; justify-items: start; gap: 6px; text-align: left; }
-.podium-lp { display: inline-flex; align-items: baseline; gap: 7px; font-family: var(--display); font-size: 44px; font-weight: 700; letter-spacing: -.05em; line-height: .9; white-space: nowrap; }
-.podium-lp .lp-unit { font-size: .36em; font-weight: 500; color: var(--muted-2); letter-spacing: .04em; }
-.podium-tier { font-size: 12px; font-weight: 650; letter-spacing: .01em; line-height: 1; }
-
-.podium-performance { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 4px 12px; padding-top: 4px; }
-.stat-pair { display: flex; align-items: baseline; gap: 7px; }
-.stat-pair.is-end { justify-self: end; gap: 5px; }
-.stat-pair strong { font-family: var(--display); font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
-.stat-pair small { color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; }
-.stat-pair .kda-label { color: var(--muted); letter-spacing: .1em; }
-.stat-pair .wins { color: var(--green); }
-.stat-pair .losses { color: var(--red); }
-.podium-performance .wr-bar { grid-column: 1 / -1; }
-.podium-form { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
-
-.podium-champions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); justify-items: center; gap: 4px; margin-top: auto; padding: 11px 0 12px; }
-/* Fewer champions than slots: hold the disc pitch and centre the set, rather than
-   spreading three discs across five columns or leaving two columns empty. */
-.podium-champions.is-partial { grid-template-columns: repeat(var(--shown), auto); justify-content: center; column-gap: 26px; }
-.podium-champions .champion { gap: 4px; }
-.podium-champions .champion-portrait { width: 48px; height: 48px; }
-
-/* Match strip pinned to the card foot */
-.podium-strip { position: relative; padding: 12px 16px 13px; border-top: 1px solid rgb(255 255 255 / 9%); background: var(--strip); }
-.podium-strip::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; z-index: 1; width: 3px; background: var(--line-bright); }
-.podium-strip .match-row { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; transition: background-color var(--hover-duration) var(--hover-ease); }
-.podium-strip a.match-row { margin: -12px -16px -13px; padding: 12px 16px 13px; }
-.podium-strip a.match-row:is(:hover, :focus-visible) { background: rgb(255 255 255 / 3.5%); }
-.podium-strip .match-art { width: var(--match-art, 44px); height: var(--match-art, 44px); }
-
-/* The card's live state: same strip, swept and warmed. */
-.podium-strip.is-live { overflow: hidden; border-top-color: rgb(236 123 136 / 30%); background: linear-gradient(120deg, rgb(236 123 136 / 15%), rgb(236 123 136 / 4%) 70%, transparent), var(--strip); animation: live-breathe 2.8s ease-in-out infinite; }
-.podium-strip.is-live::before { background: var(--red); animation: live-bar 2.8s ease-in-out infinite; }
-.podium-strip.is-live::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 34%; background: linear-gradient(90deg, transparent, rgb(255 138 148 / 4%) 28%, rgb(255 226 230 / 13%) 50%, rgb(255 138 148 / 4%) 72%, transparent); animation: live-sweep 4.4s cubic-bezier(.4, .1, .3, 1) infinite; pointer-events: none; }
-.podium-strip.is-live .match-row > * { position: relative; }
-
-/* ─── RESPAWN OVERLAY ───
-   A real clock instead of five raw digits. The card behind it is dimmed *and*
-   defocused: the blur is what lets a 46px countdown sit over champion art
-   without the art competing for the same reading. */
-.podium-card.is-dead { background: var(--dead); }
-.podium-card.is-dead :is(.podium-body, .podium-strip) { opacity: .5; filter: grayscale(1) blur(1.6px); }
-.podium-card.is-dead .podium-strip { background: var(--dead-2); }
-.podium-card.is-dead .podium-splash { opacity: .1; filter: grayscale(1); }
-.leaderboard-row.is-dead { background: var(--dead-2); }
-.leaderboard-row.is-dead .row-grid > * { opacity: .5; filter: grayscale(1) blur(1.6px); }
-.respawn {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 9px;
-  background: rgb(6 7 11 / 34%);
-  pointer-events: none;
+/* ── Top bar ─────────────────────────────── */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  border-bottom: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
-.respawn small { color: var(--red-soft); font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .2em; white-space: nowrap; text-transform: uppercase; }
-.respawn strong {
-  color: var(--red-bright);
-  font-family: var(--display);
-  font-size: 46px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -.04em;
-  line-height: 1;
-  text-shadow: 0 4px 22px rgb(0 0 0 / 70%);
+.topbar__inner { display: flex; align-items: center; gap: 18px; height: var(--topbar-h); }
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0; border: 0; background: none; cursor: pointer;
 }
-/* A row is a third of the card's height: the same two elements go side by side. */
-.leaderboard-row .respawn { display: flex; align-items: center; justify-content: center; gap: 12px; }
-.leaderboard-row .respawn strong { font-size: 30px; }
-
-/* ═══════════════════════════════════════════
-   TABLE
-   ═══════════════════════════════════════════ */
-
-/* The player column stops growing once it holds its content: the slack it used
-   to absorb — about one profile photo — goes to performance and the match panel,
-   which is where a wide viewport actually has more to show. */
-.table-heading, .row-grid {
-  display: grid;
-  /* Give Rango the space taken from Partida: roughly half a champion disc. */
-  grid-template-columns: 30px minmax(150px, 1fr) 203px minmax(180px, 1fr) 44px 150px 413px;
-  align-items: center;
-  column-gap: 11px;
+.brand__logo { width: 28px; height: 28px; border-radius: 8px; object-fit: cover; }
+.brand__name { font-size: 15px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.topbar__rule { width: 1px; height: 16px; background: var(--line-strong); flex: none; }
+.topbar__meta { color: var(--text-3); font-size: 13px; white-space: nowrap; }
+.topbar__nav { display: flex; gap: 4px; margin-left: 10px; }
+.topbar__nav a {
+  padding: 7px 12px;
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 13px; font-weight: 500;
+  transition: color var(--fast) ease, background-color var(--fast) ease;
 }
-.table-heading {
-  align-items: end;
-  margin-top: 26px;
-  padding: 0 0 9px 14px;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: .14em;
-  text-transform: uppercase;
+.topbar__nav a:hover { color: var(--text); background: var(--raised); }
+.topbar__nav a.is-current { color: var(--text); background: var(--raised); }
+.topbar__spacer { flex: 1; }
+.topbar__status { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; white-space: nowrap; }
+.topbar__status b { color: var(--text); font-weight: 500; }
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--win);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--win) 18%, transparent);
+  animation: breathe 3.2s ease-in-out infinite;
 }
-.table-heading > span { text-align: center; }
-.table-heading .center { text-align: center; }
-.table-heading .indent { padding-left: 0; text-align: center; }
+.topbar__status.is-stale .status-dot { background: #e0a14b; box-shadow: 0 0 0 3px rgb(224 161 75 / 18%); animation: none; }
+.topbar__status.is-stale b { color: #e0a14b; }
+.icon-button {
+  display: grid; place-items: center;
+  width: 28px; height: 28px;
+  padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--text-3);
+  cursor: pointer;
+  transition: color var(--fast) ease, background-color var(--fast) ease;
+}
+.icon-button:hover { color: var(--text); background: var(--raised); }
+.topbar__live { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; white-space: nowrap; }
+.topbar__live, .topbar__rule--live { animation: fade-in .3s var(--ease); }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); animation: pulse 1.6s ease-out infinite; }
+.gaspi-button {
+  display: flex; align-items: center; gap: 10px;
+  height: 36px; margin-left: 6px; padding: 0 14px 0 12px;
+  border: 1px solid #3a3222; border-radius: 10px;
+  background: #15130f; color: var(--gold-ink);
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--fast) ease, background-color var(--fast) ease, transform var(--fast) ease;
+}
+.gaspi-button svg { color: var(--gold); }
+.gaspi-button:hover { border-color: #5a4a2c; background: #1b1812; }
+.gaspi-button:active { transform: translateY(1px); }
+.gaspi-button__edition { color: #a8966c; font-size: 12px; font-weight: 400; }
 
-.leaderboard-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-
-/* No tier colour in the frame. Below the podium the metal is gone, and the rank
-   lives where it can be read precisely: the crest and the label. A tinted edge
-   on every row only re-ranked the list a second time, in a weaker alphabet. */
-.leaderboard-row {
-  position: relative;
-  overflow: hidden;
+.page { display: flex; flex-direction: column; gap: 32px; padding-top: 32px; }
+.notice {
+  margin: 0;
+  padding: 10px 14px;
   border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--panel);
-  transition: border-color var(--hover-duration) var(--hover-ease), box-shadow var(--hover-duration) var(--hover-ease), transform var(--hover-duration) var(--hover-ease);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
 }
-.leaderboard-row.is-unranked { border-color: var(--line-dim); background: var(--dim); }
-.leaderboard-row:not(.is-pending):is(:hover, :focus-within) { border-color: var(--line-bright); box-shadow: 0 10px 24px rgb(0 0 0 / 24%); transform: translateY(-1px); }
-.row-grid { position: relative; min-height: 92px; padding: 11px 0 10px 14px; }
+.unreachable {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  padding-block: 48px;
+  color: var(--text-2);
+}
+.unreachable strong { color: var(--text); font-size: 16px; }
+.unreachable button, .duos__more {
+  height: 40px; padding: 0 16px;
+  border: 1px solid var(--line-strong); border-radius: 10px;
+  background: transparent; color: var(--text);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.unreachable button:hover, .duos__more:hover { background: var(--raised); }
 
-.row-place { display: grid; justify-items: center; gap: 2px; }
-.row-place strong { font-family: var(--display); font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1; }
-.row-delta { color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .02em; }
-.row-delta.is-up { color: var(--green); }
-.row-delta.is-down { color: var(--red); }
+/* ── Podium ─────────────────────────────── */
+.podium__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 
-.row-player { display: flex; align-items: center; gap: 11px; min-width: 0; border-radius: var(--r-sm); }
-.row-player > img, .row-player > .profile-placeholder { flex: 0 0 auto; width: 46px; height: 46px; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: var(--surface); object-fit: cover; transition: border-color var(--hover-fast) var(--hover-ease), transform var(--hover-duration) var(--hover-ease); }
-.row-player:is(:hover, :focus-visible) > img { transform: scale(1.03); border-color: var(--gold-deep); }
-.row-player > span { min-width: 0; }
-.row-player strong { display: block; overflow: hidden; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; transition: color var(--hover-fast) var(--hover-ease); }
-.row-player:is(:hover, :focus-visible) strong { color: var(--gold); }
-.row-player .handle { display: block; overflow: hidden; margin-top: 3px; color: var(--muted); font-family: var(--mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.row-player .duo-text { display: block; margin-top: 3px; }
-
-.row-rank { display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 9px; }
-.row-rank > img { justify-self: center; width: 46px; height: 46px; }
-.row-rank > span { min-width: 0; }
-.row-rank .tier { display: block; font-size: 12px; font-weight: 650; white-space: nowrap; }
-.row-rank .lp { display: flex; align-items: baseline; gap: 4px; margin-top: 2px; font-family: var(--display); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
-.row-rank .lp i { color: var(--muted); font-family: var(--mono); font-size: 10px; font-style: normal; letter-spacing: .08em; }
-.row-rank .gap-text { display: block; margin-top: 2px; }
-
-.row-performance { display: grid; gap: 6px; min-width: 0; }
-.row-performance .perf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.row-performance .stat-pair strong { font-size: 16px; }
-.row-performance .perf-foot { display: flex; align-items: center; gap: 7px; }
-.row-performance .record { margin-left: auto; color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.row-performance .record .wins { color: var(--green); }
-.row-performance .record .losses { color: var(--red); }
-
-/* The match panel is a column of the row, floor to ceiling, not a box inside it. */
-.row-match, .row-live { position: relative; align-self: stretch; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin: -11px 0 -10px; padding: 10px 13px 10px 12px; }
-.row-match { border-left: 1px solid rgb(255 255 255 / 7%); background: var(--pill); transition: background-color var(--hover-duration) var(--hover-ease); }
-.row-match.is-stale { background: var(--dim); }
-a.row-match:is(:hover, :focus-visible) { background: var(--pill-hover); }
-.row-match .match-art, .row-live .match-art { width: var(--match-art, 44px); height: var(--match-art, 44px); }
-
-/* Live game: same slot, different state. */
-.row-live {
+/* The dot grid is the card's surface, as it is the row detail's; the rank plate
+   stays a plain well so the number on it reads first. */
+.pcard {
+  position: relative;
+  container: pcard / inline-size;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background-color: var(--surface);
+  background-image: radial-gradient(circle, var(--card-dot, color-mix(in srgb, var(--dot) 70%, transparent)) 1px, transparent 1.4px);
+  background-size: 9px 9px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
   overflow: hidden;
-  border-left: 1px solid rgb(236 123 136 / 32%);
-  background: linear-gradient(120deg, rgb(236 123 136 / 16%), rgb(236 123 136 / 4%) 70%, transparent), var(--strip);
-  animation: live-breathe 2.8s ease-in-out infinite;
+  transition: border-color var(--fast) ease;
 }
-.row-live::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 34%; background: linear-gradient(90deg, transparent, rgb(255 138 148 / 4%) 28%, rgb(255 226 230 / 13%) 50%, rgb(255 138 148 / 4%) 72%, transparent); animation: live-sweep 4.4s cubic-bezier(.4, .1, .3, 1) infinite; pointer-events: none; }
-.row-live > * { position: relative; }
+.pcard:hover { border-color: var(--line-strong); }
+.pcard.place-1 { --card-dot: rgb(217 178 106 / 7.5%); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
+.pcard.place-1:hover { border-color: color-mix(in srgb, var(--gold) 58%, transparent); }
+.pcard__body { display: flex; flex-direction: column; height: 100%; }
 
-.panel-footnote {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 20px 2px 0;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .04em;
+.pcard__art { position: relative; height: 104px; flex: none; overflow: hidden; background: var(--raised); }
+.pcard__splash {
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: 50% 25%;
+  /* Muted at rest; the card brings its art back to full colour on hover. */
+  filter: grayscale(.45) saturate(.8) brightness(.58);
+  transform: scale(1.01);
+  transition: transform .8s var(--ease), filter .8s var(--ease);
 }
+.pcard:hover .pcard__splash { transform: scale(1.04); filter: saturate(1) brightness(.7); }
+html.is-invaded .pcard__splash { filter: sepia(.35) saturate(.8) brightness(.58); }
 
-footer { display: flex; justify-content: space-between; gap: 24px; padding: 18px 2px 0; color: var(--muted-2); font-size: 10.5px; line-height: 1.6; }
-footer span:last-child { max-width: 780px; text-align: right; opacity: .8; }
-footer a { display: inline-block; padding-block: 7px; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; transition: color var(--hover-fast) ease; }
-footer a:is(:hover, :focus-visible) { color: var(--gold); }
-
-/* ═══════════════════════════════════════════
-   PENDING STATE
-   The loading view is the real card with `pending` set. One sweep mechanism
-   serves it: `sk-bone` stands in for a run of text, `sk-slot` shimmers inside a
-   frame the design already draws. Labels, tracks, grids and the five streak
-   slots are the live markup, so nothing shifts when the payload lands.
-   ═══════════════════════════════════════════ */
-
-.sk-bone, .sk-slot { position: relative; overflow: hidden; background: var(--sk-bg); }
-.sk-bone { display: inline-block; flex-shrink: 0; border-radius: 3px; }
-.sk-bone::after, .sk-slot::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 34%, var(--sk-shine) 50%, transparent 66%);
-  transform: translateX(-100%);
-  animation: sk-sweep 1.5s var(--ease-expo) infinite;
+.place-chip {
+  --medal: var(--medal-1);
+  position: absolute; left: 16px; top: 14px;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 28px; height: 28px; padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--medal) 45%, transparent);
+  border-radius: var(--r-chip);
+  background: rgb(11 12 14 / 74%);
+  color: var(--medal);
+  backdrop-filter: blur(6px);
 }
-@keyframes sk-sweep { to { transform: translateX(100%); } }
-/* .roster > span sets its own surface, so the slot has to match its weight. */
-.roster > .sk-slot { background: var(--sk-bg); }
-/* A crest silhouette, so the shape reads as a rank before the rank arrives. */
-.rank-slot { border-radius: 12% 12% 46% 46% / 10% 10% 60% 60%; }
-.sk-fixed { opacity: .45; }
-.is-pending { pointer-events: none; }
-.is-pending .wr-bar { background: rgb(255 255 255 / 7%); }
-.is-pending .wr-bar::after { background: rgb(255 255 255 / 14%); }
-.is-loading .is-pending:nth-child(2) :is(.sk-bone, .sk-slot)::after { animation-delay: .1s; }
-.is-loading .is-pending:nth-child(3) :is(.sk-bone, .sk-slot)::after { animation-delay: .2s; }
-.is-loading .is-pending:nth-child(4) :is(.sk-bone, .sk-slot)::after { animation-delay: .3s; }
-.is-loading .panel-footnote { opacity: .25; }
+.place-chip b { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+.place-chip--2 { --medal: var(--medal-2); }
+.place-chip--3 { --medal: var(--medal-3); }
 
-/* ═══════════════════════════════════════════
-   ENTRANCE + REFRESH
-   ═══════════════════════════════════════════ */
+.pcard__main { container: pmain / inline-size; }
+.pcard__identity { position: relative; display: flex; align-items: flex-start; gap: 14px; margin-top: -28px; padding-inline: 20px; }
+.avatar { flex: none; border-radius: 10px; background: var(--raised); object-fit: cover; }
+.avatar--empty { display: grid; place-items: center; color: var(--text-3); font-weight: 600; }
+.pcard__avatar { width: 58px; height: 58px; border: 3px solid var(--surface); border-radius: 15px; }
+.pcard__who { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-top: 34px; }
+.pcard__name { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.pcard__name strong { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--fast) ease; }
+.pcard__name small { color: var(--text-3); font-size: 12px; }
+.pcard__who:hover .pcard__name strong { color: var(--gold); }
+.pcard__role { display: flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 13px; white-space: nowrap; }
 
-/* Podium cards resolve out of focus; rows unroll from the tier edge they are
-   keyed to, so the two forms announce themselves differently.
-   The fill is `backwards`, never `both`: a forwards fill keeps applying the last
-   keyframe after the animation ends, which outranks author declarations and
-   would leave the hover lift and the dimmed respawn state permanently pinned. */
-.leaderboard-panel:not(.is-loading):not(.is-cached) .podium-card { animation: podium-enter 560ms var(--ease-rank) backwards; }
-.leaderboard-panel:not(.is-loading):not(.is-cached) .podium-card:nth-child(2) { animation-delay: 80ms; }
-.leaderboard-panel:not(.is-loading):not(.is-cached) .podium-card:nth-child(3) { animation-delay: 160ms; }
-.leaderboard-panel:not(.is-loading):not(.is-cached) .leaderboard-row { animation: row-enter 440ms var(--ease-rank) backwards; }
-.leaderboard-panel:not(.is-loading):not(.is-cached) .leaderboard-row:nth-child(n+2) { animation-delay: 60ms; }
-.leaderboard-panel:not(.is-loading):not(.is-cached) .leaderboard-row:nth-child(n+4) { animation-delay: 120ms; }
-@keyframes podium-enter {
-  from { opacity: 0; filter: blur(7px); transform: translate3d(0, 20px, 0) scale(.966); }
-  70% { filter: blur(0); }
-  to { opacity: 1; filter: blur(0); transform: none; }
+.plate {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 18px;
+  margin: 16px 20px 0; padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-plate);
+  background: var(--inset);
 }
-@keyframes row-enter {
-  from { opacity: 0; clip-path: inset(0 100% 0 0); transform: translate3d(-10px, 0, 0); }
-  to { opacity: 1; clip-path: inset(0 0 0 0); transform: none; }
+.pcard.place-1 .plate { border-color: color-mix(in srgb, var(--gold) 22%, transparent); }
+.plate__rank { display: flex; flex-direction: column; min-width: 0; }
+.plate__head { display: flex; align-items: center; gap: 12px; }
+.plate__emblem { width: 56px; height: 56px; margin: -4px -4px -4px -6px; }
+.emblem { flex: none; object-fit: contain; }
+.emblem.is-unranked { filter: grayscale(1) brightness(.75); opacity: .7; }
+.plate__figures { display: flex; flex-direction: column; min-width: 0; }
+.plate__tier { font-size: 13px; font-weight: 600; }
+.plate__lp { display: flex; align-items: baseline; gap: 5px; }
+.plate__lp b { font-size: 30px; font-weight: 500; line-height: 1.12; letter-spacing: -.03em; }
+.plate__lp small { color: var(--text-3); font-size: 13px; }
+.plate__gap { margin-top: 2px; color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.pcard.place-1 .plate__gap { color: var(--medal-1); }
+.gap-short { display: none; }
+@container pmain (max-width: 419px) {
+  .gap-long { display: none; }
+  .gap-short { display: inline; }
 }
-
-/* A refresh means new numbers, not a new page: the values settle and the update
-   segment in the header flashes, and nothing else moves. */
-.app-shell.is-refreshing :is(.podium-body, .podium-strip) > *,
-.app-shell.is-refreshing .row-grid > * { animation: value-settle 460ms var(--ease-rank) backwards; }
-.app-shell.is-refreshing .header-stats > span:last-child { animation: stat-flash 640ms var(--ease-expo); }
-@keyframes value-settle {
-  from { opacity: .3; transform: translate3d(0, 5px, 0); }
-  to { opacity: 1; transform: none; }
+.lp-bar { display: block; height: 4px; margin-top: 14px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.lp-bar i { display: block; height: 100%; border-radius: 2px; background: currentColor; transition: width .8s var(--ease); }
+.plate__next { margin-top: 7px; color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plate__stats {
+  display: grid; grid-template-columns: auto auto; column-gap: 16px; row-gap: 10px;
+  align-content: center;
+  margin: 0; padding-left: 18px;
+  border-left: 1px solid var(--line);
 }
-@keyframes stat-flash {
-  0%, 100% { border-color: var(--line); color: var(--muted-2); }
-  28% { border-color: var(--line-bright); color: var(--text); }
-}
+.plate__stats > div { display: contents; }
+.plate__stats dt { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.plate__stats dd { margin: 0; display: flex; justify-content: flex-end; font-size: 14px; font-weight: 500; white-space: nowrap; }
+.plate__record dd { color: var(--text-2); font-size: 12px; font-weight: 400; }
 
-/* ═══════════════════════════════════════════
-   MEJORES DÚOS
-   A second chapter under the ranking: which pairs actually win together, by the
-   same Wilson lower bound that orders every player's champions.
-   ═══════════════════════════════════════════ */
-
-.duo-panel { margin-top: 18px; }
-/* No caption between the two chapters — the change of shape already reads.
-   A short centred rule rather than a full-width one: it is a breath between
-   two tables, not a section break, and it used to take sixty-four pixels of
-   height to say so. The duos arrive with the ranking, so there is nothing
-   here holding them back until they are scrolled to. */
-.section-divider { width: min(420px, 60%); height: 1px; margin: 20px auto 0; border: 0; background: linear-gradient(90deg, transparent, var(--line-bright) 22%, var(--line-bright) 78%, transparent); }
-
-.duo-heading, .duo-grid { display: grid; grid-template-columns: 30px minmax(190px, 1fr) 90px minmax(220px, 1.1fr) 116px; align-items: center; column-gap: 11px; }
-.duo-heading { align-items: end; margin-top: 14px; padding: 0 14px 9px; border-bottom: 1px solid var(--line); color: var(--muted); font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
-.duo-heading > span:nth-child(n+3) { text-align: center; }
-.duo-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
-.duo-row { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel); transition: border-color var(--hover-duration) var(--hover-ease), box-shadow var(--hover-duration) var(--hover-ease); }
-.duo-row:hover { border-color: var(--line-bright); box-shadow: 0 10px 24px rgb(0 0 0 / 24%); }
-.duo-row.is-top { border-color: rgb(246 214 138 / 30%); background: linear-gradient(90deg, rgb(224 180 94 / 7%), transparent 58%), var(--panel); }
-.duo-row.is-top:hover { border-color: rgb(246 214 138 / 45%); }
-.duo-row.is-top :is(.duo-place strong, .duo-score strong) { color: var(--gold); }
-.duo-grid { min-height: 64px; padding: 10px 14px; }
-
-.duo-place { display: grid; justify-items: center; }
-.duo-place strong { font-family: var(--display); font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1; }
-.duo-pair { display: flex; align-items: center; gap: 11px; min-width: 0; }
-.duo-avatars { display: flex; flex: 0 0 auto; }
-.duo-avatars img { width: 38px; height: 38px; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: var(--surface); object-fit: cover; }
-.duo-avatars img + img { margin-left: -9px; box-shadow: -2px 0 0 rgb(7 8 12 / 85%); }
-.duo-pair > span { min-width: 0; }
-.duo-pair strong { display: block; overflow: hidden; font-size: 13.5px; font-weight: 650; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
-.duo-pair small { display: block; overflow: hidden; margin-top: 3px; color: var(--muted); font-family: var(--mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.duo-games { display: grid; justify-items: center; gap: 2px; }
-.duo-games strong { font-family: var(--display); font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.duo-games small { color: var(--muted-2); font-family: var(--mono); font-size: 10px; }
-.duo-wr { display: grid; gap: 6px; min-width: 0; }
-.duo-wr-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.duo-wr-head strong { font-family: var(--display); font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
-.duo-wr-head .record { color: var(--muted-2); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.duo-wr-head .record .wins { color: var(--green); }
-.duo-wr-head .record .losses { color: var(--red); }
-.duo-score { display: grid; justify-items: center; gap: 2px; }
-.duo-score strong { font-family: var(--display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1; }
-.duo-score small { color: var(--muted-2); font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
-
-/* ═══════════════════════════════════════════
-   LOS JUEGOS DE GASPI
-   The easter egg behind the header badge: a full-screen title card, with the
-   ranking underneath repainted in the tournament's gold.
-   ═══════════════════════════════════════════ */
-
-.gaspi { position: fixed; inset: 0; z-index: 200; overflow: auto; background: #070604; animation: gaspi-in .5s var(--ease-rank) backwards; }
-.gaspi-bg { position: fixed; inset: 0; background: radial-gradient(ellipse 70% 46% at 50% 16%, rgb(227 188 110 / 10%), transparent 70%), linear-gradient(180deg, rgb(10 9 6 / 82%), rgb(10 9 6 / 58%) 42%, rgb(10 9 6 / 90%)), url("https://halloflegends.leagueoflegends.com/meta-post-event.jpg") center 24% / cover no-repeat, #070604; }
-.gaspi-bg::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 26vmin rgb(0 0 0 / 72%); }
-.gaspi-particles { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
-.gaspi-particles i { position: absolute; bottom: -4vh; border-radius: 50%; background: var(--gold); box-shadow: 0 0 8px rgb(246 214 138 / 60%); opacity: 0; filter: blur(.4px); animation: gaspi-rise linear infinite; }
-@keyframes gaspi-rise { 0% { transform: translateY(0); opacity: 0; } 12% { opacity: .7; } 82% { opacity: .18; } 100% { transform: translateY(-108vh); opacity: 0; } }
-
-.gaspi-back { position: fixed; top: 18px; left: 18px; z-index: 210; padding: 9px 13px; border: 1px solid var(--line-bright); border-radius: var(--r-sm); background: rgb(13 15 22 / 82%); color: var(--text-2); font-family: var(--mono); font-size: 11px; cursor: pointer; transition: border-color var(--hover-fast) ease, color var(--hover-fast) ease, background-color var(--hover-duration) var(--hover-ease); animation: gaspi-fade .6s ease .35s backwards; }
-.gaspi-back:is(:hover, :focus-visible) { border-color: rgb(246 214 138 / 45%); background: rgb(246 214 138 / 7%); color: var(--gold); }
-.gaspi-back:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
-
-.gaspi-stage { position: relative; z-index: 1; display: grid; justify-items: center; align-content: center; gap: 17px; min-height: 100%; padding: 92px 24px 64px; text-align: center; }
-.gaspi-kicker { color: var(--gold-deep); font-family: "Cinzel", var(--display), serif; font-size: 12px; font-weight: 600; letter-spacing: .42em; text-transform: uppercase; animation: gaspi-fade .7s ease .15s backwards; }
-.gaspi-title { position: relative; display: grid; gap: 6px; font-family: "Cinzel", var(--display), serif; font-size: clamp(36px, 7.4vw, 92px); font-weight: 700; letter-spacing: .06em; line-height: 1.04; text-transform: uppercase; }
-.gaspi-line { display: flex; justify-content: center; filter: drop-shadow(0 6px 34px rgb(224 180 94 / 30%)); }
-.gaspi-letter { color: transparent; background: linear-gradient(180deg, #fdf4d8 8%, var(--gold) 52%, #c89546 94%); -webkit-background-clip: text; background-clip: text; animation: gaspi-letter .72s var(--ease-rank) backwards; }
-@keyframes gaspi-letter { from { opacity: 0; transform: translateY(30px) scale(1.55); filter: blur(12px); } 62% { filter: blur(0); } to { opacity: 1; transform: none; filter: blur(0); } }
-.gaspi-beam { width: min(430px, 62vw); height: 1px; background: linear-gradient(90deg, transparent, var(--gold-deep), transparent); box-shadow: 0 0 12px rgb(224 180 94 / 50%); transform: scaleX(0); animation: gaspi-beam .8s var(--ease-expo) forwards; }
-.gaspi-beam.is-top { animation-delay: 1.62s; }
-.gaspi-beam.is-bottom { animation-delay: 1.74s; }
-@keyframes gaspi-beam { to { transform: scaleX(1); } }
-.gaspi-sub { color: var(--gold-deep); font-family: var(--mono); font-size: 11px; letter-spacing: .3em; text-transform: uppercase; animation: gaspi-fade .7s ease 1.95s backwards; }
-
-.gaspi-hall { display: grid; justify-items: center; gap: 14px; margin-top: 24px; animation: gaspi-fade .8s ease 2.3s backwards; }
-.gaspi-hall-label { display: flex; align-items: center; gap: 14px; color: rgb(224 180 94 / 78%); font-family: "Cinzel", var(--display), serif; font-size: 12px; font-weight: 600; letter-spacing: .34em; text-transform: uppercase; }
-.gaspi-hall-label::before, .gaspi-hall-label::after { content: ""; width: 52px; height: 1px; background: linear-gradient(90deg, transparent, rgb(224 180 94 / 45%)); }
-.gaspi-hall-label::after { background: linear-gradient(90deg, rgb(224 180 94 / 45%), transparent); }
-.gaspi-edition { display: grid; justify-items: center; gap: 10px; width: min(340px, 86vw); padding: 26px 28px 24px; border: 1px solid rgb(246 214 138 / 22%); border-radius: var(--r-md); background: linear-gradient(168deg, rgb(224 180 94 / 8%), transparent 46%), var(--card); box-shadow: 0 24px 60px rgb(0 0 0 / 45%), inset 0 1px 0 rgb(255 255 255 / 5%); }
-.gaspi-edition-name { font-family: "Cinzel", var(--display), serif; font-size: 19px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
-.gaspi-slot { display: grid; place-items: center; width: 58px; height: 58px; border: 1px dashed rgb(246 214 138 / 35%); border-radius: var(--r-sm); background: rgb(246 214 138 / 4%); color: var(--gold-deep); font-family: "Cinzel", var(--display), serif; font-size: 24px; }
-@keyframes gaspi-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes gaspi-in { from { opacity: 0; } to { opacity: 1; } }
-
-/* ─── THE SECOND VISIT ───
-   The reveal is spent after one opening per page load. From then on the card
-   arrives whole: every piece rides the overlay's own fade rather than its own
-   delay, and the title stops being the thing you wait for — it moves up to the
-   top edge at a fraction of the size and hands the middle of the screen to the
-   hall of fame, which is what someone coming back a second time came to see. */
-.gaspi.is-seen :is(.gaspi-back, .gaspi-kicker, .gaspi-letter, .gaspi-beam, .gaspi-sub, .gaspi-hall) { animation: none; }
-.gaspi.is-seen .gaspi-beam { transform: scaleX(1); }
-.gaspi.is-seen .gaspi-stage { align-content: start; gap: 13px; padding: 64px 24px 48px; }
-.gaspi.is-seen .gaspi-kicker { font-size: 10.5px; letter-spacing: .34em; }
-.gaspi.is-seen .gaspi-title { font-size: clamp(21px, 3.2vw, 34px); }
-.gaspi.is-seen .gaspi-line { filter: drop-shadow(0 3px 16px rgb(224 180 94 / 26%)); }
-.gaspi.is-seen .gaspi-beam { width: min(280px, 46vw); }
-.gaspi.is-seen .gaspi-hall { margin-top: 38px; }
-
-/* ═══════════════════════════════════════════
-   RESPONSIVE
-   ═══════════════════════════════════════════ */
-
-@media (max-width: 1180px) {
-  /* The match panel is the one column that cannot shrink past its parts:
-     44px of art, two text lines and 108px of participants. */
-  .table-heading, .row-grid { grid-template-columns: 28px minmax(140px, 1fr) 168px minmax(158px, 1fr) 40px 130px 358px; }
-  .podium-champions .champion-portrait { width: 42px; height: 42px; }
-  .podium-champions.is-partial { column-gap: 20px; }
-  .row-champions .champion-portrait { width: 30px; height: 30px; }
-  .duo-heading, .duo-grid { grid-template-columns: 28px minmax(170px, 1fr) 80px minmax(190px, 1.1fr) 104px; }
-}
-
-@media (max-width: 1080px) {
-  .podium { grid-template-columns: 1fr; }
-  .podium-card { width: min(100%, 560px); margin-inline: auto; }
-}
-
-@media (max-width: 960px) {
-  .app-shell { width: min(100% - 24px, 1260px); }
-  .site-header { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
-  .header-stats { display: none; }
-  .table-heading { display: none; }
-  /* That header is what put air between the podium and the fourth place, so
-     hiding it left them flush. 14px matches the podium's own grid gap, which is
-     the rhythm the section already uses. */
-  .leaderboard-list { margin-top: 14px; }
-
-  /* Stacked rows label their own figures, so no number is left nameless. */
-  .row-grid {
-    grid-template-columns: 30px minmax(0, 1fr) auto;
-    grid-template-areas:
-      "place player player"
-      "place rank performance"
-      "place role champions"
-      "match match match";
-    gap: 14px 10px;
-    padding: 12px 12px 0;
+/* A narrow card stacks its plate: the rank above, the four figures as a 2×2 grid. */
+@container pmain (max-width: 359px) {
+  .plate { grid-template-columns: 1fr; row-gap: 12px; }
+  .plate__stats {
+    grid-template-columns: repeat(2, auto minmax(0, 1fr));
+    column-gap: 10px;
+    padding: 12px 0 0;
+    border-left: 0;
+    border-top: 1px dashed var(--line-strong);
   }
-  .row-place { grid-area: place; align-self: start; }
-  .row-player { grid-area: player; }
-  .row-rank { grid-area: rank; }
-  .row-performance { grid-area: performance; }
-  .row-role { grid-area: role; justify-self: start; }
-  /* The band is the flex container itself, so its caption is a flex item. Left in
-     flow it stood beside the discs, and a wrapping flex container still reports
-     every item's width as its max-content — which sized this auto track to
-     caption + discs and collapsed the column next to it. Out of flow the caption
-     contributes nothing, and padding reserves the row it sits in. */
-  .row-champions { grid-area: champions; position: relative; justify-self: end; min-width: 0; padding-top: 19px; }
-  .row-champions[data-label]::before { position: absolute; inset: 0 0 auto 0; margin-bottom: 0; }
-  .row-match, .row-live { grid-area: match; margin: 0 -12px; padding: 10px 12px 12px; border-left: 0; border-top: 1px solid rgb(255 255 255 / 7%); }
-  .row-live { border-top-color: rgb(236 123 136 / 32%); }
-
-  .row-grid [data-label]::before, .duo-grid [data-label]::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 5px;
-    color: var(--muted-2);
-    font-family: var(--mono);
-    font-size: 9.5px;
-    font-weight: 500;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-  }
-  /* The in-game panel never carries a caption: the IN-GAME badge names it. */
-  .row-place[data-label]::before,
-  .row-player[data-label]::before,
-  .row-match[data-label]::before,
-  .row-live[data-label]::before { content: none; }
-  /* An empty band has no discs to clear, so its caption goes back in flow. */
-  .row-champions.is-empty { padding-top: 0; }
-  .row-champions.is-empty[data-label]::before { position: static; }
-  /* The gap sentence is the longest string in a narrow rank column: let it wrap
-     instead of running under the performance band beside it. */
-  .row-rank .gap-text { white-space: normal; }
-  .row-rank[data-label] { grid-template-areas: "label label" "emblem detail"; }
-  .row-rank[data-label]::before { grid-area: label; }
-  .row-rank > img { grid-area: emblem; }
-  .row-rank > span { grid-area: detail; }
-
-  .panel-footnote, footer { flex-direction: column; gap: 6px; }
-  footer span:last-child { max-width: none; text-align: left; }
-
-  /* A duo row keeps the pair and its score on one line and drops the tallies
-     underneath, so the two figures that rank it stay side by side. */
-  .duo-heading { display: none; }
-  .duo-list { margin-top: 12px; }
-  /* The first column is shared by the place and the game count, and it is the
-     caption under the count that sets how wide it has to be: "PARTIDAS" wants
-     fifty-five pixels and the column was twenty-six, so it wrapped onto two
-     lines and shoved the row open. `auto` lets the widest of the two decide. */
-  .duo-grid {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "place pair score"
-      "games wr   wr";
-    gap: 12px 10px;
-    padding: 11px 12px 12px;
-  }
-  /* The score already names itself underneath, so the column caption above it
-     was both a repetition and one pixel too wide to fit on one line. */
-  .duo-score[data-label]::before { content: none; }
-  .duo-place { grid-area: place; align-self: center; }
-  .duo-pair { grid-area: pair; }
-  .duo-score { grid-area: score; justify-self: end; align-self: center; justify-items: end; }
-  .duo-score strong { font-size: 19px; }
-  .duo-games { grid-area: games; justify-items: center; align-self: start; }
-  .duo-wr { grid-area: wr; }
 }
 
-@media (max-width: 560px) {
-  .app-shell { width: min(100% - 16px, 1260px); }
-  .brand-logo { width: 30px; height: 30px; }
-  .brand strong { font-size: 13px; }
-  /* The brand has to yield before it reaches the Gaspi card: max-content plus
-     two nowrap lines cannot shrink, so it silently overlapped instead. */
-  .brand { width: auto; min-width: 0; }
-  .brand strong, .brand small { overflow: hidden; text-overflow: ellipsis; }
-  .gaspi-card { grid-template-columns: minmax(0, 1fr) auto; width: 172px; min-height: 48px; gap: 8px; padding: 5px 9px 5px 11px; }
-  .gaspi-card-label { display: none; }
-  .gaspi-card-body strong { font-size: 11px; }
-  .gaspi-card-body small { font-size: 9px; }
+.stitch {
+  height: 1px; margin: 16px 20px 0; flex: none;
+  background-image: linear-gradient(to right, var(--stitch) 55%, transparent 0);
+  background-size: 7px 1px;
+  background-repeat: repeat-x;
+}
+.stitch + .mline, .stitch + .pcard__respawn { margin-block: 0; }
+.mline + .stitch, .pcard__respawn + .stitch { margin-top: 0; }
 
-  /* 384px reference frame: the same grid at 18px, with every label still on. */
-  .app-shell { --match-art: 40px; --match-line: 18px; --roster-cell: 18px; --roster-row-gap: 2px; }
-  .match-score { font-size: 14px; }
-  .live-clock > b { font-size: 14px; }
-  .live-badge > strong, .match-result { font-size: 10.5px; }
+.pcard__side { display: flex; flex-direction: column; flex: 1; }
+.pcard__respawn { padding: 12px 20px; }
+.pcard__champs { padding: 14px 20px 18px; }
+.pcard__champs-tiles { display: none; }
+.section-label {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 22px;
+  color: var(--text-3); font-size: 12px;
+}
+.section-label > span:first-child { font-weight: 500; }
 
-  .podium-card { min-height: 0; }
-  .podium-body { padding: 14px 14px 0; }
-  .podium-header { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; }
-  .podium-place { font-size: 26px; }
-  .podium-avatar { width: 44px; height: 44px; }
-  .podium-rank { column-gap: 6px; padding: 12px 0 8px; }
-  .podium-rank > img { width: 94px; height: 94px; }
-  .podium-lp { font-size: 38px; }
-  .podium-champions { gap: 4px; padding: 10px 0 11px; }
-  .podium-champions .champion-portrait { width: 44px; height: 44px; }
-  .podium-strip { padding: 11px 14px 12px; }
-  .podium-strip .match-row, .podium-strip a.match-row { gap: 9px; }
-  .podium-strip a.match-row { margin: -11px -14px -12px; padding: 11px 14px 12px; }
-
-  /* ─── THE 384px ROW ───
-     Section 03 of the audit. The row stops being a stack of labelled columns
-     and becomes four full-width lines — identity, rank, performance, champions
-     — with the match module underneath. Every figure sits beside the thing that
-     names it, so the column captions go with the columns. */
-  .row-grid {
-    grid-template-columns: 24px minmax(0, 1fr) auto;
-    grid-template-areas:
-      "place       player      role"
-      "rank        rank        rank"
-      "performance performance performance"
-      "champions   champions   champions"
-      "match       match       match";
-    gap: 10px 9px;
-    padding: 11px 12px 0;
-  }
-  .row-rank[data-label]::before,
-  .row-performance[data-label]::before,
-  .row-role[data-label]::before,
-  .row-champions[data-label]::before { content: none; }
-
-  /* Line 1: place, portrait, identity, role. */
-  .row-place { align-self: center; }
-  .row-place strong { font-size: 19px; }
-  .row-player { gap: 9px; }
-  .row-player > img, .row-player > .profile-placeholder { width: 42px; height: 42px; }
-  .row-player strong { font-size: 13px; }
-  /* The habitual duo is the one field the mockup drops here. It stays, folded
-     onto the handle line, so the identity block still measures one portrait
-     tall instead of growing a third line. */
-  .row-player > span { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "name name" "handle duo"; align-items: baseline; column-gap: 5px; }
-  .row-player > span > strong { grid-area: name; }
-  .row-player .handle { grid-area: handle; margin-top: 2px; }
-  .row-player .duo-text { grid-area: duo; margin-top: 2px; }
-  .row-player .duo-text::before { content: "· "; color: var(--faint); }
-  .row-role { justify-self: end; align-self: center; }
-  .row-role .role-block { gap: 2px; }
-
-  /* Line 2: the crest, the label and the gap on the left, the LP at the end. */
-  .row-rank { grid-template-columns: 42px minmax(0, 1fr); gap: 9px; }
-  .row-rank[data-label] { grid-template-areas: "emblem detail"; }
-  .row-rank > img { width: 42px; height: 42px; }
-  .row-rank > span { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "tier lp" "gap lp"; align-items: center; column-gap: 9px; }
-  .row-rank .tier { grid-area: tier; }
-  .row-rank .gap-text { grid-area: gap; white-space: nowrap; }
-  .row-rank .lp { grid-area: lp; margin-top: 0; font-size: 20px; letter-spacing: -.03em; }
-
-  /* Line 3: winrate against KDA over the full width. */
-  .row-performance .stat-pair strong { font-size: 15px; }
-  .row-performance .stat-pair.is-end strong { font-size: 16px; }
-
-  /* Line 4: four discs spread edge to edge, on the same axis as the crest. The
-     band stops stretching past the reference frame, or by 560px the four discs
-     scatter with 160px of air between them. */
-  .row-champions { justify-self: center; width: 100%; max-width: 400px; justify-content: space-between; padding-top: 0; }
-  .row-champions.is-partial { justify-content: center; column-gap: 26px; }
-  .row-champions .champion-games { display: none; }
-  .row-champions .champion-portrait { width: 40px; height: 40px; }
-
-  .row-match, .row-live { gap: 9px; margin-top: 2px; padding: 10px 12px 11px; }
-  .row-live .live-badge { gap: 6px; }
-  .row-live .live-badge > i { width: 6px; height: 6px; }
-
-  .respawn { gap: 6px; }
-  .respawn small { font-size: 10.5px; }
-  .respawn strong { font-size: 40px; }
-  .leaderboard-row .respawn strong { font-size: 26px; }
-
-  .duo-pair strong { font-size: 13px; }
-  .duo-avatars img { width: 34px; height: 34px; }
-  .gaspi-back { top: 12px; left: 12px; }
-  .gaspi-stage { padding: 84px 16px 48px; }
-  .gaspi.is-seen .gaspi-stage { padding: 62px 16px 40px; }
-  .gaspi.is-seen .gaspi-hall { margin-top: 26px; }
+.info-hint {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0; border: 0; background: none;
+  color: var(--text-3); font-size: 12px; cursor: help;
+}
+.info-hint:hover { color: var(--text-2); }
+.tooltip {
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text-2);
+  font-size: 12px; line-height: 1.45;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 40%);
+  animation: fade-in 120ms var(--ease);
+  z-index: 60;
 }
 
-/* A respawned Papipu stays a quiet, grayscale surface. The generic hover rules
-   below the card/row declarations must not reintroduce colour, lift, shadows or
-   champion-disc motion through either layout. The card-level hover/focus state
-   remains available; only the inner content stays quiet and grayscale. */
-.podium-card.is-dead:is(:hover, :focus-within) .podium-splash {
-  opacity: .1;
-  filter: grayscale(1);
+/* ── Champion lists ─────────────────────── */
+.champ-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.champ-row { display: flex; align-items: center; gap: 12px; height: 28px; }
+.portrait {
+  flex: none;
+  display: block;
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  background: var(--track);
+  overflow: hidden;
 }
-.podium-card.is-dead:is(:hover, :focus-within) .podium-crest {
-  filter: grayscale(1) brightness(.75);
+.portrait img { width: 100%; height: 100%; transform: scale(1.1); }
+.champ-row__name { width: 96px; flex: none; color: #d4d5da; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.champ-row__games { width: 30px; flex: none; text-align: right; color: var(--text-3); font-size: 12px; }
+.champ-row__wr { width: 40px; flex: none; text-align: right; font-size: 13px; font-weight: 500; }
+.wr-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.wr-track i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+.wr-track__observed { background: var(--win-soft); }
+.wr-track__adjusted { background: var(--win); }
+.wr-track::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--surface); }
+.tone-strong { color: var(--text); }
+.tone-even { color: var(--text-2); }
+.tone-weak { color: var(--loss); }
+.empty-note { margin: 12px 0 0; color: var(--text-3); font-size: 13px; }
+
+.champ-tiles { display: flex; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.champ-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 36px; }
+.champ-tile .portrait { border-radius: 8px; }
+.champ-tile small { font-size: 12px; }
+.champ-tile__games { color: var(--text-3); }
+
+/* ── Form, match line, live, respawn ────── */
+.form { display: inline-flex; align-items: center; gap: 8px; }
+.form__pills { display: inline-flex; gap: 4px; }
+.pill { width: 6px; height: 14px; border-radius: 3px; background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.pill.is-win { background: var(--win); box-shadow: none; }
+.pill.is-loss { background: var(--loss); box-shadow: none; }
+.form__text { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+
+.mline { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: var(--text); transition: background-color var(--fast) ease; }
+a.mline:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); }
+.mline.is-empty { margin: 0; color: var(--text-3); font-size: 13px; }
+.mline__icon { flex: none; width: 30px; height: 30px; border-radius: 8px; overflow: hidden; background: var(--track); }
+.mline__icon img { width: 100%; height: 100%; transform: scale(1.1); }
+.mline__body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.mline__top { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.mline__age { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.mline__sub { color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mline__chevron { flex: none; color: var(--text-3); transition: transform var(--fast) var(--ease); }
+a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2); }
+.mline.is-old .mline__icon { opacity: .75; }
+.mline.is-compact { padding: 0; gap: 10px; }
+.outcome { font-size: 13px; font-weight: 600; }
+.outcome.is-win { color: var(--win); }
+.outcome.is-loss { color: var(--loss); }
+.outcome.is-remake { color: var(--text-2); }
+.lp-change { font-size: 13px; cursor: help; }
+.lp-change.is-win { color: var(--win); }
+.lp-change.is-loss { color: var(--loss); }
+.lp-change.is-pending, .lp-change.is-neutral { color: var(--text-2); }
+.live-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--win); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+.live-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--win); animation: pulse 1.6s ease-out infinite; }
+.mline.is-live b { font-size: 13px; font-weight: 500; }
+
+.respawn { display: flex; flex-direction: column; gap: 5px; }
+.respawn__pill {
+  display: inline-flex; align-items: center; align-self: flex-start; gap: 8px;
+  height: 28px; padding: 0 11px 0 9px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--raised); color: var(--text-2);
+  font-size: 12px; white-space: nowrap;
 }
-.podium-card.is-dead .podium-strip a.match-row:is(:hover, :focus-visible) {
-  background: transparent;
+.respawn__pill b { color: var(--text); font-size: 13px; font-weight: 500; }
+.respawn__note { padding-left: 10px; color: var(--text-3); font-size: 12px; font-style: italic; }
+.pcard.is-dead img, .srow.is-dead .avatar, .srow.is-dead .emblem, .srow.is-dead .champ-tile img { filter: grayscale(1) brightness(.7); }
+.pcard.is-dead .plate, .pcard.is-dead .pcard__champs { opacity: .5; }
+
+/* ── Standings board ────────────────────── */
+.board { border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); overflow: hidden; }
+.board__head {
+  height: 40px; align-items: center;
+  padding-inline: 20px;
+  background: var(--surface-2);
+  color: var(--text-3); font-size: 12px;
 }
-.podium-card.is-dead .champion:hover .champion-portrait,
-.leaderboard-row.is-dead .champion:hover .champion-portrait {
-  transform: none;
-  border-color: var(--line-dim);
+.board__body { margin: 0; padding: 0; list-style: none; }
+.srow-grid {
+  display: grid;
+  grid-template-columns: 44px minmax(180px, 1.2fr) minmax(190px, 1.15fr) minmax(130px, .75fr) 52px 100px 142px minmax(170px, 1.05fr) 24px;
+  column-gap: 16px;
 }
-.podium-card.is-dead .podium-strip.is-live::after,
-.leaderboard-row.is-dead .row-live::before {
-  animation: none;
+.srow { border-top: 1px solid var(--line-soft); transition: background-color var(--fast) ease; }
+.srow:hover { background: color-mix(in srgb, var(--raised) 45%, transparent); }
+.srow.is-open { background: color-mix(in srgb, var(--raised) 70%, transparent); }
+.srow.is-dead { background: color-mix(in srgb, var(--inset) 80%, transparent); }
+.srow__main { align-items: center; min-height: 68px; padding-inline: 20px; cursor: pointer; }
+.srow.is-pending .srow__main { cursor: default; }
+.srow__stats { display: contents; }
+.srow__place { display: flex; flex-direction: column; gap: 2px; }
+.srow__place b { font-size: 14px; font-weight: 600; }
+.delta { color: var(--text-4); font-size: 12px; }
+.delta.is-up { color: var(--win); }
+.delta.is-down { color: var(--loss); }
+.srow__player { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.srow__avatar { width: 36px; height: 36px; }
+.srow__who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.srow__who strong { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--fast) ease; }
+.srow__player:hover .srow__who strong { color: var(--gold); }
+.srow__meta { display: flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.srow__gapline, .srow__respawn-inline, .srow__role-mark { display: none; }
+.srow__respawn-inline { align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.srow__respawn-inline b { color: var(--text); font-weight: 500; }
+.srow__rank { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.srow__emblem { width: 40px; height: 40px; margin: -4px; }
+.srow__rank-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.srow__tier { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; font-size: 13px; }
+.srow__tier b { font-weight: 600; }
+.srow__gap { color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow__wr { display: flex; flex-direction: column; gap: 8px; }
+.srow__wr-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.srow__wr-top b { font-size: 14px; font-weight: 500; }
+.srow__wr-top small { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.wr-bar { position: relative; display: block; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.wr-bar i { display: block; height: 100%; background: var(--win); transition: width .8s var(--ease); }
+.wr-bar::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--surface); }
+.srow.is-dead .wr-bar i { background: var(--text-4); }
+.srow__kda { font-size: 14px; }
+.srow.is-dead :is(.srow__rank, .srow__wr, .srow__kda, .srow__form, .srow__champs) { opacity: .45; }
+.srow__toggle {
+  display: grid; place-items: center;
+  width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-3);
+  cursor: pointer;
+  transition: transform .25s var(--ease), color var(--fast) ease, background-color var(--fast) ease;
+}
+.srow__toggle:hover { color: var(--text); background: var(--raised); }
+.srow.is-open .srow__toggle { transform: rotate(180deg); color: var(--text); }
+.srow__detail { overflow: hidden; }
+
+.detail {
+  display: grid; grid-template-columns: 1.25fr 1fr 1.2fr .9fr; gap: 40px;
+  padding: 24px 20px 28px 80px;
+  border-top: 1px solid var(--line-soft);
+  background-color: var(--inset);
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--dot) 70%, transparent) 1px, transparent 1.4px);
+  background-size: 9px 9px;
+}
+.detail__block { min-width: 0; }
+.detail__block .champ-row__name { width: 84px; }
+.detail__hint { margin-top: 10px; }
+.segmented { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.segmented button {
+  height: 22px; padding: 0 10px;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-3);
+  font-size: 12px; cursor: pointer;
+  transition: color var(--fast) ease, background-color var(--fast) ease;
+}
+.segmented button[aria-pressed="true"] { background: var(--line); color: var(--text); }
+.role-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.role-list li { display: flex; align-items: center; gap: 10px; height: 26px; color: var(--text-2); }
+.role-list__name { width: 56px; color: #d4d5da; font-size: 13px; }
+.role-list__bar { flex: 1; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.role-list__bar i { display: block; height: 100%; border-radius: 3px; background: #6b6d76; }
+.role-list__value { width: 76px; text-align: right; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.text-link { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 12px; }
+.text-link:hover { color: var(--text); }
+.detail__result { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 14px 0 0; font-size: 12px; }
+.detail__kda { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 0; }
+.detail__kda b { font-size: 16px; font-weight: 500; }
+.detail__kda small { color: var(--text-3); font-size: 12px; }
+.roster { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.roster__row { display: flex; align-items: center; gap: 12px; }
+.roster__label { width: 60px; flex: none; color: var(--text-3); font-size: 12px; }
+.roster__slots { display: flex; gap: 6px; }
+.roster__slot { width: 28px; height: 28px; border-radius: 7px; background: var(--track); overflow: hidden; }
+.roster__slot img { width: 100%; height: 100%; transform: scale(1.1); }
+.roster__slot.is-self { box-shadow: 0 0 0 2px var(--inset), 0 0 0 3.5px var(--text); }
+.roster__slot.is-peer { box-shadow: 0 0 0 2px var(--inset), 0 0 0 3.5px var(--gold); }
+.summary { display: flex; flex-direction: column; gap: 14px; margin: 14px 0 0; }
+.summary dt { color: var(--text-3); font-size: 12px; }
+.summary dd { margin: 4px 0 0; font-size: 14px; }
+.summary__duo { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.summary__duo .avatar { width: 22px; height: 22px; border-radius: 6px; }
+.summary__duo small { color: var(--text-3); font-size: 12px; }
+
+/* ── Duos ───────────────────────────────── */
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.section-head h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.section-head > span { color: var(--text-3); font-size: 13px; }
+.drow-grid {
+  display: grid;
+  grid-template-columns: 44px minmax(240px, 1.35fr) minmax(0, 1fr) minmax(0, 1fr) 110px 100px;
+  column-gap: 24px;
+}
+.drow { border-top: 1px solid var(--line-soft); transition: background-color var(--fast) ease; }
+.drow:hover { background: color-mix(in srgb, var(--raised) 45%, transparent); }
+.drow__main { align-items: center; min-height: 56px; padding-inline: 20px; }
+.drow__place { color: var(--text-2); font-size: 14px; font-weight: 600; }
+.drow.place-1 .drow__place { color: var(--medal-1); }
+.drow.place-2 .drow__place { color: var(--medal-2); }
+.drow.place-3 .drow__place { color: var(--medal-3); }
+.drow__pair { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.drow__avatars { display: flex; flex: none; }
+.drow__avatars .avatar { width: 30px; height: 30px; border: 2px solid var(--surface); border-radius: 9px; }
+.drow__avatars .avatar + .avatar { margin-left: -10px; }
+.drow__names { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.drow__names strong { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drow__ranks { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.drow__mobile-meta, .drow__wr-record, .drow__wr-adjusted { display: none; }
+.drow__games { display: flex; align-items: center; gap: 12px; }
+.drow__games b { width: 32px; font-size: 14px; font-weight: 500; }
+.volume { flex: 1; max-width: 200px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.volume i { display: block; height: 100%; border-radius: 2px; background: #6b6d76; }
+.drow__wr { display: flex; align-items: center; gap: 12px; }
+.drow__wr-top { display: flex; align-items: baseline; gap: 8px; }
+.drow__wr-top b { width: 52px; font-size: 14px; font-weight: 500; }
+.drow__wr .wr-track { max-width: 200px; }
+.drow__record { color: var(--text-2); font-size: 13px; }
+.drow__adjusted { text-align: right; font-size: 14px; font-weight: 500; }
+.col-adjusted { text-align: right; }
+.duos__more { display: none; width: 100%; margin-top: 12px; }
+
+/* ── Footer ─────────────────────────────── */
+.footer { display: flex; flex-direction: column; gap: 14px; margin-top: 56px; padding-block: 28px 48px; border-top: 1px solid var(--line-soft); }
+.footer__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--text-3); font-size: 13px; }
+.footer__row nav { display: flex; gap: 20px; }
+.footer__row a { display: inline-block; padding-block: 8px; color: var(--text-2); }
+.footer__row a:hover { color: var(--text); }
+.footer p { max-width: 820px; margin: 0; color: var(--text-3); font-size: 12px; line-height: 18px; }
+
+/* ── Loading ────────────────────────────── */
+.sk {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--track) 25%, color-mix(in srgb, var(--track) 55%, var(--line-strong)) 50%, var(--track) 75%);
+  background-size: 200% 100%;
+  animation: sk-sweep 1.4s ease-in-out infinite;
+}
+.sk-line { border-radius: 4px; }
+.sk-champ { height: 28px; margin-top: 8px; }
+.pcard.is-pending .pcard__art { background: var(--raised); }
+.pcard.is-pending .plate__stats { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Los Juegos de Gaspi ────────────────── */
+.gaspi-overlay { position: fixed; inset: 0; z-index: 70; background: #0a0907; animation: fade-in .45s var(--ease); }
+.gaspi {
+  position: fixed; inset: 0; z-index: 71;
+  display: flex; flex-direction: column;
+  color: #ebd29a;
+  animation: fade-in .45s var(--ease);
+  outline: none;
+  overflow: auto;
+}
+/* Light from above, a halo behind the name and a vignette. Fixed, like the
+   motes and the frame, so a short screen can scroll the card beneath them. */
+.gaspi__light {
+  position: fixed; inset: 0; overflow: hidden; pointer-events: none;
+  background:
+    radial-gradient(ellipse 58% 42% at 50% 46%, rgb(233 190 110 / 13%), transparent 70%),
+    radial-gradient(ellipse 50% 62% at 50% -6%, rgb(236 198 122 / 22%), rgb(236 198 122 / 7%) 48%, transparent 74%);
+  box-shadow: inset 0 0 min(240px, 28vmin) rgb(0 0 0 / 82%);
+}
+.gaspi__rays { position: absolute; left: 50%; top: -60px; }
+.gaspi__rays i {
+  position: absolute; top: 0; left: calc(var(--w) / -2);
+  width: var(--w); height: 130vh;
+  transform: rotate(var(--r)); transform-origin: 50% 0;
+  background: linear-gradient(to bottom, rgb(246 214 140 / var(--a)), transparent 80%);
+  filter: blur(20px);
+}
+.gaspi__rays i:nth-child(1) { --w: 160px; --r: -31deg; --a: 8%; }
+.gaspi__rays i:nth-child(2) { --w: 120px; --r: -15deg; --a: 10%; }
+.gaspi__rays i:nth-child(3) { --w: 220px; --r: 0deg; --a: 12%; }
+.gaspi__rays i:nth-child(4) { --w: 120px; --r: 15deg; --a: 10%; }
+.gaspi__rays i:nth-child(5) { --w: 160px; --r: 31deg; --a: 8%; }
+/* Gold motes rising through the whole view; the first few are soft, larger
+   out-of-focus lights. Sizes, peaks and timings ride in on each mote. */
+.gaspi__dust { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+.gaspi__dust i {
+  position: absolute; bottom: -12px;
+  width: var(--size); height: var(--size); border-radius: 50%;
+  background: #f8dc98;
+  box-shadow: 0 0 calc(var(--size) * 4) rgb(246 214 138 / 85%);
   opacity: 0;
+  animation: gaspi-rise var(--duration) linear var(--delay) infinite;
 }
-.leaderboard-row.is-dead:is(:hover, :focus-within) .row-grid > * {
-  opacity: .5;
-  filter: grayscale(1) blur(1.6px);
+.gaspi__dust i.is-orb { box-shadow: none; filter: blur(calc(var(--size) / 4)); }
+.gaspi__frame { position: fixed; inset: 24px; border: 1px solid rgb(217 178 106 / 13%); border-radius: 20px; pointer-events: none; }
+.gaspi__bar { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 52px 56px 0; }
+.gaspi__back {
+  display: flex; align-items: center; gap: 8px;
+  height: 40px; padding: 0 16px 0 12px;
+  border: 1px solid #5a4a2c; border-radius: 10px;
+  background: rgb(21 19 15 / 82%); color: #f0e2bf;
+  font-size: 13px; font-weight: 600; cursor: pointer;
 }
-.leaderboard-row.is-dead :is(a.row-match, .row-live):is(:hover, :focus-visible) {
-  background: var(--dead-2);
+.gaspi__back:hover { background: #1c1913; }
+.gaspi__esc { display: flex; align-items: center; gap: 8px; color: #a8966c; font-size: 12px; }
+.gaspi__esc kbd { padding: 2px 6px; border: 1px solid #3a3222; border-radius: 5px; color: #cdbb92; font-family: var(--font-mono); font-size: 11px; }
+.gaspi__stage { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px 76px; text-align: center; }
+.gaspi__kicker { padding-left: .42em; color: #b89c62; font-family: var(--font-mono); font-size: 12px; letter-spacing: .42em; text-transform: uppercase; }
+.gaspi__beam { display: flex; align-items: center; gap: 16px; width: min(680px, 80vw); margin: 24px 0 28px; }
+.gaspi__beam i { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgb(236 198 122 / 70%)); box-shadow: 0 0 10px rgb(236 198 122 / 35%); }
+.gaspi__beam i:last-child { background: linear-gradient(90deg, rgb(236 198 122 / 70%), transparent); }
+.gaspi__beam b { width: 8px; height: 8px; border: 1px solid #ecc67a; transform: rotate(45deg); box-shadow: 0 0 12px rgb(236 198 122 / 55%); }
+.gaspi__title {
+  margin: 0;
+  font-family: var(--font-display); font-size: clamp(40px, 9vw, 108px); font-weight: 600;
+  line-height: 1.02; letter-spacing: .07em; text-transform: uppercase;
+  filter: drop-shadow(0 0 30px rgb(233 190 110 / 32%));
 }
-
-/* Respawn may quiet the contents, but it never changes the podium's medal edge. */
-.podium-card.is-dead.place-1:is(:hover, :focus-within) { border-color: rgb(224 180 94 / 34%); }
-.podium-card.is-dead.place-2:is(:hover, :focus-within) { border-color: rgb(211 220 236 / 24%); }
-.podium-card.is-dead.place-3:is(:hover, :focus-within) { border-color: rgb(214 154 106 / 26%); }
-
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+.gaspi__line { display: block; padding-left: .07em; }
+.gaspi__letter {
+  display: inline-block;
+  background: linear-gradient(180deg, #fff4d8 8%, #edc77e 52%, #b7883f 96%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: letter-in .7s var(--ease) backwards;
 }
+.gaspi.is-seen .gaspi__letter { animation: none; }
+.gaspi__sub { margin: 0; color: #cdbb92; font-size: 15px; }
 
-/* ═══════════════════════════════════════════
-   LEGAL PAGES
-   ═══════════════════════════════════════════ */
-
-.legal-shell { width: min(900px, calc(100% - 40px)); margin: 0 auto; padding: 22px 0 28px; }
-.legal-site-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 42px; }
-.legal-brand { width: max-content; }
-.legal-nav { display: flex; align-items: center; gap: 8px; }
-.legal-nav a { padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--r-sm); background: rgb(14 15 22 / 70%); color: var(--text-2); font-size: 10px; letter-spacing: .045em; text-decoration: none; transition: background-color var(--hover-duration) var(--hover-ease), border-color var(--hover-fast) ease, color var(--hover-fast) ease, transform var(--hover-duration) var(--hover-ease); }
-.legal-nav a:is(:hover, :focus-visible) { border-color: var(--line-bright); background: rgb(157 123 229 / 6%); color: var(--gold-bright); transform: translateY(-1px); }
-
-.legal-document { margin-top: 18px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-md); background: linear-gradient(145deg, rgb(217 169 78 / 6%), transparent 26%), var(--panel); box-shadow: 0 24px 80px rgb(0 0 0 / 26%); }
-.legal-intro { padding: clamp(24px, 6vw, 52px); border-bottom: 1px solid var(--line); }
-.legal-intro > span { color: var(--gold); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
-.legal-intro h1 { max-width: 760px; margin: 12px 0; font-size: clamp(30px, 6vw, 52px); font-weight: 600; letter-spacing: -.045em; line-height: 1.04; }
-.legal-intro p { max-width: 720px; margin: 0; color: var(--text-2); font-size: 13px; line-height: 1.7; }
-.legal-content { padding: clamp(24px, 6vw, 52px); }
-.legal-content section + section { margin-top: 34px; padding-top: 30px; border-top: 1px solid rgb(255 255 255 / 7%); }
-.legal-content h2 { margin: 0 0 12px; color: var(--gold-bright); font-size: 15px; font-weight: 600; line-height: 1.35; }
-.legal-content p, .legal-content li { color: var(--text-2); font-size: 12px; line-height: 1.75; }
+/* ── Legal pages ────────────────────────── */
+.legal-shell { width: min(900px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 40px; }
+.legal-site-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 44px; }
+.legal-brand { display: flex; align-items: center; gap: 10px; width: max-content; font-size: 15px; font-weight: 600; }
+.legal-brand .brand-logo { width: 28px; height: 28px; border-radius: 8px; }
+.legal-nav { display: flex; align-items: center; gap: 6px; }
+.legal-nav a { padding: 8px 12px; border-radius: 8px; color: var(--text-3); font-size: 13px; font-weight: 500; transition: color var(--fast) ease, background-color var(--fast) ease; }
+.legal-nav a:hover { color: var(--text); background: var(--raised); }
+.legal-document { margin-top: 20px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); }
+.legal-intro { padding: clamp(24px, 6vw, 48px); border-bottom: 1px solid var(--line); }
+.legal-intro > span { color: var(--gold); font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+.legal-intro h1 { max-width: 760px; margin: 12px 0; font-size: clamp(28px, 5vw, 44px); font-weight: 600; letter-spacing: -.03em; line-height: 1.08; }
+.legal-intro p { max-width: 720px; margin: 0; color: var(--text-2); font-size: 14px; line-height: 1.7; }
+.legal-content { padding: clamp(24px, 6vw, 48px); }
+.legal-content section + section { margin-top: 32px; padding-top: 28px; border-top: 1px solid var(--line-soft); }
+.legal-content h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; line-height: 1.35; }
+.legal-content p, .legal-content li { color: var(--text-2); font-size: 14px; line-height: 1.75; }
 .legal-content p { margin: 0; }
 .legal-content p + p, .legal-content p + ul, .legal-content ul + p { margin-top: 12px; }
 .legal-content ul { margin: 0; padding-left: 20px; }
-.legal-content li + li { margin-top: 5px; }
-.legal-content blockquote { margin: 16px 0 0; padding: 16px 18px; border-left: 3px solid var(--gold); background: rgb(217 169 78 / 8%); color: var(--text-2); font-size: 11px; line-height: 1.7; }
-.legal-action { display: inline-block; padding: 10px 13px; border: 1px solid var(--gold); border-radius: var(--r-sm); color: var(--gold-bright); text-decoration: none; transition: background-color var(--hover-duration) var(--hover-ease), box-shadow var(--hover-duration) var(--hover-ease), transform var(--hover-duration) var(--hover-ease); }
-.legal-action:is(:hover, :focus-visible) { background: rgb(217 169 78 / 8%); box-shadow: 0 6px 18px rgb(0 0 0 / 18%); transform: translateY(-1px); }
-.legal-footer { display: flex; justify-content: space-between; gap: 20px; padding: 14px 2px 0; color: var(--muted); font-size: 10px; }
-.legal-footer a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.legal-content li + li { margin-top: 6px; }
+.legal-content a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.legal-content blockquote { margin: 16px 0 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--inset); color: var(--text-2); font-size: 13px; line-height: 1.7; }
+.legal-action { display: inline-block; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--text); }
+.legal-action:hover { background: var(--raised); }
+.legal-footer { display: flex; justify-content: space-between; gap: 20px; padding: 16px 2px 0; color: var(--text-3); font-size: 12px; }
+.legal-footer a { color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
 
-@media (max-width: 520px) {
-  .legal-shell { width: min(100% - 16px, 900px); padding-top: 12px; }
-  .legal-site-header { align-items: flex-start; }
-  .legal-brand > strong { font-size: 12px; }
-  .legal-nav { gap: 5px; }
-  .legal-nav a { padding: 8px 9px; font-size: 10px; }
-  .legal-document { margin-top: 12px; }
-  .legal-intro, .legal-content { padding: 22px 18px; }
-  .legal-content section + section { margin-top: 26px; padding-top: 24px; }
-  .legal-footer { flex-direction: column; gap: 5px; }
+/* ── Motion ─────────────────────────────── */
+@keyframes sk-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--win) 45%, transparent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes letter-in { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes gaspi-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  12% { opacity: var(--peak); }
+  75% { opacity: calc(var(--peak) * .6); }
+  100% { transform: translateY(calc(-100vh - 24px)); opacity: 0; }
+}
+
+/* ── Responsive ─────────────────────────── */
+
+/* Medium table: KDA and the last match move into the detail. */
+@media (max-width: 1359px) {
+  .srow-grid { grid-template-columns: 36px minmax(160px, 1.3fr) minmax(196px, 1.1fr) minmax(115px, .75fr) 100px 116px 20px; column-gap: 12px; }
+  .col-kda, .col-match { display: none; }
+  .board__head, .srow__main { padding-inline: 16px; }
+  .srow__champs .champ-tiles { gap: 7px; }
+  .srow__champs .champ-tile { width: 34px; }
+  .srow.is-dead .srow__meta { display: none; }
+  .srow.is-dead .srow__respawn-inline { display: flex; }
+  .detail { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 40px; padding: 22px 16px 26px 64px; }
+  .drow-grid { grid-template-columns: 36px minmax(0, 1fr) 120px 200px 84px; column-gap: 16px; }
+  .drow__main, .board--duos .board__head { padding-inline: 16px; }
+  .col-record { display: none; }
+  .drow__wr { display: flex; flex-direction: column; align-items: stretch; gap: 7px; }
+  .drow__wr-top { justify-content: space-between; }
+  .drow__wr-top b { width: auto; }
+  .drow__wr-record { display: inline; color: var(--text-3); font-size: 12px; }
+  .drow__wr .wr-track { flex: none; max-width: none; }
+}
+
+@media (max-width: 1199px) {
+  .topbar__meta, .topbar__rule:first-of-type { display: none; }
+  .podium__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pcard.place-1 { grid-column: 1 / -1; }
+}
+
+/* The leader's card turns horizontal as soon as it has the width for it. */
+@container pcard (min-width: 820px) {
+  .pcard__body { display: grid; grid-template-columns: 150px minmax(0, 1.3fr) minmax(0, 1fr); }
+  .pcard__art { height: auto; min-height: 100%; }
+  .pcard__splash { position: absolute; inset: 0; object-position: 60% 40%; }
+  .pcard__main { padding: 20px; border-right: 1px solid var(--line); }
+  .pcard__identity { margin-top: 0; padding-inline: 0; align-items: center; }
+  .pcard__avatar { width: 48px; height: 48px; border: 0; border-radius: 12px; }
+  .pcard__who { padding-top: 0; }
+  .pcard__main .plate { margin: 16px 0 0; }
+  .pcard__side { padding: 8px 0 4px; }
+  .pcard__side > .stitch:first-child { display: none; }
+  .pcard__side .mline { padding-inline: 20px; }
+  .pcard__side .champ-row__name { width: 84px; }
+}
+
+/* Compact rows: two lines per player, the table heading goes away. */
+@media (max-width: 959px) {
+  .topbar__live, .topbar__rule--live, .topbar__status-label, .topbar__refresh { display: none; }
+  .board__head { display: none; }
+  .srow-grid { grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 10px; row-gap: 12px; }
+  .srow__main { padding: 14px 12px; min-height: 0; }
+  .srow__place { grid-column: 1; grid-row: 1; }
+  .srow__place .delta { display: none; }
+  .srow__player { grid-column: 2; grid-row: 1; }
+  .srow__avatar { width: 40px; height: 40px; border-radius: 11px; }
+  .srow__meta, .srow__gap { display: none; }
+  .srow__role-mark { display: block; flex: none; color: var(--text-3); }
+  .srow__who { flex: 1; }
+  .srow.is-dead .srow__respawn-inline { display: flex; }
+  .srow:not(.is-dead) .srow__gapline { display: block; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow__rank { grid-column: 3; grid-row: 1; justify-self: end; gap: 6px; }
+  .srow__emblem { width: 30px; height: 30px; margin: -3px; }
+  .srow__rank-text { align-items: flex-end; }
+  .srow__tier { flex-direction: column; align-items: flex-end; gap: 2px; }
+  .srow__stats { grid-column: 2; grid-row: 2; display: flex; align-items: center; gap: 14px; min-width: 0; padding-left: 52px; }
+  .srow__wr { flex: none; }
+  .srow__wr-top { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .srow__wr .wr-bar { display: none; }
+  .srow__form .form__text { display: none; }
+  .srow__champs { margin-left: auto; }
+  .srow__champs .champ-tiles { gap: 6px; }
+  .srow__champs .champ-tile small { display: none; }
+  .srow__champs .champ-tile { width: auto; }
+  .srow__champs .portrait { width: 28px; height: 28px; }
+  .srow__toggle { grid-column: 3; grid-row: 2; justify-self: end; width: 28px; height: 28px; }
+  .detail { grid-template-columns: 1fr; padding: 18px 16px 22px; gap: 24px; }
+  .drow-grid { grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 10px; }
+  .drow__main { padding: 12px 14px 12px 12px; row-gap: 10px; }
+  .drow__games, .drow__record, .drow__adjusted { display: none; }
+  .drow__mobile-meta { display: block; color: var(--text-3); font-size: 12px; }
+  .drow__wr { grid-column: 3; align-items: flex-end; }
+  .drow__wr-top { flex-direction: column; align-items: flex-end; gap: 2px; }
+  .drow__wr-record { display: none; }
+  .drow__wr-adjusted { display: inline; color: var(--text-3); font-size: 12px; }
+  .drow__wr .wr-track { display: none; }
+  .board--duos .board__head { display: none; }
+  .board--duos:not(.is-expanded) .drow.is-extra { display: none; }
+  .duos__more { display: block; }
+}
+
+@media (max-width: 719px) {
+  :root { --topbar-h: 56px; }
+  .topbar__inner { gap: 10px; }
+  .topbar__nav a.is-current, .topbar__status-label, .topbar__refresh, .gaspi-button__label, .gaspi-button__edition { display: none; }
+  .topbar__nav { margin-left: auto; }
+  .topbar__spacer { display: none; }
+  .gaspi-button { width: 44px; height: 44px; justify-content: center; padding: 0; margin-left: 0; border-radius: 12px; }
+  .gaspi-button svg { width: 18px; height: 18px; }
+  .page { gap: 24px; padding-top: 16px; }
+  .podium__grid { grid-template-columns: 1fr; gap: 12px; }
+  .pcard.place-2 .pcard__art, .pcard.place-3 .pcard__art { height: 72px; }
+  .pcard.place-2 .place-chip, .pcard.place-3 .place-chip { top: 12px; min-width: 26px; height: 26px; padding-inline: 8px; }
+  .pcard.place-2 .pcard__identity, .pcard.place-3 .pcard__identity { margin-top: -22px; }
+  .pcard.place-2 .pcard__avatar, .pcard.place-3 .pcard__avatar { width: 50px; height: 50px; border-radius: 13px; }
+  .pcard.place-2 .pcard__who, .pcard.place-3 .pcard__who { padding-top: 26px; }
+  .pcard.place-2 .plate__record, .pcard.place-3 .plate__record, .pcard.place-2 .lp-bar, .pcard.place-3 .lp-bar,
+  .pcard.place-2 .plate__next, .pcard.place-3 .plate__next { display: none; }
+  .pcard.place-2 .pcard__champs-bars, .pcard.place-3 .pcard__champs-bars,
+  .pcard.place-2 .pcard__champs .info-hint, .pcard.place-3 .pcard__champs .info-hint { display: none; }
+  .pcard.place-2 .pcard__champs-tiles, .pcard.place-3 .pcard__champs-tiles { display: block; margin-top: 10px; }
+  .pcard__champs-tiles .champ-tiles { justify-content: space-between; }
+  .pcard__champs-tiles .champ-tile { width: 52px; }
+  .pcard__identity, .plate, .stitch { margin-inline: 16px; }
+  .pcard__identity { padding-inline: 0; }
+  .mline, .pcard__respawn, .pcard__champs { padding-inline: 16px; }
+  .plate__lp b { font-size: 28px; }
+  .gap-long { display: none; }
+  .gap-short { display: inline; }
+  .section-head { flex-direction: column; gap: 2px; margin-bottom: 12px; }
+  .footer { margin-top: 40px; padding-block: 24px 32px; }
+  .footer__row { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .footer__row nav a { min-height: 44px; display: inline-flex; align-items: center; }
+  .gaspi__bar { padding: 36px 32px 0; }
+  .gaspi__back { height: 44px; }
+  .gaspi__esc { display: none; }
+  .gaspi__frame { inset: 12px; border-radius: 16px; }
+  .gaspi__dust i:nth-child(n+33) { display: none; }
+  .gaspi__kicker { padding-left: .36em; font-size: 11px; letter-spacing: .36em; }
+  .gaspi__beam { width: min(280px, 72vw); margin: 18px 0 20px; }
+  .gaspi__title { letter-spacing: .05em; }
+  .gaspi__line { padding-left: .05em; }
+  .gaspi__sub { font-size: 14px; }
+}
+
+@media (max-width: 479px) {
+  .srow__role-mark { display: none; }
+  .srow__stats { padding-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  :root { transition: none; }
+  .gaspi__letter { animation: none; }
+  .gaspi__dust i { animation: none; bottom: auto; top: var(--y); opacity: calc(var(--peak) * .8); }
 }

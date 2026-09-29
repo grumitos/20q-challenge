@@ -14,12 +14,15 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "test:source": "node --experimental-strip-types --test tests/cloud-cron-pinger.test.mjs tests/leaderboard-logic.test.mjs tests/leaderboard-route-refresh.test.mjs tests/leaderboard-service.test.mjs tests/lp-evidence-persistence.test.mjs tests/lp-reconciliation.test.mjs tests/lp-tracker-api.test.mjs tests/lp-tracker-integration.test.mjs tests/lp-tracker.test.mjs tests/migrations.test.mjs tests/opus-frontend-contract.test.mjs tests/player-enrichment.test.mjs tests/remote-store.test.mjs tests/riot-client.test.mjs tests/riot-request.test.mjs tests/scheduled-refresh.test.mjs tests/season-analytics.test.mjs tests/ui-regressions.test.mjs",
+    "test:source": "node --experimental-strip-types --test tests/cloud-cron-pinger.test.mjs tests/leaderboard-logic.test.mjs tests/leaderboard-route-refresh.test.mjs tests/leaderboard-service.test.mjs tests/lp-evidence-persistence.test.mjs tests/lp-reconciliation.test.mjs tests/lp-tracker-api.test.mjs tests/lp-tracker-integration.test.mjs tests/lp-tracker.test.mjs tests/migrations.test.mjs tests/opus-frontend-contract.test.mjs tests/player-enrichment.test.mjs tests/remote-store.test.mjs tests/riot-client.test.mjs tests/riot-request.test.mjs tests/scheduled-refresh.test.mjs tests/season-analytics.test.mjs tests/ui-format.test.mjs tests/ui-regressions.test.mjs",
     "verify": "npm run lint && npm run typecheck && npm run test:source && npm test",
     "test:built": "node --test tests/cron-endpoints.test.mjs tests/rendered-html.test.mjs tests/rso-readiness.test.mjs"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "1.1.23",
+    "@radix-ui/react-tooltip": "1.2.16",
     "drizzle-orm": "0.45.2",
+    "motion": "13.4.5",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
