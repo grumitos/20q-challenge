@@ -288,7 +288,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
   width: 100%; height: 100%;
   object-fit: cover; object-position: 50% 25%;
   /* Muted at rest; the card brings its art back to full colour on hover.
-     Every rule below spells out the same four functions in the same order:
+     Every rule below spells out the same four functions, in the same sequence:
      a filter list is only interpolated when both ends have the same functions,
      and any other pair changes in one step, which is how this used to snap. */
   filter: grayscale(.45) sepia(0) saturate(.8) brightness(.58);
