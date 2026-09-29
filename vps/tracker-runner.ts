@@ -23,8 +23,11 @@ import { fetchRiotLeaderboard, RIOT_PLAYERS } from "../lib/riot-client.ts";
 import {
   ANALYTICS_HEARTBEAT_LANE,
   ANALYTICS_HEARTBEAT_TTL_MS,
+  ANALYTICS_RETRY_DELAY_MS,
+  ANALYTICS_RETRY_LANE,
   analyticsPhaseDue,
   readAnalyticsHeartbeat,
+  readAnalyticsRetry,
 } from "./analytics-schedule.ts";
 
 /**
@@ -129,12 +132,12 @@ async function main() {
     }));
 
     // Champion/role ingestion, once the last successful run is ~10 minutes
-    // old — or on demand for a drain.
+    // old and no failed run is backing off — or on demand for a drain.
     const analyticsStartedAt = Date.now();
     try {
       if (
         process.env.FORCE_ANALYTICS === "1" ||
-        analyticsPhaseDue(analyticsStartedAt, await readAnalyticsHeartbeat(d1))
+        analyticsPhaseDue(analyticsStartedAt, await readAnalyticsHeartbeat(d1), await readAnalyticsRetry(d1))
       ) {
         const outcome = await runAnalyticsPhase(store, apiKey, analyticsStartedAt);
         console.log(JSON.stringify({
@@ -151,6 +154,12 @@ async function main() {
         durationMs: Date.now() - analyticsStartedAt,
         error: error instanceof Error ? error.message : String(error),
       }));
+      // Back off before the next try; see `ANALYTICS_RETRY_DELAY_MS`.
+      try {
+        await store.blockLaneUntil(ANALYTICS_RETRY_LANE, analyticsStartedAt + ANALYTICS_RETRY_DELAY_MS);
+      } catch {
+        // Best-effort: losing it only means the next tick retries straight away.
+      }
     }
     // A skipped run is not a failure: another run holds the lane, which is the
     // lease doing its job. Only a thrown run is worth a non-zero exit, so the
