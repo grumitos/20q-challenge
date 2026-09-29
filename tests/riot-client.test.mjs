@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { backfillSeasonAnalytics, fetchRiotLeaderboard, fetchRiotPlayer, inferLeaguePointsChange, normalizePersistedSoloQueueMatch, normalizeSoloQueueMatch, RIOT_PLAYERS, RiotApiError } from "../lib/riot-client.ts";
+import { backfillSeasonAnalytics, currentDataDragonVersion, fetchRiotLeaderboard, fetchRiotPlayer, inferLeaguePointsChange, normalizePersistedSoloQueueMatch, normalizeSoloQueueMatch, RIOT_PLAYERS, RiotApiError } from "../lib/riot-client.ts";
+import { championsByNumericKey, resetChampionCatalog } from "../lib/champion-catalog.ts";
 import { createDemoSnapshot } from "../lib/leaderboard.ts";
 
 const MAMIMU_PUUID = RIOT_PLAYERS.find(({ id }) => id === "mamimu").puuid;
@@ -761,5 +762,42 @@ test("keeps the version it had when Data Dragon cannot be reached", async () => 
     "secret-key", fakeFetch, new Date("2026-07-19T00:00:00Z"), cached, undefined, 500,
   );
   assert.equal(snapshot.dataDragonVersion, "16.13.1");
+});
+
+/**
+ * A Data Dragon request that is accepted and never answered, until its signal
+ * gives up. `AbortSignal.timeout` does not hold the event loop open, so the
+ * interval does, or the test runner would end the test before the deadline.
+ */
+async function withHungDataDragon(run) {
+  const keepAlive = setInterval(() => {}, 50);
+  try {
+    return await run((_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal.reason));
+    }));
+  } finally {
+    clearInterval(keepAlive);
+  }
+}
+
+test("gives up on a Data Dragon version lookup that hangs and keeps the version it had", { timeout: 5_000 }, async () => {
+  // Without a deadline this waited on the OS, inside a tracker run the timer
+  // kills at 90 seconds.
+  const started = Date.now();
+  const version = await withHungDataDragon((hung) => currentDataDragonVersion(hung, "16.13.1", 20));
+  assert.equal(version, "16.13.1");
+  assert.ok(Date.now() - started < 2_000);
+});
+
+test("gives up on a Data Dragon champion list that hangs", { timeout: 5_000 }, async () => {
+  // The tracker catches this and shows the live game without its champion,
+  // instead of the run hanging until the timer kills it.
+  resetChampionCatalog();
+  try {
+    await withHungDataDragon((hung) =>
+      assert.rejects(championsByNumericKey("16.15.1", hung, 20), { name: "TimeoutError" }));
+  } finally {
+    resetChampionCatalog();
+  }
 });
 
