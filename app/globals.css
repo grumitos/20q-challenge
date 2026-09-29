@@ -217,8 +217,8 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
   transition: color var(--fast) ease, background-color var(--fast) ease;
 }
 .icon-button:hover { color: var(--text); background: var(--raised); }
-.topbar__live { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; white-space: nowrap; }
-.topbar__live.is-live { color: var(--text); }
+.topbar__live { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; white-space: nowrap; }
+.topbar__live, .topbar__rule--live { animation: fade-in .3s var(--ease); }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); animation: pulse 1.6s ease-out infinite; }
 .gaspi-button {
   display: flex; align-items: center; gap: 10px;

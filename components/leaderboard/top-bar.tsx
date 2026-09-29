@@ -9,7 +9,7 @@ export function TopBar({ updatedAt, stale, liveCount, onRefresh, onOpenGaspi }: 
   onRefresh: () => void;
   onOpenGaspi: () => void;
 }) {
-  const liveText = liveCount === 0 ? "Nadie en partida" : liveCount === 1 ? "1 en partida" : `${liveCount} en partida`;
+  const liveText = liveCount === 1 ? "1 en partida" : `${liveCount} en partida`;
   const statusLabel = updatedAt === null ? "Cargando" : stale ? "Sin actualizar desde" : "Actualizado";
 
   return (
@@ -35,11 +35,16 @@ export function TopBar({ updatedAt, stale, liveCount, onRefresh, onOpenGaspi }: 
             <RefreshIcon size={14} />
           </button>
         </span>
-        <span className="topbar__rule topbar__rule--live" aria-hidden="true" />
-        <span className={`topbar__live${liveCount > 0 ? " is-live" : ""}`}>
-          {liveCount > 0 ? <i className="live-dot" aria-hidden="true" /> : null}
-          {liveText}
-        </span>
+        {/* Only while someone is in a game; an empty board says nothing here. */}
+        {liveCount > 0 ? (
+          <>
+            <span className="topbar__rule topbar__rule--live" aria-hidden="true" />
+            <span className="topbar__live">
+              <i className="live-dot" aria-hidden="true" />
+              {liveText}
+            </span>
+          </>
+        ) : null}
         <button type="button" className="gaspi-button" onClick={onOpenGaspi} aria-label={`Abrir ${GASPI_TITLE}`}>
           <TrophyIcon size={16} />
           <span className="gaspi-button__label">Los Juegos de Gaspi</span>
