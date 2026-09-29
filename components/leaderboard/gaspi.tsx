@@ -108,16 +108,6 @@ export function GaspiDialog({ open, seen, onOpenChange }: {
             </Dialog.Title>
             <Beam />
             <p className="gaspi__sub">Torneo 1v1 · Temporada 2026</p>
-            <div className="gaspi__hall">
-              <h3 className="gaspi__hall-label"><span>Sala de la fama</span></h3>
-              <article className="gaspi__edition">
-                <div>
-                  <strong>Edición I</strong>
-                  <small>Campeón por definirse</small>
-                </div>
-                <span className="gaspi__slot" role="img" aria-label="Campeón sin definir">?</span>
-              </article>
-            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

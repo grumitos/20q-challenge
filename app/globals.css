@@ -732,23 +732,6 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 }
 .gaspi.is-seen .gaspi__letter { animation: none; }
 .gaspi__sub { margin: 0; color: #cdbb92; font-size: 15px; }
-.gaspi__hall { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; margin-top: 52px; }
-.gaspi__hall-label { display: flex; align-items: center; gap: 14px; margin: 0; color: #b89c62; font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: .34em; text-transform: uppercase; }
-.gaspi__hall-label span { padding-left: .34em; }
-.gaspi__hall-label::before, .gaspi__hall-label::after { content: ""; width: 56px; height: 1px; background: linear-gradient(90deg, transparent, rgb(236 198 122 / 55%)); }
-.gaspi__hall-label::after { background: linear-gradient(90deg, rgb(236 198 122 / 55%), transparent); }
-.gaspi__edition {
-  display: flex; align-items: center; gap: 24px;
-  width: min(480px, 100%); padding: 20px 20px 20px 28px;
-  border: 1px solid rgb(217 178 106 / 30%); border-radius: 16px;
-  background: linear-gradient(160deg, rgb(236 198 122 / 11%), rgb(236 198 122 / 2%) 55%), #12100c;
-  box-shadow: 0 30px 80px rgb(0 0 0 / 55%), 0 0 60px rgb(233 190 110 / 7%), inset 0 1px 0 rgb(255 236 190 / 8%);
-  text-align: left;
-}
-.gaspi__edition div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-.gaspi__edition strong { color: #f1dca8; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: .12em; line-height: 1.2; text-transform: uppercase; }
-.gaspi__edition small { color: #bfaf8a; font-size: 14px; }
-.gaspi__slot { display: grid; place-items: center; flex: none; width: 64px; height: 64px; border: 1px dashed rgb(236 198 122 / 55%); border-radius: 14px; background: rgb(236 198 122 / 5%); color: #ecc67a; font-family: var(--font-display); font-size: 30px; font-weight: 600; }
 
 /* ── Legal pages ────────────────────────── */
 .legal-shell { width: min(900px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 40px; }
@@ -925,12 +908,6 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .gaspi__title { letter-spacing: .05em; }
   .gaspi__line { padding-left: .05em; }
   .gaspi__sub { font-size: 14px; }
-  .gaspi__hall { margin-top: 40px; }
-  .gaspi__hall-label::before, .gaspi__hall-label::after { width: 36px; }
-  .gaspi__edition { gap: 16px; padding: 16px 16px 16px 20px; border-radius: 14px; }
-  .gaspi__edition strong { font-size: 19px; letter-spacing: .1em; }
-  .gaspi__edition small { font-size: 13px; }
-  .gaspi__slot { width: 56px; height: 56px; border-radius: 12px; font-size: 26px; }
 }
 
 @media (max-width: 479px) {
