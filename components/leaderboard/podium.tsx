@@ -1,4 +1,5 @@
 import { m } from "motion/react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { PlayerSnapshot } from "../../lib/leaderboard";
 import {
   ROLE_LABELS,
@@ -36,13 +37,61 @@ type PodiumProps = {
   pending: boolean;
 };
 
+/**
+ * Touch screens have no hover to bring a card's art back to full colour, so
+ * the card being looked at gets it instead: the one with the most of itself on
+ * screen below the sticky top bar. Only ever one, and only where hover is not
+ * available; elsewhere this stays null and hover does the job.
+ */
+function useFeaturedCard(grid: RefObject<HTMLDivElement | null>, active: boolean) {
+  const [featured, setFeatured] = useState<string | null>(null);
+  useEffect(() => {
+    const container = grid.current;
+    if (!active || !container || !window.matchMedia("(hover: none)").matches) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const top = document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0;
+      let best: string | null = null;
+      let bestArea = 0;
+      for (const card of container.querySelectorAll<HTMLElement>(".pcard[data-ranking-id]")) {
+        const rect = card.getBoundingClientRect();
+        const visibleHeight = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, top);
+        const area = Math.max(0, visibleHeight) * rect.width;
+        if (area > bestArea) {
+          bestArea = area;
+          best = card.dataset.rankingId ?? null;
+        }
+      }
+      setFeatured(best);
+    };
+    const schedule = () => {
+      if (frame === 0) frame = requestAnimationFrame(update);
+    };
+    const resized = new ResizeObserver(schedule);
+    resized.observe(container);
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      resized.disconnect();
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      cancelAnimationFrame(frame);
+    };
+  }, [grid, active]);
+  return active ? featured : null;
+}
+
 export function Podium({ standings, version, now, respawnFor, pending }: PodiumProps) {
+  const grid = useRef<HTMLDivElement>(null);
+  const featured = useFeaturedCard(grid, !pending);
   return (
     <section id="clasificacion" className="podium shell" aria-labelledby="podio-title">
       <h2 id="podio-title" className="sr-only">Top 3 del ranking</h2>
       {/* Places stay 1-2-3 in the document so focus follows the reading order;
           the leader's weight comes from width and the medal, not from reordering. */}
-      <div className="podium__grid">
+      <div className="podium__grid" ref={grid}>
         {pending
           ? [1, 2, 3].map((place) => <PodiumSkeleton key={place} place={place} />)
           : standings.slice(0, 3).map((player, index) => (
@@ -56,6 +105,7 @@ export function Podium({ standings, version, now, respawnFor, pending }: PodiumP
                 roster={standings}
                 now={now}
                 respawnSeconds={respawnFor(player)}
+                featured={featured === player.id}
               />
             ))}
       </div>
@@ -63,7 +113,7 @@ export function Podium({ standings, version, now, respawnFor, pending }: PodiumP
   );
 }
 
-function PodiumCard({ player, place, gap, shortGap, version, roster, now, respawnSeconds }: {
+function PodiumCard({ player, place, gap, shortGap, version, roster, now, respawnSeconds, featured }: {
   player: PlayerSnapshot;
   place: number;
   gap: string;
@@ -72,6 +122,8 @@ function PodiumCard({ player, place, gap, shortGap, version, roster, now, respaw
   roster: readonly PlayerSnapshot[];
   now: number;
   respawnSeconds: number | null;
+  /** The card being looked at on a touch screen; see `useFeaturedCard`. */
+  featured: boolean;
 }) {
   const champions = player.riotIdFound ? bestChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS) : [];
   const splash = champions[0];
@@ -86,7 +138,7 @@ function PodiumCard({ player, place, gap, shortGap, version, roster, now, respaw
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: (place - 1) * 0.06, ease: [0.22, 1, 0.36, 1] }}
-      className={`pcard place-${place}${dead ? " is-dead" : ""}`}
+      className={`pcard place-${place}${dead ? " is-dead" : ""}${featured ? " is-featured" : ""}`}
       data-ranking-id={player.id}
     >
       <div className="pcard__body">
