@@ -1,14 +1,55 @@
+import { useEffect, useState } from "react";
 import { RefreshIcon, TrophyIcon } from "./icons";
 import { GASPI_TITLE } from "./gaspi";
 
-export function TopBar({ updatedAt, stale, liveCount, onRefresh, onOpenGaspi }: {
+export type BoardSection = "clasificacion" | "duos";
+
+/**
+ * The part of the board the reader is looking at: the duos once their
+ * section's top has climbed past 45% of the viewport, or once the page can
+ * scroll no further with them on screen. Narrow top bars show only the link
+ * that is not current, so this is also what lets the reader get back.
+ */
+export function useBoardSection(hasDuos: boolean): BoardSection {
+  const [section, setSection] = useState<BoardSection>("clasificacion");
+  useEffect(() => {
+    const duos = hasDuos ? document.getElementById("duos") : null;
+    if (!duos) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const top = duos.getBoundingClientRect().top;
+      const view = window.innerHeight;
+      const atBottom = window.scrollY + view >= document.documentElement.scrollHeight - 2;
+      setSection(top <= view * 0.45 || (atBottom && top < view) ? "duos" : "clasificacion");
+    };
+    const schedule = () => {
+      if (frame === 0) frame = requestAnimationFrame(update);
+    };
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      cancelAnimationFrame(frame);
+    };
+  }, [hasDuos]);
+  return hasDuos ? section : "clasificacion";
+}
+
+export function TopBar({ updatedAt, stale, liveCount, section, onRefresh, onOpenGaspi }: {
   /** Lima "HH:MM" of the snapshot on screen, or null while nothing has loaded. */
   updatedAt: string | null;
   stale: boolean;
   liveCount: number;
+  section: BoardSection;
   onRefresh: () => void;
   onOpenGaspi: () => void;
 }) {
+  const current = (target: BoardSection) => section === target
+    ? { className: "is-current", "aria-current": "location" as const }
+    : {};
   const liveText = liveCount === 1 ? "1 en partida" : `${liveCount} en partida`;
   const statusLabel = updatedAt === null ? "Cargando" : stale ? "Sin actualizar desde" : "Actualizado";
 
@@ -23,8 +64,8 @@ export function TopBar({ updatedAt, stale, liveCount, onRefresh, onOpenGaspi }: 
         <span className="topbar__rule" aria-hidden="true" />
         <span className="topbar__meta">LAS · Solo/Duo · Temporada 2026</span>
         <nav className="topbar__nav" aria-label="Secciones">
-          <a href="#clasificacion" className="is-current">Clasificación</a>
-          <a href="#duos">Dúos</a>
+          <a href="#clasificacion" {...current("clasificacion")}>Clasificación</a>
+          <a href="#duos" {...current("duos")}>Dúos</a>
         </nav>
         <span className="topbar__spacer" />
         <span className={`topbar__status${stale ? " is-stale" : ""}`}>

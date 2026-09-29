@@ -16,7 +16,7 @@ import { Duos } from "../components/leaderboard/duos";
 import { GASPI_TITLE, GaspiDialog, playHelicopter } from "../components/leaderboard/gaspi";
 import { Podium } from "../components/leaderboard/podium";
 import { Standings } from "../components/leaderboard/standings";
-import { TopBar } from "../components/leaderboard/top-bar";
+import { TopBar, useBoardSection } from "../components/leaderboard/top-bar";
 
 const LEADERBOARD_STORAGE_KEY = "20q-leaderboard-payload-v1";
 const LEADERBOARD_REFRESH_MS = 60_000;
@@ -253,6 +253,8 @@ export default function Home() {
 
   const updatedAt = payload ? formatLimaTime(payload.data.fetchedAt) : null;
   const unreachable = loadError && payload === null;
+  const hasDuos = Boolean(payload?.data.duos?.length) && !unreachable;
+  const section = useBoardSection(hasDuos);
 
   return (
     <LazyMotion features={domMax} strict>
@@ -263,6 +265,7 @@ export default function Home() {
             updatedAt={updatedAt}
             stale={stale || (loadError && payload !== null)}
             liveCount={liveCount}
+            section={section}
             onRefresh={() => reloadBoard.current()}
             onOpenGaspi={openGaspi}
           />
