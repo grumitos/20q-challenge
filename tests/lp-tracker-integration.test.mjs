@@ -708,10 +708,13 @@ test("leaves an unchanged identity alone instead of rewriting it every minute", 
   assert.deepEqual(store.writes.enrolled.filter(({ id }) => id === "yvncv"), []);
 });
 
-test("sweeps stale observations hourly, not on every tick", async () => {
+test("sweeps stale observations hourly by elapsed time, whatever minute the ticks land on", async () => {
   // `rank_observations` grows by nine rows a minute and `loadTrackerState`
   // ranks all of them on every run, so without a sweep the read cost climbs
   // linearly forever. Running it every minute would be pointless churn.
+  //
+  // It used to run on `minute % 60 === 0`. The timer's ticks drift 60–70 s
+  // apart, so an hour whose ticks skipped that one minute was never swept.
   const players = [{
     playerId: "p1", puuid: "puuid-1", gameName: "P1", tagLine: "LAS", recentMatchId: null,
   }];
@@ -719,21 +722,33 @@ test("sweeps stale observations hourly, not on every tick", async () => {
     id: "p1:1000", playerId: "p1", observedAt: 1_000,
     tier: "SILVER", division: "I", leaguePoints: 90, wins: 10, losses: 10,
   }];
+  const store = fakeStore(players, observations, []);
+  // The sweep lane behaves like the real lease: claimable once expired.
+  const expiries = new Map();
+  store.acquireLease = async (name, _owner, now, ttlMs) => {
+    if (name === "lp-tracker") return true;
+    if ((expiries.get(name) ?? 0) > now) return false;
+    expiries.set(name, now + ttlMs);
+    return true;
+  };
 
-  const onTheHour = 3_600_000 * 5;
-  const sweeping = fakeStore(players, observations, []);
-  await runTemporalLpTracker({
-    store: sweeping, apiKey: "secret", now: onTheHour, owner: "run-sweep",
-    fetchImpl: (input) => Promise.resolve(riotResponse(String(input), { count: 0 })),
-  });
-  assert.deepEqual(sweeping.writes.pruned, [onTheHour - 7 * 24 * 60 * 60_000]);
+  const hour = 60 * 60_000;
+  const ticks = [
+    5 * hour + 30_000, // sweeps: nothing has swept yet
+    5 * hour + 95_000, // too soon
+    5 * hour + 59 * 60_000 + 50_000, // still inside the hour
+    6 * hour + 60_000, // 70 s later: the 6:00 minute had no tick at all
+    6 * hour + 125_000,
+  ];
+  for (const [index, now] of ticks.entries()) {
+    await runTemporalLpTracker({
+      store, apiKey: "secret", now, owner: `run-sweep-${index}`,
+      fetchImpl: (input) => Promise.resolve(riotResponse(String(input), { count: 0 })),
+    });
+  }
 
-  const quiet = fakeStore(players, observations, []);
-  await runTemporalLpTracker({
-    store: quiet, apiKey: "secret", now: onTheHour + 60_000, owner: "run-quiet",
-    fetchImpl: (input) => Promise.resolve(riotResponse(String(input), { count: 0 })),
-  });
-  assert.deepEqual(quiet.writes.pruned, []);
+  const retention = 7 * 24 * hour;
+  assert.deepEqual(store.writes.pruned, [ticks[0] - retention, ticks[3] - retention]);
 });
 
 /** Runs the tracker with its structured log captured, whether it resolves or throws. */

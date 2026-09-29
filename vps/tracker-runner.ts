@@ -20,6 +20,12 @@ import { runTemporalLpTracker } from "../lib/lp-tracker.ts";
 import { createLpTrackerStore, type LpTrackerStore } from "../db/lp-tracker-store.ts";
 import { openBunTrackerDatabase } from "./bun-sqlite.ts";
 import { fetchRiotLeaderboard, RIOT_PLAYERS } from "../lib/riot-client.ts";
+import {
+  ANALYTICS_HEARTBEAT_LANE,
+  ANALYTICS_HEARTBEAT_TTL_MS,
+  analyticsPhaseDue,
+  readAnalyticsHeartbeat,
+} from "./analytics-schedule.ts";
 
 /**
  * The Worker's defaults exist because of its 10 ms CPU ceiling; out here the
@@ -33,16 +39,16 @@ const RUNNER_MAX_REQUESTS = 30;
 const RUNNER_MATCH_DETAILS_PER_RUN = 2;
 
 /**
- * The analytics phase — champion and role ingestion — runs here too, on every
- * tenth minute. It lived only in the Worker, where the 10 ms CPU allowance
- * froze it for a month once the backlog outgrew one invocation; out here a
- * small bounded batch keeps normal games fresh without consuming the window
- * needed by the minute-by-minute tracker. The VPS timer is the only production
- * scheduler after cutover; there is no Cloudflare fallback lane.
+ * The analytics phase — champion and role ingestion — runs here too, about
+ * every ten minutes (see `analytics-schedule.ts`). It lived only in the Worker,
+ * where the 10 ms CPU allowance froze it for a month once the backlog outgrew
+ * one invocation; out here a small bounded batch keeps normal games fresh
+ * without consuming the window needed by the minute-by-minute tracker. The VPS
+ * timer is the only production scheduler after cutover; there is no Cloudflare
+ * fallback lane.
  */
 const RUNNER_ANALYTICS_DETAILS_PER_RUN = 5;
 const RUNNER_ANALYTICS_MAX_REQUESTS = 32;
-const ANALYTICS_HEARTBEAT_TTL_MS = 12 * 60_000;
 
 async function runAnalyticsPhase(
   store: LpTrackerStore,
@@ -74,7 +80,7 @@ async function runAnalyticsPhase(
       );
       await store.persistLeaderboardSnapshot(snapshot, matchesToPersist);
       await store.blockLaneUntil(
-        "leaderboard-analytics-heartbeat",
+        ANALYTICS_HEARTBEAT_LANE,
         now + ANALYTICS_HEARTBEAT_TTL_MS,
       );
       return "completed";
@@ -122,25 +128,29 @@ async function main() {
       ...("playerErrors" in result ? { playerErrors: result.playerErrors } : {}),
     }));
 
-    // Champion/role ingestion, every tenth minute — or on demand for a drain.
-    if (new Date(startedAt).getUTCMinutes() % 10 === 0 || process.env.FORCE_ANALYTICS === "1") {
-      const analyticsStartedAt = Date.now();
-      try {
+    // Champion/role ingestion, once the last successful run is ~10 minutes
+    // old — or on demand for a drain.
+    const analyticsStartedAt = Date.now();
+    try {
+      if (
+        process.env.FORCE_ANALYTICS === "1" ||
+        analyticsPhaseDue(analyticsStartedAt, await readAnalyticsHeartbeat(d1))
+      ) {
         const outcome = await runAnalyticsPhase(store, apiKey, analyticsStartedAt);
         console.log(JSON.stringify({
           event: "tracker_runner_analytics",
           status: outcome,
           durationMs: Date.now() - analyticsStartedAt,
         }));
-      } catch (error) {
-        // Analytics lag must not mark a tracker run that succeeded as failed.
-        console.error(JSON.stringify({
-          event: "tracker_runner_analytics",
-          status: "failed",
-          durationMs: Date.now() - analyticsStartedAt,
-          error: error instanceof Error ? error.message : String(error),
-        }));
       }
+    } catch (error) {
+      // Analytics lag must not mark a tracker run that succeeded as failed.
+      console.error(JSON.stringify({
+        event: "tracker_runner_analytics",
+        status: "failed",
+        durationMs: Date.now() - analyticsStartedAt,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
     // A skipped run is not a failure: another run holds the lane, which is the
     // lease doing its job. Only a thrown run is worth a non-zero exit, so the

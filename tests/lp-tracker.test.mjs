@@ -59,6 +59,46 @@ test("polls full recent history for live/postgame work and rotates idle players"
   assert.equal(recentMatchPollCount("p1", [], [], 1, 9, 60_000), 3);
 });
 
+/** The rotation as the timer drives it: 60–70 s between ticks, every idle
+    player fed its own previous poll. Returns each player's longest wait. */
+function longestIdleWait({ knowsPreviousPoll }) {
+  const rosterSize = 9;
+  const gaps = [61_000, 67_000, 70_000, 64_000, 69_000, 62_000, 66_000, 60_000, 68_000, 65_000];
+  const lastPolledAt = new Array(rosterSize).fill(null);
+  const longest = new Array(rosterSize).fill(0);
+  let previous = null;
+  let now = Date.UTC(2026, 8, 29, 0, 0, 30);
+  for (let tick = 0; tick < 1_000; tick += 1) {
+    for (let playerIndex = 0; playerIndex < rosterSize; playerIndex += 1) {
+      const count = recentMatchPollCount("p", [], [], playerIndex, rosterSize, now, knowsPreviousPoll ? previous : null);
+      if (count === 0) continue;
+      if (lastPolledAt[playerIndex] !== null) {
+        longest[playerIndex] = Math.max(longest[playerIndex], now - lastPolledAt[playerIndex]);
+      }
+      lastPolledAt[playerIndex] = now;
+    }
+    previous = now;
+    now += gaps[tick % gaps.length];
+  }
+  return Math.max(...longest);
+}
+
+test("serves every idle rotation slot even when the timer's ticks drift", () => {
+  // A tick that lands two minutes after the previous one used to leave the
+  // minute in between to nobody, and that player waited a whole extra rotation.
+  // Every slot since the previous poll is honoured now, so nobody waits longer
+  // than one rotation plus one tick.
+  assert.ok(longestIdleWait({ knowsPreviousPoll: true }) < 9 * 60_000 + 70_000);
+  assert.ok(
+    longestIdleWait({ knowsPreviousPoll: false }) >= 18 * 60_000 - 70_000,
+    "the old minute-only rule skips a player's slot under the same drift",
+  );
+  // Two ticks inside one minute cannot poll the same slot twice.
+  assert.equal(recentMatchPollCount("p1", [], [], 1, 9, 60_500, 60_100), 0);
+  // A long gap catches every player up, but never polls anyone twice.
+  assert.equal(recentMatchPollCount("p1", [], [], 4, 9, 30 * 60_000, 0), 3);
+});
+
 test("links an ended Spectator session and resolves one matching victory", () => {
   const result = processTrackerPlayer({
     now: 5_000,

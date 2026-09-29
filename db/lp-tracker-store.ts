@@ -66,6 +66,7 @@ type SyncRow = {
   game_name: string;
   tag_line: string;
   recent_match_id: string | null;
+  last_tracker_at: number | null;
 };
 
 type ObservationRow = {
@@ -180,7 +181,7 @@ export function createLpTrackerStore(db: TrackerD1) {
       const observationCutoff = now - 3 * 60 * 60_000;
       const observationWindow = "observed_at >= ?";
       const [sync, observations, sessions, candidates, cache] = await Promise.all([
-        db.prepare(`SELECT player_id, puuid, game_name, tag_line, recent_match_id FROM player_sync_state WHERE player_id IN (${placeholders})`).bind(...playerIds).all<SyncRow>(),
+        db.prepare(`SELECT player_id, puuid, game_name, tag_line, recent_match_id, last_tracker_at FROM player_sync_state WHERE player_id IN (${placeholders})`).bind(...playerIds).all<SyncRow>(),
         db.prepare(
           `WITH referenced_observations AS (
              SELECT baseline_observation_id AS observation_id
@@ -249,6 +250,7 @@ export function createLpTrackerStore(db: TrackerD1) {
           gameName: row.game_name,
           tagLine: row.tag_line,
           recentMatchId: row.recent_match_id,
+          lastTrackerAt: row.last_tracker_at,
         })),
         observations: (observations.results ?? []).map((row): TrackerObservation => ({
           id: row.id,

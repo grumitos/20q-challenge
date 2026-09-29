@@ -16,6 +16,8 @@ export type TrackerPlayerState = {
   gameName: string;
   tagLine: string;
   recentMatchId: string | null;
+  /** When a tick last polled this player (`player_sync_state.last_tracker_at`). */
+  lastTrackerAt?: number | null;
 };
 
 export type TrackerObservation = {
@@ -188,8 +190,13 @@ const PROJECTION_GAP_COOLDOWN_MS = 60_000;
     ranking the whole retained history on every tick. */
 const OBSERVATION_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
-/** Hourly. The sweep is cheap but pointless to run against 9 new rows. */
-const OBSERVATION_SWEEP_EVERY_TICKS = 60;
+/** Hourly. The sweep is cheap but pointless to run against 9 new rows.
+    Measured by elapsed time, not by the clock: the sweep claims its own lane
+    for an hour and never releases it, so the first tick after that hour runs
+    the next one. `minute % 60 === 0` needed a tick inside one exact minute,
+    which 60–70 s ticks miss about one hour in twelve. */
+const OBSERVATION_SWEEP_INTERVAL_MS = 60 * 60_000;
+const OBSERVATION_SWEEP_LANE = "lp-tracker-observation-sweep";
 
 function participantResult(match: TrackerMatch, puuid: string) {
   return match.participants.find((participant) => participant.puuid === puuid)?.won;
@@ -216,6 +223,8 @@ export function recentMatchPollCount(
   playerIndex: number,
   rosterSize: number,
   now: number,
+  /** This player's previous poll, when known (`TrackerPlayerState.lastTrackerAt`). */
+  previousPollAt: number | null = null,
 ) {
   const hasLiveOrUnresolvedWork = sessions.some((session) =>
     session.playerId === playerId &&
@@ -226,12 +235,25 @@ export function recentMatchPollCount(
       candidate.state !== "unavailable");
   if (hasLiveOrUnresolvedWork || rosterSize <= 1) return RECENT_MATCH_IDS_FULL_POLL_COUNT;
 
-  // Idle players rotate through the full three-id window. Everyone else skips
-  // Match-V5 history on this tick; rank and spectator are still polled every
-  // minute, and the next rotation covers the idle player's recent games.
-  return Math.floor(now / 60_000) % rosterSize === playerIndex
-    ? RECENT_MATCH_IDS_FULL_POLL_COUNT
-    : 0;
+  // Idle players rotate through the full three-id window, one minute slot
+  // each. Everyone else skips Match-V5 history on this tick; rank and
+  // spectator are still polled every minute, and the next rotation covers the
+  // idle player's recent games.
+  //
+  // The timer's ticks drift 60–70 s apart, so one tick can land two minutes
+  // after the previous and the slot in between used to belong to nobody —
+  // that player simply waited another full rotation. Every slot since this
+  // player's previous poll is honoured instead, so each slot is served by the
+  // first tick at or after it. Unknown history covers the current slot only.
+  const slot = Math.floor(now / 60_000);
+  const previousSlot = previousPollAt === null ? slot - 1 : Math.floor(previousPollAt / 60_000);
+  const slotsDue = Math.min(slot - previousSlot, rosterSize);
+  for (let offset = 0; offset < slotsDue; offset += 1) {
+    if (((slot - offset) % rosterSize + rosterSize) % rosterSize === playerIndex) {
+      return RECENT_MATCH_IDS_FULL_POLL_COUNT;
+    }
+  }
+  return 0;
 }
 
 async function persistStoreBatch(
@@ -668,6 +690,7 @@ export async function runTemporalLpTracker(options: {
         playerIndex,
         tracked.length,
         options.now,
+        player.lastTrackerAt ?? null,
       );
       const [rank, activeGame, matchIds] = await Promise.allSettled([
         api.fetchSoloQueueEntryByPuuid(player.puuid),
@@ -905,16 +928,16 @@ export async function runTemporalLpTracker(options: {
     // Retention. `loadTrackerState` keeps at most 32 observations per player
     // anyway, so anything past the reconciliation window is unreachable data
     // that the load query still has to rank on every single run.
-    if (Math.floor(options.now / 60_000) % OBSERVATION_SWEEP_EVERY_TICKS === 0) {
-      try {
+    try {
+      if (await options.store.acquireLease(OBSERVATION_SWEEP_LANE, owner, options.now, OBSERVATION_SWEEP_INTERVAL_MS)) {
         await options.store.pruneRankObservations(options.now - OBSERVATION_RETENTION_MS);
-      } catch (error) {
-        console.log(JSON.stringify({
-          event: "lp_tracker_prune_failed",
-          runId: owner,
-          error: error instanceof Error ? error.message : String(error),
-        }));
       }
+    } catch (error) {
+      console.log(JSON.stringify({
+        event: "lp_tracker_prune_failed",
+        runId: owner,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
 
     // `bootstrapPlayerSyncState` only runs on a cold start and skips anyone
