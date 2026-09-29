@@ -345,15 +345,11 @@ html.is-invaded .pcard__splash { filter: sepia(.35) saturate(.8) brightness(.58)
 .plate__lp b { font-size: 30px; font-weight: 500; line-height: 1.12; letter-spacing: -.03em; }
 .plate__lp small { color: var(--text-3); font-size: 13px; }
 .plate__gap { margin-top: 2px; color: var(--text-2); font-size: 12px; white-space: nowrap; }
-.pcard.place-1 .plate__gap { color: var(--medal-1); }
 .gap-short { display: none; }
 @container pmain (max-width: 419px) {
   .gap-long { display: none; }
   .gap-short { display: inline; }
 }
-.lp-bar { display: block; height: 4px; margin-top: 14px; border-radius: 2px; background: var(--track); overflow: hidden; }
-.lp-bar i { display: block; height: 100%; border-radius: 2px; background: currentColor; transition: width .8s var(--ease); }
-.plate__next { margin-top: 7px; color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plate__stats {
   display: grid; grid-template-columns: auto auto; column-gap: 16px; row-gap: 10px;
   align-content: center;
@@ -888,8 +884,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .pcard.place-2 .pcard__identity, .pcard.place-3 .pcard__identity { margin-top: -22px; }
   .pcard.place-2 .pcard__avatar, .pcard.place-3 .pcard__avatar { width: 50px; height: 50px; border-radius: 13px; }
   .pcard.place-2 .pcard__who, .pcard.place-3 .pcard__who { padding-top: 26px; }
-  .pcard.place-2 .plate__record, .pcard.place-3 .plate__record, .pcard.place-2 .lp-bar, .pcard.place-3 .lp-bar,
-  .pcard.place-2 .plate__next, .pcard.place-3 .plate__next { display: none; }
+  .pcard.place-2 .plate__record, .pcard.place-3 .plate__record { display: none; }
   .pcard.place-2 .pcard__champs-bars, .pcard.place-3 .pcard__champs-bars,
   .pcard.place-2 .pcard__champs .info-hint, .pcard.place-3 .pcard__champs .info-hint { display: none; }
   .pcard.place-2 .pcard__champs-tiles, .pcard.place-3 .pcard__champs-tiles { display: block; margin-top: 10px; }

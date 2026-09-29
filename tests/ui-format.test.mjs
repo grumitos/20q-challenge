@@ -7,7 +7,6 @@ import {
   championIconUrl,
   championKey,
   championView,
-  divisionProgress,
   duoView,
   firstName,
   formSlots,
@@ -19,7 +18,6 @@ import {
   kdaRatio,
   matchDetailsUrl,
   mostPlayedChampionViews,
-  nextDivisionText,
   peerNames,
   perGameAverages,
   profileUrl,
@@ -37,32 +35,22 @@ const player = (overrides) => ({
   ...overrides,
 });
 
-test("names ranks, crests and divisions the way the board prints them", () => {
+test("names ranks and crests the way the board prints them", () => {
   assert.equal(rankLabel({ tier: "PLATINUM", division: "IV" }), "Platino IV");
   assert.equal(rankLabel({ tier: "MASTER", division: "" }), "Maestro");
   assert.equal(rankAsset("GOLD"), "/ranks/gold.png");
   // Unranked borrows Iron's crest; the stylesheet drains it.
   assert.equal(rankAsset("UNRANKED"), "/ranks/iron.png");
-
-  assert.equal(nextDivisionText({ tier: "PLATINUM", division: "IV", leaguePoints: 27 }), "73 PL para Platino III");
-  assert.equal(nextDivisionText({ tier: "SILVER", division: "I", leaguePoints: 10 }), "90 PL para Oro IV");
-  assert.equal(nextDivisionText({ tier: "DIAMOND", division: "I", leaguePoints: 40 }), "60 PL para Maestro");
-  assert.equal(nextDivisionText({ tier: "MASTER", division: "", leaguePoints: 120 }), "Sin divisiones en este rango");
-  assert.equal(nextDivisionText({ tier: "UNRANKED", division: "", leaguePoints: 0 }), "Sin partidas clasificadas");
-
-  assert.equal(divisionProgress({ tier: "GOLD", division: "IV", leaguePoints: 61 }), 61);
-  assert.equal(divisionProgress({ tier: "GOLD", division: "IV", leaguePoints: 140 }), 100);
-  assert.equal(divisionProgress({ tier: "CHALLENGER", division: "", leaguePoints: 900 }), null);
 });
 
-test("states the league-point distance that explains each placement, by first name", () => {
+test("states the distance to the player above by first name, and nothing for the leader", () => {
   const standings = [
     player({ gameName: "Mamimu", tier: "PLATINUM", division: "IV", leaguePoints: 27 }),
     player({ gameName: "INTI VIRAC0NCHA", tier: "PLATINUM", division: "IV", leaguePoints: 0 }),
     player({ gameName: "RVN", tier: "GOLD", division: "IV", leaguePoints: 61 }),
     player({ gameName: "Nuevo", tier: "UNRANKED", division: "", leaguePoints: 0 }),
   ];
-  assert.equal(gapText(standings, 0), "+27 PL sobre INTI");
+  assert.equal(gapText(standings, 0), "", "the leader's lead is redundant: being first says it");
   assert.equal(gapText(standings, 1), "27 PL para Mamimu");
   assert.equal(gapText(standings, 2), "339 PL para INTI");
   assert.equal(gapText(standings, 2, true), "339 para INTI");
