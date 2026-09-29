@@ -143,8 +143,9 @@ test("closes a finished game even when the run dies before its expensive half", 
   // `last_seen_at`, so the board advertised a game that had finished — for
   // sixty-seven minutes, because each following run died in the same place.
   //
-  // A kill is modelled here as the match-detail fetch never returning, which is
-  // where the CPU actually went.
+  // A kill is modelled here as the run dying at the match-detail fetch, which
+  // is where the CPU actually went. A per-match failure no longer ends the run,
+  // so it dies on a key-wide one instead.
   const players = [{ playerId: "p1", puuid: "puuid-1", gameName: "P1", tagLine: "LAS", recentMatchId: null }];
   const observations = [{ id: "p1:1000", playerId: "p1", observedAt: 1_000, tier: "SILVER", division: "I", leaguePoints: 90, wins: 10, losses: 10 }];
   // Live as far as the store knows: the spectator 404 below is the game ending.
@@ -158,10 +159,10 @@ test("closes a finished game even when the run dies before its expensive half", 
     owner: "run-killed",
     fetchImpl: async (input) => {
       const url = String(input);
-      if (url.includes("/lol/match/v5/matches/LA2_")) throw new Error("Worker exceeded resource limits");
+      if (url.includes("/lol/match/v5/matches/LA2_")) return new Response("{}", { status: 401 });
       return riotResponse(url, { count: 0 });
     },
-  }));
+  }), /authentication failed/);
 
   const closed = store.writes.sessions.find((session) => session.platformGameId === "77");
   assert.ok(closed, "the session must be persisted before the run risks itself");
@@ -819,6 +820,40 @@ test("one player's Riot 5xx skips that player and keeps everyone else's tick", a
   assert.equal(run.observationsInserted, 1);
   assert.equal(run.playerErrors, 1);
   assert.deepEqual(run.playerErrorDetails, [{ playerId: "p2", error: "Riot is temporarily unavailable." }]);
+});
+
+test("one match detail's 5xx leaves that match for a later tick and keeps the tick", async () => {
+  // The last whole-tick failure the per-player split left: a Match-V5 detail
+  // answering 5xx after the observations were already written. Now it costs
+  // only that match, which stays unknown and is asked for again later.
+  const players = [{ playerId: "p1", puuid: "puuid-1", gameName: "P1", tagLine: "LAS", recentMatchId: null }];
+  const observations = [{ id: "p1:1000", playerId: "p1", observedAt: 1_000, tier: "SILVER", division: "I", leaguePoints: 90, wins: 10, losses: 10 }];
+  const sessions = [{ playerId: "p1", platformGameId: "77", queueId: 420, baselineObservationId: "p1:1000", gameStartedAt: 1_500, firstSeenAt: 2_000, lastSeenAt: 3_000, endedDetectedAt: 4_000, matchId: null, status: "ended_waiting_match", updatedAt: 4_000 }];
+  const store = fakeStore(players, observations, sessions);
+
+  const { result, error, run } = await runLogged({
+    store, apiKey: "secret", now: 5_000, owner: "run-match-5xx",
+    fetchImpl: async (input) => {
+      const url = String(input);
+      if (url.includes("/lol/match/v5/matches/LA2_")) return new Response("{}", { status: 503 });
+      return riotResponse(url, { count: 0 });
+    },
+  });
+
+  assert.equal(error, undefined);
+  assert.equal(result.status, "completed");
+  assert.equal(result.matchErrors, 1);
+  assert.deepEqual(store.writes.observations.map(({ playerId }) => playerId), ["p1"]);
+  assert.deepEqual(store.writes.evidence, [], "no evidence without the match");
+  assert.equal(
+    store.writes.sessions.filter(({ platformGameId }) => platformGameId === "77").at(-1).status,
+    "ended_waiting_match",
+    "the session keeps waiting for its match",
+  );
+  assert.equal(store.writes.cursors[0].matchId, null, "the cursor does not move past a match it never read");
+  assert.equal(run.status, "completed");
+  assert.equal(run.matchErrors, 1);
+  assert.deepEqual(run.matchErrorDetails, [{ matchId: "LA2_77", error: "Riot is temporarily unavailable." }]);
 });
 
 test("a tick in which every player fails is still a failed run", async () => {

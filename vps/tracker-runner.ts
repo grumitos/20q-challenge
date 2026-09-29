@@ -129,6 +129,7 @@ async function main() {
       ...("observationsInserted" in result ? { observationsInserted: result.observationsInserted } : {}),
       ...("sessionsUpdated" in result ? { sessionsUpdated: result.sessionsUpdated } : {}),
       ...("playerErrors" in result ? { playerErrors: result.playerErrors } : {}),
+      ...("matchErrors" in result ? { matchErrors: result.matchErrors } : {}),
     }));
 
     // Champion/role ingestion, once the last successful run is ~10 minutes

@@ -18,6 +18,7 @@ import {
   type RiotRequestBudget,
 } from "./riot-request.ts";
 import seasonSeedJson from "./season-analytics-seed.json" with { type: "json" };
+import { DATA_DRAGON_TIMEOUT_MS } from "./champion-catalog.ts";
 import { preserveDefinitiveEvidence, reconcileRankedMatch, toLpChangeEvidence } from "./lp-reconciliation.ts";
 import {
   addMatchToAnalytics,
@@ -849,12 +850,19 @@ async function refreshSeasonAnalytics(
  *
  * Best-effort and deliberately unauthenticated — this is Data Dragon, not the
  * Riot API, so it needs no key and counts against no Riot allowance. If it fails
- * the caller keeps the version it already had, which is exactly today's
- * behaviour and never worse.
+ * or hangs past its deadline, the caller keeps the version it already had,
+ * which is exactly today's behaviour and never worse.
  */
-async function currentDataDragonVersion(fetchImpl: FetchLike, fallback: string) {
+export async function currentDataDragonVersion(
+  fetchImpl: FetchLike,
+  fallback: string,
+  /** Test-only: lets a hung request fail in milliseconds. */
+  timeoutMs = DATA_DRAGON_TIMEOUT_MS,
+) {
   try {
-    const response = await fetchImpl("https://ddragon.leagueoflegends.com/api/versions.json");
+    const response = await fetchImpl("https://ddragon.leagueoflegends.com/api/versions.json", {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (!response.ok) return fallback;
     const versions = await response.json();
     const latest = Array.isArray(versions) ? versions[0] : null;
