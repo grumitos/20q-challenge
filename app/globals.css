@@ -290,7 +290,13 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
   transform: scale(1.01);
   transition: transform .8s var(--ease), filter .8s var(--ease);
 }
-.pcard:hover .pcard__splash { transform: scale(1.04); filter: saturate(1) brightness(.7); }
+/* Hover only where it is real: a tap would leave a touch screen's :hover stuck
+   on one card while another is the one on screen. Touch screens mark that
+   one instead (`is-featured`, see the podium). */
+@media (hover: hover) {
+  .pcard:hover .pcard__splash { transform: scale(1.04); filter: saturate(1) brightness(.7); }
+}
+.pcard.is-featured .pcard__splash { transform: scale(1.04); filter: saturate(1) brightness(.7); }
 html.is-invaded .pcard__splash { filter: sepia(.35) saturate(.8) brightness(.58); }
 
 .place-chip {
