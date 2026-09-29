@@ -81,21 +81,21 @@
 /* Los Juegos de Gaspi: once the card has been opened the whole board turns to
    the tournament's gold, and stays that way until the page is reloaded. */
 html.is-invaded {
-  --bg: #0c0a06;
-  --surface: #15110a;
-  --surface-2: #120f09;
-  --inset: #110d08;
-  --raised: #1d170d;
-  --line: #2b2316;
-  --line-soft: #241d12;
-  --line-strong: #3a3020;
-  --track: #261f13;
-  --text: #f3e7c9;
-  --text-2: #cdbb92;
-  --text-3: #a8966c;
+  --bg: #0c0a08;
+  --surface: #14110c;
+  --surface-2: #110f0b;
+  --inset: #100d0a;
+  --raised: #1c1710;
+  --line: #282219;
+  --line-soft: #221d15;
+  --line-strong: #362f24;
+  --track: #241f16;
+  --text: #f2e8d1;
+  --text-2: #c7b99b;
+  --text-3: #a29475;
   --win: #e2bd6b;
-  --dot: rgb(217 178 106 / 10%);
-  --stitch: #3a3020;
+  --dot: rgb(217 178 106 / 8%);
+  --stitch: #372f24;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -285,12 +285,13 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .pcard__splash {
   width: 100%; height: 100%;
   object-fit: cover; object-position: 50% 25%;
-  filter: saturate(.85) brightness(.6);
+  /* Muted at rest; the card brings its art back to full colour on hover. */
+  filter: grayscale(.45) saturate(.8) brightness(.58);
   transform: scale(1.01);
   transition: transform .8s var(--ease), filter .8s var(--ease);
 }
-.pcard:hover .pcard__splash { transform: scale(1.04); filter: saturate(.95) brightness(.66); }
-html.is-invaded .pcard__splash { filter: sepia(.45) saturate(.8) brightness(.58); }
+.pcard:hover .pcard__splash { transform: scale(1.04); filter: saturate(1) brightness(.7); }
+html.is-invaded .pcard__splash { filter: sepia(.35) saturate(.8) brightness(.58); }
 
 .place-chip {
   --medal: var(--medal-1);
