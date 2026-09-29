@@ -92,7 +92,6 @@ export function Stitch() {
 export function PlaceChip({ place }: { place: number }) {
   return (
     <span className={`place-chip place-chip--${place}`} aria-label={`Puesto ${place}`}>
-      <i aria-hidden="true" />
       <b className="mono" aria-hidden="true">{place}</b>
     </span>
   );

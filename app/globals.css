@@ -291,15 +291,14 @@ html.is-invaded .pcard__splash { filter: sepia(.45) saturate(.8) brightness(.58)
 .place-chip {
   --medal: var(--medal-1);
   position: absolute; left: 16px; top: 14px;
-  display: flex; align-items: center; gap: 7px;
-  height: 28px; padding: 0 10px 0 8px;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 28px; height: 28px; padding: 0 9px;
   border: 1px solid color-mix(in srgb, var(--medal) 45%, transparent);
   border-radius: var(--r-chip);
   background: rgb(11 12 14 / 74%);
   color: var(--medal);
   backdrop-filter: blur(6px);
 }
-.place-chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--medal); }
 .place-chip b { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
 .place-chip--2 { --medal: var(--medal-2); }
 .place-chip--3 { --medal: var(--medal-3); }
@@ -842,7 +841,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .page { gap: 24px; padding-top: 16px; }
   .podium__grid { grid-template-columns: 1fr; gap: 12px; }
   .pcard.place-2 .pcard__art, .pcard.place-3 .pcard__art { height: 72px; }
-  .pcard.place-2 .place-chip, .pcard.place-3 .place-chip { top: 12px; height: 26px; }
+  .pcard.place-2 .place-chip, .pcard.place-3 .place-chip { top: 12px; min-width: 26px; height: 26px; padding-inline: 8px; }
   .pcard.place-2 .pcard__identity, .pcard.place-3 .pcard__identity { margin-top: -22px; }
   .pcard.place-2 .pcard__avatar, .pcard.place-3 .pcard__avatar { width: 50px; height: 50px; border-radius: 13px; }
   .pcard.place-2 .pcard__who, .pcard.place-3 .pcard__who { padding-top: 26px; }
