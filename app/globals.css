@@ -60,7 +60,7 @@
 
   --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-display: "Cinzel", Georgia, serif;
 
   --r-card: 16px;
   --r-plate: 12px;
@@ -261,19 +261,23 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 /* ── Podium ─────────────────────────────── */
 .podium__grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 16px; align-items: stretch; }
 
+/* The dot grid is the card's surface, as it is the row detail's; the rank plate
+   stays a plain well so the number on it reads first. */
 .pcard {
   position: relative;
   container: pcard / inline-size;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--r-card);
-  background: var(--surface);
+  background-color: var(--surface);
+  background-image: radial-gradient(circle, var(--card-dot, color-mix(in srgb, var(--dot) 70%, transparent)) 1px, transparent 1.4px);
+  background-size: 9px 9px;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
   overflow: hidden;
   transition: border-color var(--fast) ease;
 }
 .pcard:hover { border-color: var(--line-strong); }
-.pcard.place-1 { border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
+.pcard.place-1 { --card-dot: rgb(217 178 106 / 7.5%); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
 .pcard.place-1:hover { border-color: color-mix(in srgb, var(--gold) 58%, transparent); }
 .pcard__body { display: flex; flex-direction: column; height: 100%; }
 
@@ -320,14 +324,9 @@ html.is-invaded .pcard__splash { filter: sepia(.45) saturate(.8) brightness(.58)
   margin: 16px 20px 0; padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--r-plate);
-  background-color: var(--inset);
-  background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.4px);
-  background-size: 9px 9px;
+  background: var(--inset);
 }
-.pcard.place-1 .plate {
-  border-color: color-mix(in srgb, var(--gold) 22%, transparent);
-  background-image: radial-gradient(circle, rgb(217 178 106 / 13%) 1px, transparent 1.4px);
-}
+.pcard.place-1 .plate { border-color: color-mix(in srgb, var(--gold) 22%, transparent); }
 .plate__rank { display: flex; flex-direction: column; min-width: 0; }
 .plate__head { display: flex; align-items: center; gap: 12px; }
 .plate__emblem { width: 56px; height: 56px; margin: -4px -4px -4px -6px; }
@@ -665,42 +664,91 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   outline: none;
   overflow: auto;
 }
-.gaspi__dust { position: absolute; inset: 0; pointer-events: none; }
-.gaspi__dust i { position: absolute; border-radius: 50%; background: var(--gold); opacity: .3; animation: drift linear infinite; }
-.gaspi__frame { position: absolute; inset: 24px; border: 1px solid rgb(217 178 106 / 14%); border-radius: 20px; pointer-events: none; }
+/* Light from above, a halo behind the name and a vignette. Fixed, like the
+   motes and the frame, so a short screen can scroll the card beneath them. */
+.gaspi__light {
+  position: fixed; inset: 0; overflow: hidden; pointer-events: none;
+  background:
+    radial-gradient(ellipse 58% 42% at 50% 46%, rgb(233 190 110 / 13%), transparent 70%),
+    radial-gradient(ellipse 50% 62% at 50% -6%, rgb(236 198 122 / 22%), rgb(236 198 122 / 7%) 48%, transparent 74%);
+  box-shadow: inset 0 0 min(240px, 28vmin) rgb(0 0 0 / 82%);
+}
+.gaspi__rays { position: absolute; left: 50%; top: -60px; }
+.gaspi__rays i {
+  position: absolute; top: 0; left: calc(var(--w) / -2);
+  width: var(--w); height: 130vh;
+  transform: rotate(var(--r)); transform-origin: 50% 0;
+  background: linear-gradient(to bottom, rgb(246 214 140 / var(--a)), transparent 80%);
+  filter: blur(20px);
+}
+.gaspi__rays i:nth-child(1) { --w: 160px; --r: -31deg; --a: 8%; }
+.gaspi__rays i:nth-child(2) { --w: 120px; --r: -15deg; --a: 10%; }
+.gaspi__rays i:nth-child(3) { --w: 220px; --r: 0deg; --a: 12%; }
+.gaspi__rays i:nth-child(4) { --w: 120px; --r: 15deg; --a: 10%; }
+.gaspi__rays i:nth-child(5) { --w: 160px; --r: 31deg; --a: 8%; }
+/* Gold motes rising through the whole view; the first few are soft, larger
+   out-of-focus lights. Sizes, peaks and timings ride in on each mote. */
+.gaspi__dust { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+.gaspi__dust i {
+  position: absolute; bottom: -12px;
+  width: var(--size); height: var(--size); border-radius: 50%;
+  background: #f8dc98;
+  box-shadow: 0 0 calc(var(--size) * 4) rgb(246 214 138 / 85%);
+  opacity: 0;
+  animation: gaspi-rise var(--duration) linear var(--delay) infinite;
+}
+.gaspi__dust i.is-orb { box-shadow: none; filter: blur(calc(var(--size) / 4)); }
+.gaspi__frame { position: fixed; inset: 24px; border: 1px solid rgb(217 178 106 / 13%); border-radius: 20px; pointer-events: none; }
 .gaspi__bar { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 52px 56px 0; }
 .gaspi__back {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 8px;
   height: 40px; padding: 0 16px 0 12px;
-  border: 1px solid #3a3222; border-radius: 10px;
-  background: #15130f; color: var(--gold-ink);
+  border: 1px solid #5a4a2c; border-radius: 10px;
+  background: rgb(21 19 15 / 82%); color: #f0e2bf;
   font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .gaspi__back:hover { background: #1c1913; }
 .gaspi__esc { display: flex; align-items: center; gap: 8px; color: #a8966c; font-size: 12px; }
-.gaspi__esc kbd { padding: 2px 6px; border: 1px solid #3a3222; border-radius: 5px; font-family: var(--font-mono); }
-.gaspi__stage { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px 64px; text-align: center; }
-.gaspi__kicker { color: #a8966c; font-family: var(--font-mono); font-size: 12px; letter-spacing: .24em; text-transform: uppercase; }
-.gaspi__beam { display: flex; align-items: center; gap: 14px; width: min(440px, 80vw); margin: 22px 0 18px; }
-.gaspi__beam i { flex: 1; height: 1px; background: rgb(217 178 106 / 45%); }
-.gaspi__beam b { width: 7px; height: 7px; border: 1px solid var(--gold); transform: rotate(45deg); }
-.gaspi__title { margin: 0; font-family: var(--font-serif); font-weight: 400; font-size: clamp(64px, 10vw, 136px); line-height: .92; letter-spacing: -.01em; color: #ebd29a; }
-.gaspi__line { display: block; }
-.gaspi__line + .gaspi__line { font-style: italic; }
-.gaspi__letter { display: inline-block; animation: letter-in .7s var(--ease) backwards; }
+.gaspi__esc kbd { padding: 2px 6px; border: 1px solid #3a3222; border-radius: 5px; color: #cdbb92; font-family: var(--font-mono); font-size: 11px; }
+.gaspi__stage { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px 76px; text-align: center; }
+.gaspi__kicker { padding-left: .42em; color: #b89c62; font-family: var(--font-mono); font-size: 12px; letter-spacing: .42em; text-transform: uppercase; }
+.gaspi__beam { display: flex; align-items: center; gap: 16px; width: min(680px, 80vw); margin: 24px 0 28px; }
+.gaspi__beam i { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgb(236 198 122 / 70%)); box-shadow: 0 0 10px rgb(236 198 122 / 35%); }
+.gaspi__beam i:last-child { background: linear-gradient(90deg, rgb(236 198 122 / 70%), transparent); }
+.gaspi__beam b { width: 8px; height: 8px; border: 1px solid #ecc67a; transform: rotate(45deg); box-shadow: 0 0 12px rgb(236 198 122 / 55%); }
+.gaspi__title {
+  margin: 0;
+  font-family: var(--font-display); font-size: clamp(40px, 9vw, 108px); font-weight: 600;
+  line-height: 1.02; letter-spacing: .07em; text-transform: uppercase;
+  filter: drop-shadow(0 0 30px rgb(233 190 110 / 32%));
+}
+.gaspi__line { display: block; padding-left: .07em; }
+.gaspi__letter {
+  display: inline-block;
+  background: linear-gradient(180deg, #fff4d8 8%, #edc77e 52%, #b7883f 96%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: letter-in .7s var(--ease) backwards;
+}
 .gaspi.is-seen .gaspi__letter { animation: none; }
-.gaspi__sub { margin: 0; color: #bfaf8a; font-size: 15px; }
-.gaspi__hall { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 56px; }
+.gaspi__sub { margin: 0; color: #cdbb92; font-size: 15px; }
+.gaspi__hall { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; margin-top: 52px; }
+.gaspi__hall-label { display: flex; align-items: center; gap: 14px; margin: 0; color: #b89c62; font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: .34em; text-transform: uppercase; }
+.gaspi__hall-label span { padding-left: .34em; }
+.gaspi__hall-label::before, .gaspi__hall-label::after { content: ""; width: 56px; height: 1px; background: linear-gradient(90deg, transparent, rgb(236 198 122 / 55%)); }
+.gaspi__hall-label::after { background: linear-gradient(90deg, rgb(236 198 122 / 55%), transparent); }
 .gaspi__edition {
   display: flex; align-items: center; gap: 24px;
-  width: min(380px, 86vw); padding: 18px 18px 18px 22px;
-  border: 1px solid rgb(217 178 106 / 28%); border-radius: 16px;
-  background: #120f0a; text-align: left;
+  width: min(480px, 100%); padding: 20px 20px 20px 28px;
+  border: 1px solid rgb(217 178 106 / 30%); border-radius: 16px;
+  background: linear-gradient(160deg, rgb(236 198 122 / 11%), rgb(236 198 122 / 2%) 55%), #12100c;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 55%), 0 0 60px rgb(233 190 110 / 7%), inset 0 1px 0 rgb(255 236 190 / 8%);
+  text-align: left;
 }
-.gaspi__edition div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.gaspi__edition strong { font-family: var(--font-serif); font-size: 30px; font-weight: 400; line-height: 1.1; color: #ebd29a; }
-.gaspi__edition small { color: #bfaf8a; font-size: 13px; }
-.gaspi__slot { display: grid; place-items: center; width: 64px; height: 64px; border: 1px dashed rgb(217 178 106 / 55%); border-radius: 14px; color: var(--gold); font-family: var(--font-serif); font-size: 34px; }
+.gaspi__edition div { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.gaspi__edition strong { color: #f1dca8; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: .12em; line-height: 1.2; text-transform: uppercase; }
+.gaspi__edition small { color: #bfaf8a; font-size: 14px; }
+.gaspi__slot { display: grid; place-items: center; flex: none; width: 64px; height: 64px; border: 1px dashed rgb(236 198 122 / 55%); border-radius: 14px; background: rgb(236 198 122 / 5%); color: #ecc67a; font-family: var(--font-display); font-size: 30px; font-weight: 600; }
 
 /* ── Legal pages ────────────────────────── */
 .legal-shell { width: min(900px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 40px; }
@@ -739,7 +787,12 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes letter-in { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
-@keyframes drift { from { transform: translateY(0); opacity: 0; } 15% { opacity: .35; } to { transform: translateY(-60px); opacity: 0; } }
+@keyframes gaspi-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  12% { opacity: var(--peak); }
+  75% { opacity: calc(var(--peak) * .6); }
+  100% { transform: translateY(calc(-100vh - 24px)); opacity: 0; }
+}
 
 /* ── Responsive ─────────────────────────── */
 
@@ -863,8 +916,21 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .footer__row { flex-direction: column; align-items: flex-start; gap: 4px; }
   .footer__row nav a { min-height: 44px; display: inline-flex; align-items: center; }
   .gaspi__bar { padding: 36px 32px 0; }
+  .gaspi__back { height: 44px; }
   .gaspi__esc { display: none; }
-  .gaspi__frame { inset: 12px; }
+  .gaspi__frame { inset: 12px; border-radius: 16px; }
+  .gaspi__dust i:nth-child(n+33) { display: none; }
+  .gaspi__kicker { padding-left: .36em; font-size: 11px; letter-spacing: .36em; }
+  .gaspi__beam { width: min(280px, 72vw); margin: 18px 0 20px; }
+  .gaspi__title { letter-spacing: .05em; }
+  .gaspi__line { padding-left: .05em; }
+  .gaspi__sub { font-size: 14px; }
+  .gaspi__hall { margin-top: 40px; }
+  .gaspi__hall-label::before, .gaspi__hall-label::after { width: 36px; }
+  .gaspi__edition { gap: 16px; padding: 16px 16px 16px 20px; border-radius: 14px; }
+  .gaspi__edition strong { font-size: 19px; letter-spacing: .1em; }
+  .gaspi__edition small { font-size: 13px; }
+  .gaspi__slot { width: 56px; height: 56px; border-radius: 12px; font-size: 26px; }
 }
 
 @media (max-width: 479px) {
@@ -876,4 +942,5 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   :root { transition: none; }
   .gaspi__letter { animation: none; }
+  .gaspi__dust i { animation: none; bottom: auto; top: var(--y); opacity: calc(var(--peak) * .8); }
 }

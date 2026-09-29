@@ -11,18 +11,41 @@ export const GASPI_TITLE = "LOS JUEGOS DE GASPI";
 const GASPI_LINES = ["Los Juegos", "de Gaspi"] as const;
 const LETTER_START_MS = 350;
 const LETTER_STEP_MS = 60;
-const PARTICLE_COUNT = 18;
+const MOTE_COUNT = 42;
+const MOTE_SIZES = [2, 2.5, 3, 3.5, 2, 4.5];
 
 /** Deterministic rather than random: the field only has to look scattered, and a
     stable one survives a re-render without twitching. */
-const PARTICLES: CSSProperties[] = Array.from({ length: PARTICLE_COUNT }, (_, index) => ({
-  left: `${(index * 53 + 7) % 100}%`,
-  top: `${(index * 37 + 11) % 100}%`,
-  width: `${2 + (index % 3)}px`,
-  height: `${2 + (index % 3)}px`,
-  animationDuration: `${6 + (index % 5) * 1.3}s`,
-  animationDelay: `${((index * 0.7) % 5).toFixed(1)}s`,
-}));
+function scatter(seed: number) {
+  const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+type Particle = { style: CSSProperties; orb: boolean };
+
+function particle(index: number, size: number, peak: number, duration: number, orb: boolean): Particle {
+  return {
+    orb,
+    style: {
+      left: `${(scatter(index + 1) * 100).toFixed(2)}%`,
+      "--y": `${(scatter(index + 51) * 100).toFixed(2)}%`,
+      "--size": `${size}px`,
+      "--peak": peak.toFixed(2),
+      "--duration": `${duration.toFixed(1)}s`,
+      // Negative, so the field is already spread over the whole height when
+      // the card opens instead of starting from the floor.
+      "--delay": `${(-scatter(index + 251) * duration).toFixed(1)}s`,
+    } as CSSProperties,
+  };
+}
+
+/** Out-of-focus lights first, so a narrow screen can drop motes off the end. */
+const PARTICLES: Particle[] = [
+  ...[22, 30, 16, 14, 26, 18].map((size, index) =>
+    particle(100 + index, size, 0.08 + scatter(index + 300) * 0.06, 26 + index * 2, true)),
+  ...Array.from({ length: MOTE_COUNT }, (_, index) =>
+    particle(index, MOTE_SIZES[index % MOTE_SIZES.length]!, 0.45 + scatter(index + 101) * 0.5, 9 + scatter(index + 151) * 9, false)),
+];
 
 function Beam() {
   return (
@@ -50,8 +73,11 @@ export function GaspiDialog({ open, seen, onOpenChange }: {
       <Dialog.Portal>
         <Dialog.Overlay className="gaspi-overlay" />
         <Dialog.Content className={`gaspi${seen ? " is-seen" : ""}`} aria-describedby={undefined}>
+          <div className="gaspi__light" aria-hidden="true">
+            <span className="gaspi__rays"><i /><i /><i /><i /><i /></span>
+          </div>
           <div className="gaspi__dust" aria-hidden="true">
-            {PARTICLES.map((style, index) => <i key={index} style={style} />)}
+            {PARTICLES.map(({ style, orb }, index) => <i key={index} className={orb ? "is-orb" : undefined} style={style} />)}
           </div>
           <div className="gaspi__frame" aria-hidden="true" />
           <div className="gaspi__bar">
@@ -83,7 +109,7 @@ export function GaspiDialog({ open, seen, onOpenChange }: {
             <Beam />
             <p className="gaspi__sub">Torneo 1v1 · Temporada 2026</p>
             <div className="gaspi__hall">
-              <span className="gaspi__kicker">Sala de la fama</span>
+              <h3 className="gaspi__hall-label"><span>Sala de la fama</span></h3>
               <article className="gaspi__edition">
                 <div>
                   <strong>Edición I</strong>
