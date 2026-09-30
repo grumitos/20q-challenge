@@ -1,5 +1,4 @@
 import type { MouseEvent } from "react";
-import { TrophyIcon } from "./icons";
 import { GASPI_TITLE } from "./gaspi";
 
 /**
@@ -51,7 +50,8 @@ export function TopBar({ liveCount, onOpenGaspi }: {
           </span>
         ) : null}
         <button type="button" className="gaspi-button" onClick={onOpenGaspi} aria-label={`Abrir ${GASPI_TITLE}`}>
-          <TrophyIcon size={16} />
+          {/* The tournament's own mark: the title's gilded Cinzel, in one letter. */}
+          <span className="gaspi-mark" aria-hidden="true">G</span>
           <span className="gaspi-button__label">Los Juegos de Gaspi</span>
           <span className="gaspi-button__edition mono">Ed. I</span>
         </button>

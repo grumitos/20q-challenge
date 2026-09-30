@@ -227,13 +227,12 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
             </dl>
           </div>
         </div>
-        {/* The last match closes the card's plain part; only the panel below
-            it sits on the dot grid. */}
+        {/* The last match closes the card's plain part; the panel's dot grid
+            below it is its own separator. */}
         <Stitch />
         {respawnSeconds !== null
           ? <div className="pcard__respawn"><RespawnPill seconds={respawnSeconds} playerName={player.gameName} /></div>
           : <MatchLine player={player} roster={roster} version={version} now={now} />}
-        <Stitch />
       </div>
 
       <div className="pcard__side">
@@ -330,7 +329,6 @@ function PodiumSkeleton({ place }: { place: number }) {
         </div>
         <Stitch />
         <div className="mline is-empty"><span className="sk sk-line" style={{ width: "70%", height: 12 }} /></div>
-        <Stitch />
       </div>
       <div className="pcard__side">
         <div className="pcard__champs">
