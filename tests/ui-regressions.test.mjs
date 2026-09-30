@@ -161,18 +161,24 @@ test("keeps the section links as plain scroll shortcuts that do not follow or fo
   assert.match(page, /window\.history\.replaceState\(null, "", `\$\{pathname\}\$\{search\}`\)/);
 });
 
-test("draws a champion's bar as its season in grey under its last month in the result's ink", async () => {
+test("draws a champion's season as a muted bar that agrees with its percentage, and its last month as a mark", async () => {
   const { primitives, duos, css } = await sources();
-  // The grey layer and the percentage are the season; the ink over it is the last month.
+  // The bar and the percentage are one figure, the season, in the muted ink of the season's own result.
+  assert.match(primitives, /<span className=\{`wr-track is-\$\{champion\.tone\}`\} aria-hidden="true">/);
   assert.match(primitives, /className="wr-track__season" style=\{\{ width: `\$\{champion\.winRate\}%` \}\}/);
-  assert.match(primitives, /className="wr-track__recent" style=\{\{ width: `\$\{Math\.max\(2, ink\.winRate\)\}%` \}\}/);
-  assert.match(css, /\.wr-track__season \{ background: color-mix\(in srgb, var\(--text-3\) 32%, transparent\); \}/);
-  assert.match(css, /\.wr-track__recent \{ background: var\(--bar\); \}/);
-  // Not played lately: grey only. No recent records in the payload (an older API): the ink shows the season.
-  assert.match(primitives, /const ink = champion\.recent === undefined\s*\? \{ winRate: champion\.winRate, tone: champion\.tone \}\s*: champion\.recent;/);
-  // The month's record is told, not only drawn: in the row's tooltip and label.
+  assert.match(css, /\.wr-track__season \{ background: color-mix\(in srgb, var\(--bar\) 42%, transparent\); \}/);
+  // The month is a mark placed where its winrate falls (never a second bar, so no bar can run past
+  // the percentage), clamped inside the track, in its own result's bright ink, hollow on one or two games.
+  assert.match(primitives, /className=\{`wr-track__month is-\$\{month\.tone\}\$\{month\.games < 3 \? " is-few" : ""\}`\}/);
+  assert.match(primitives, /style=\{\{ left: `clamp\(0px, calc\(\$\{month\.winRate\}% - 2px\), calc\(100% - 4px\)\)` \}\}/);
+  assert.doesNotMatch(primitives, /wr-track__month[^\n]*width:/);
+  assert.match(css, /\.wr-track__month \{[^}]*background: var\(--mark\);/);
+  assert.match(css, /\.wr-track__month\.is-few \{ background: var\(--halo, var\(--surface\)\);/);
+  // Not an <i>: the switch's bar-fill animation scales the bars, never the mark.
+  assert.match(primitives, /<b\s+className=\{`wr-track__month/);
+  // The month's record is told, not only drawn: in the row's tooltip and label, and the hint says which is which.
   assert.match(primitives, /aria-label=\{`\$\{champion\.name\}: \$\{champion\.games\} partidas, \$\{champion\.winRate\}% de winrate\$\{recent \? `; \$\{recent\}` : ""\}`\}/);
-  assert.match(primitives, /Barra de color: winrate de los últimos 30 días/);
+  assert.match(primitives, /Barra y porcentaje: winrate de toda la temporada\.\\nMarca: winrate de los últimos 30 días/);
   // The duos keep the adjusted bar: solid adjusted winrate over the observed one as a light tail.
   assert.match(duos, /className="wr-track__observed" style=\{\{ width: `\$\{view\.winRate\}%` \}\}/);
   assert.match(duos, /className="wr-track__adjusted" style=\{\{ width: `\$\{view\.adjusted\}%` \}\}/);
@@ -193,7 +199,7 @@ test("inks wins green, losses red and even results grey, and keeps the accent fo
   const { primitives, standings, duos, css } = await sources();
   assert.match(css, /\.wr-track\.is-even, \.wr-bar\.is-even \{ --bar: var\(--even\); \}/);
   assert.match(css, /\.wr-track\.is-loss, \.wr-bar\.is-loss \{ --bar: var\(--loss\); \}/);
-  assert.match(primitives, /className=\{`wr-track\$\{ink \? ` is-\$\{ink\.tone\}` : ""\}`\}/);
+  assert.match(primitives, /className=\{`wr-track is-\$\{champion\.tone\}`\}/);
   assert.match(duos, /className=\{`wr-track is-\$\{view\.tone\}`\}/);
   assert.match(standings, /className=\{`wr-bar is-\$\{winRateTone\(player\.winRate, games, 1\)\}`\}/);
   for (const source of [primitives, standings]) {
@@ -411,20 +417,28 @@ test("sets the last match on a two-row grid whose figure columns line up on ever
   assert.doesNotMatch(primitives, /\.join\(" · "\)/);
   assert.match(primitives, /\{kdaRatio\(match\.kills, match\.deaths, match\.assists\)\} KDA/);
   // Fixed figure columns on a wide card, every cell on its row's baseline.
-  assert.match(css, /grid-template-columns: minmax\(0, 1fr\) 62px 68px;\s*grid-template-areas: "result kda age" "champ ratio time";\s*align-items: baseline;/);
-  // In a game shared with challenge members the company takes the ratio's and the length's columns, in gold.
-  assert.match(css, /\.mline\.has-company \.mline__body \{ grid-template-areas: "result kda age" "champ with with"; \}/);
+  assert.match(css, /grid-template-columns: minmax\(0, 1fr\) 62px 80px;\s*grid-template-areas: "result kda age" "champ ratio time";\s*align-items: baseline;/);
+  // In a game shared with challenge members the company, in gold, takes only the length's place:
+  // the ratio stays under the K/D/A, so the block keeps its columns with a duo or without.
+  assert.match(css, /\.mline\.has-company \.mline__body \{ grid-template-areas: "result kda age" "champ ratio with"; \}/);
   assert.match(css, /\.mline__with b \{ color: var\(--gold\);/);
-  assert.match(primitives, /\{company\.length > 0 \? <MatchCompany names=\{company\} \/> : \(/);
+  assert.match(primitives, /<small className="mline__ratio mono">\{kdaRatio\(match\.kills, match\.deaths, match\.assists\)\} KDA<\/small>\s*\{\/\*[^*]*\*\/\}\s*\{company\.length > 0\s*\? <MatchCompany names=\{company\} \/>\s*: <span className="mline__time mono">/);
   // The lane is named beside its icon, and the champion by its display name.
   assert.match(primitives, /<span className="mline__lane">\{ROLE_LABELS\[lane\]\}<\/span>/);
   assert.match(primitives, /const champion = championDisplayName\(\{ id: match\.championId, name: match\.championName \}\);/);
   // Icons ride inline in the text: a flex item led by an icon takes the icon's bottom edge as its baseline.
   assert.match(css, /\.mline__body svg \{ display: inline-block; margin-right: 4px; vertical-align: -2px;/);
   assert.doesNotMatch(css, /\.mline__(champ|time|stats) \{[^}]*display: (inline-)?flex/);
-  // Narrower cards size the figure columns to their content; the narrowest stack them in two.
-  assert.match(css, /@container mline \(max-width: 335px\) \{\s*\.mline__body \{ grid-template-columns: minmax\(0, 1fr\) auto auto;/);
-  assert.match(css, /@container mline \(max-width: 299px\) \{\s*\.mline__body \{ grid-template-columns: minmax\(0, 1fr\) auto; grid-template-areas: "result age" "champ kda"; \}/);
+  // Narrower cards keep every fact on three lines of two columns, the table's layout, duo or not.
+  assert.match(css, /@container mline \(max-width: 335px\) \{\s*\.mline__body \{ grid-template-columns: minmax\(0, 1fr\) auto; grid-template-areas: "result age" "champ kda" "time ratio";/);
+  assert.match(css, /@container mline \(max-width: 335px\) \{[^@]*\.mline\.has-company \.mline__body \{ grid-template-areas: "result age" "champ kda" "with ratio"; \}/);
+  assert.doesNotMatch(css, /@container mline \(max-width: 299px\)/);
+  // The table's column says the same on three lines: the lane and champion too, then the length
+  // and ratio for a game played alone, or the company in their place for a shared one.
+  assert.doesNotMatch(primitives, /compact \? \[\] : peerNames/);
+  assert.doesNotMatch(primitives, /\{compact \? null : \(\s*<>\s*<MatchChampion/);
+  assert.match(css, /\.mline\.is-compact \.mline__body \{\s*grid-template-columns: minmax\(0, 1fr\) auto;\s*grid-template-areas: "result age" "champ kda" "time ratio";/);
+  assert.match(css, /\.mline\.is-compact\.has-company \.mline__body \{ grid-template-areas: "result age" "champ kda" "with ratio"; \}/);
   // One K/D/A everywhere a match shows, and the row detail speaks the same words without dots.
   assert.match(primitives, /export function KdaFigures/);
   assert.match(standings, /<KdaFigures kills=\{match\.kills\} deaths=\{match\.deaths\} assists=\{match\.assists\} \/>/);

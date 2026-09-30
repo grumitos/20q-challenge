@@ -598,10 +598,24 @@ html.is-invaded .pcard__splash { --splash-rest: grayscale(0) sepia(.35) saturate
 /* The duos' bar: the observed winrate as a light tail, the adjusted one solid. */
 .wr-track__observed { background: color-mix(in srgb, var(--bar) 28%, transparent); }
 .wr-track__adjusted { background: var(--bar); }
-/* A champion's bar: the season in grey, the last month in the result's ink over it. */
-.wr-track__season { background: color-mix(in srgb, var(--text-3) 32%, transparent); }
-.wr-track__recent { background: var(--bar); }
 .wr-track::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--surface); }
+/* A champion's bar: the season, as long as the percentage beside it, in the
+   muted ink of its own result; the last month, a mark in the bright ink of its
+   own result where that month's winrate falls. The mark stands proud of the
+   track, ringed in the surface under it, above the 50% notch; hollow when the
+   month rests on one or two games. */
+.champ-row .wr-track { overflow: visible; }
+.wr-track__season { background: color-mix(in srgb, var(--bar) 42%, transparent); }
+.wr-track__month {
+  --mark: var(--win);
+  position: absolute; top: -4px; bottom: -4px; z-index: 1; width: 4px;
+  border-radius: 2px;
+  background: var(--mark);
+  box-shadow: 0 0 0 2px var(--halo, var(--surface)), 0 0 8px color-mix(in srgb, var(--mark) 50%, transparent);
+}
+.wr-track__month.is-even { --mark: var(--even); }
+.wr-track__month.is-loss { --mark: var(--loss); }
+.wr-track__month.is-few { background: var(--halo, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--mark), 0 0 0 2px var(--halo, var(--surface)); }
 .tone-win { color: var(--win); }
 .tone-even { color: var(--text-2); }
 .tone-loss { color: var(--loss); }
@@ -633,21 +647,22 @@ a.mline:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); 
 .mline__icon { flex: none; width: 30px; height: 30px; border-radius: 8px; overflow: hidden; background: var(--track); }
 .mline__icon img { width: 100%; height: 100%; transform: scale(1.1); }
 /* The figures sit on a grid of two rows. Above: the result with its PL, the
-   K/D/A and the age; below: the lane and the champion, then the ratio and the
-   length, or, in a game shared with challenge members, who they were across
-   both of those columns (the company says more than the length). On a wide
-   card the two figure columns have one width, so the podium's lines read as
-   one table; every cell sits flush right on its row's baseline. The icons ride
-   inline in the text, since a flex item that starts with an icon takes the
-   icon's bottom edge as its baseline. */
+   K/D/A and the age; below: the lane and the champion, the ratio and the
+   length, where a game shared with challenge members names them instead of
+   the length (the company says more), so the ratio always stays under the
+   K/D/A. On a wide card the two figure columns have one width, the second wide
+   enough for a name, so the podium's lines read as one table; every cell sits
+   flush right on its row's baseline. The icons ride inline in the text, since
+   a flex item that starts with an icon takes the icon's bottom edge as its
+   baseline. */
 .mline__body {
   display: grid; flex: 1; min-width: 0;
-  grid-template-columns: minmax(0, 1fr) 62px 68px;
+  grid-template-columns: minmax(0, 1fr) 62px 80px;
   grid-template-areas: "result kda age" "champ ratio time";
   align-items: baseline; gap: 3px 14px;
   color: var(--text-3); font-size: 12px; white-space: nowrap;
 }
-.mline.has-company .mline__body { grid-template-areas: "result kda age" "champ with with"; }
+.mline.has-company .mline__body { grid-template-areas: "result kda age" "champ ratio with"; }
 .mline__body > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mline__body svg { display: inline-block; margin-right: 4px; vertical-align: -2px; color: var(--text-4); }
 /* The top row's cells share the K/D/A's size, so the row's baseline is the
@@ -665,27 +680,41 @@ a.mline:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); 
 .mline__with b { color: var(--gold); font-weight: 600; }
 .mline__ratio { grid-area: ratio; justify-self: end; font-size: 12px; }
 .mline__time { grid-area: time; justify-self: end; }
-/* A narrower card sizes the figure columns to their content. */
+/* A narrower card keeps every fact on three lines of two columns, as the
+   table does: the result and the age, the lane and champion and the K/D/A,
+   then the length (or the company) and the ratio. Every card in a row gets the
+   same three lines, duo or not, so the podium's panels still line up. */
 @container mline (max-width: 335px) {
-  .mline__body { grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 10px; }
-}
-/* The narrowest stack the figures in two columns: the age beside the result,
-   the K/D/A beside the champion, the company on a line of its own. */
-@container mline (max-width: 299px) {
-  .mline__body { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "result age" "champ kda"; }
-  .mline.has-company .mline__body { grid-template-areas: "result age" "champ kda" "with with"; }
-  .mline__with { justify-self: start; }
-  .mline__ratio, .mline__time { display: none; }
+  .mline__body { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "result age" "champ kda" "time ratio"; column-gap: 10px; }
+  .mline.has-company .mline__body { grid-template-areas: "result age" "champ kda" "with ratio"; }
+  .mline.is-live .mline__body { grid-template-areas: "result result" "champ age" "with with"; }
+  .mline :is(.mline__time, .mline__with) { justify-self: start; }
 }
 .mline__chevron { flex: none; color: var(--text-3); transition: transform var(--fast) var(--ease), color var(--fast) ease; }
 a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2); }
 .mline__chevron-room { flex: none; width: 14px; }
 .mline.is-old .mline__icon { opacity: .75; }
-/* The table's form: the result across, then the K/D/A and the age. */
+/* The table's form, the same facts in a narrow column on three lines: the
+   result and the age; the lane and champion and the K/D/A; then the length,
+   or the company in a shared game, and the ratio. A live game: the clock, the
+   champion and its start, then the company. */
 .mline.is-compact { padding: 0; gap: 10px; }
-.mline.is-compact .mline__body { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "result result" "kda age"; }
-.mline.is-compact.is-live .mline__body { grid-template-areas: "result result" "champ champ"; }
+.mline.is-compact .mline__body {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "result age" "champ kda" "time ratio";
+  row-gap: 2px;
+}
+.mline.is-compact.has-company .mline__body { grid-template-areas: "result age" "champ kda" "with ratio"; }
+.mline.is-compact.is-live .mline__body { grid-template-areas: "result result" "champ age" "with with"; }
+.mline.is-compact .mline__time { justify-self: start; }
+.mline.is-compact .mline__with { justify-self: start; }
 .mline.is-compact .kda { font-size: 12px; }
+/* The table's column is its own measure: where it is narrow (the smallest
+   desktops) the lane keeps its icon and gives up its name. */
+.srow__match { container: srow-match / inline-size; }
+@container srow-match (max-width: 229px) {
+  .mline.is-compact :is(.mline__lane, .mline__sep) { display: none; }
+}
 .outcome { font-size: 13px; font-weight: 600; }
 .outcome.is-win { color: var(--win); }
 .outcome.is-loss { color: var(--loss); }
@@ -739,10 +768,11 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 }
 .board__body { margin: 0; padding: 0; list-style: none; }
 /* The player and the rank take about what their content needs; the winrate bar
-   and the last match, which read better wider, take what is left over. */
+   and the last match, which read better wider, take what is left over, the
+   match most of all: it names the lane, the champion and the company too. */
 .srow-grid {
   display: grid;
-  grid-template-columns: 44px minmax(170px, 1.2fr) minmax(160px, 1fr) minmax(130px, 1fr) 52px 100px 176px minmax(170px, 1.2fr) 24px;
+  grid-template-columns: 44px minmax(176px, 1.1fr) minmax(150px, .9fr) minmax(120px, 1fr) 52px 100px 176px minmax(210px, 1.4fr) 24px;
   column-gap: 16px;
 }
 .srow { border-top: 1px solid var(--line-soft); transition: background-color var(--fast) ease; }
@@ -1290,9 +1320,11 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .srow__stats { padding-left: 0; }
 }
 
-/* A row's fourth champion only fits beside the winrate and the form from about 420px up. */
+/* A row's fourth champion only fits beside the winrate and the form from about
+   420px up, and the meta line keeps the role and its share without the tag. */
 @media (max-width: 419px) {
   .srow__champs .champ-tile:nth-child(n+4) { display: none; }
+  .srow__meta :is(.srow__tag, .srow__meta-sep) { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
