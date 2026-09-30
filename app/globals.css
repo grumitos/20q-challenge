@@ -40,8 +40,8 @@
   --text-4: #5e5f66;
   /* Data inks: a win, a loss, and what came out even (50%, a remake, 0 PL).
      The accent marks focus and what is live, never a result. */
-  --win: #46cf7e;
-  --loss: #f2626b;
+  --win: #4ebc7b;
+  --loss: #e36369;
   --even: #7c7e87;
   --accent: #5b9dff;
   --gold: #d9b26a;
@@ -129,12 +129,31 @@ body {
   margin: 0;
   min-height: 100vh;
   background: var(--bg);
+  /* Its own stacking context, so the backdrop below paints over the background
+     and under everything else. */
+  isolation: isolate;
   color: var(--text);
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* The page is not a flat field: a hairline grid centred on the page, the card
+   dots' larger kin, under a faint light from the top. Both fade out on a wide
+   ellipse well before the rows end, and scroll away with the page. */
+body::before {
+  content: "";
+  position: absolute; inset: 0 0 auto; z-index: -1;
+  height: max(900px, 110vh);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgb(255 255 255 / 3%), transparent 70%),
+    linear-gradient(to right, rgb(255 255 255 / 3.5%) 1px, transparent 1px) 50% 0 / 56px 56px,
+    linear-gradient(to bottom, rgb(255 255 255 / 3.5%) 1px, transparent 1px) 50% 0 / 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 0%, #000 35%, transparent 80%);
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 0%, #000 35%, transparent 80%);
+  pointer-events: none;
 }
 
 img { display: block; max-width: 100%; }
@@ -215,18 +234,29 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .topbar__spacer { flex: 1; }
 .topbar__live { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; white-space: nowrap; animation: fade-in .3s var(--ease); }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-out infinite; }
+/* Los Juegos' door: a gilded rim, lit from the top left like the title's
+   letters, around the tournament's mark; hovering warms it with a glow. */
 .gaspi-button {
   display: flex; align-items: center; gap: 10px;
-  height: 36px; margin-left: 6px; padding: 0 14px 0 12px;
-  border: 1px solid #3a3222; border-radius: 10px;
-  background: #15130f; color: var(--gold-ink);
+  height: 36px; margin-left: 6px; padding: 0 14px 0 11px;
+  border: 1px solid transparent; border-radius: 10px;
+  background:
+    linear-gradient(#15130f, #15130f) padding-box,
+    linear-gradient(135deg, #f3dca4, #8a6a34 42%, #d9b26a 72%, #5f4824) border-box;
+  color: var(--gold-ink);
   font-size: 13px; font-weight: 600; white-space: nowrap;
   cursor: pointer;
-  transition: border-color var(--fast) ease, background-color var(--fast) ease, transform var(--fast) ease;
+  transition: box-shadow var(--switch) var(--ease-soft), transform var(--fast) ease;
 }
-.gaspi-button svg { color: var(--gold); }
-.gaspi-button:hover { border-color: #5a4a2c; background: #1b1812; }
+.gaspi-button:hover { box-shadow: 0 0 18px rgb(236 198 122 / 24%); }
 .gaspi-button:active { transform: translateY(1px); }
+.gaspi-mark {
+  font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1;
+  background: linear-gradient(180deg, #fff4d8 8%, #edc77e 52%, #b7883f 96%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 6px rgb(233 190 110 / 35%));
+}
 .gaspi-button__edition { color: #a8966c; font-size: 12px; font-weight: 400; }
 
 .page { display: flex; flex-direction: column; gap: 32px; padding-top: 32px; }
@@ -257,9 +287,15 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 /* ── Podium ─────────────────────────────── */
 .podium__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 
-/* The dot grid is the card's surface, as it is the row detail's; the rank plate
-   stays a plain well so the number on it reads first. */
+/* Where a dot grid meets text, every glyph wears a soft halo of the surface
+   under it: the dots right behind letters and numbers dim away, the rest of
+   the grid stays as it is, and no box is drawn anywhere. Each grid sets its
+   own --halo to the colour it lies on. */
+.pcard, .detail { text-shadow: 0 0 4px var(--halo), 0 0 1.5px var(--halo); }
+
+/* The dot grid is the whole card's surface, as it is the row detail's. */
 .pcard {
+  --halo: var(--surface);
   position: relative;
   container: pcard / inline-size;
   min-width: 0;
@@ -281,11 +317,14 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .pcard__splash {
   width: 100%; height: 100%;
   object-fit: cover; object-position: 50% 25%;
-  /* Muted at rest; the card brings its art back to full colour on hover.
-     Every rule below spells out the same four functions, in the same sequence:
-     a filter list is only interpolated when both ends have the same functions,
-     and any other pair changes in one step, which is how this used to snap. */
-  filter: grayscale(.45) sepia(0) saturate(.8) brightness(.58);
+  /* Softened at rest; the card lights its art up on hover, or on a touch screen
+     while it is the card being looked at. Both states live here once and every
+     screen uses them. They spell out the same four functions in the same
+     sequence: a filter list only interpolates between matching lists, and any
+     other pair changes in one step, which is how this used to snap. */
+  --splash-rest: grayscale(.3) sepia(0) saturate(.9) brightness(.64);
+  --splash-lit: grayscale(0) sepia(0) saturate(1) brightness(.7);
+  filter: var(--splash-rest);
   transform: scale(1.01);
   transition: transform .8s var(--ease), filter .7s var(--ease-soft);
   will-change: filter, transform;
@@ -294,10 +333,10 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
    on one card while another is the one on screen. Touch screens mark that
    one instead (`is-featured`, see the podium). */
 @media (hover: hover) {
-  .pcard:hover .pcard__splash { transform: scale(1.04); filter: grayscale(0) sepia(0) saturate(1) brightness(.7); }
+  .pcard:hover .pcard__splash { transform: scale(1.04); filter: var(--splash-lit); }
 }
-.pcard.is-featured .pcard__splash { transform: scale(1.04); filter: grayscale(0) sepia(0) saturate(1) brightness(.7); }
-html.is-invaded .pcard__splash { filter: grayscale(0) sepia(.35) saturate(.8) brightness(.58); }
+.pcard.is-featured .pcard__splash { transform: scale(1.04); filter: var(--splash-lit); }
+html.is-invaded .pcard__splash { --splash-rest: grayscale(0) sepia(.35) saturate(.85) brightness(.64); }
 
 .place-chip {
   --medal: var(--medal-1);
@@ -326,13 +365,12 @@ html.is-invaded .pcard__splash { filter: grayscale(0) sepia(.35) saturate(.8) br
 .pcard__role { display: flex; align-items: center; gap: 5px; flex: none; color: var(--text-3); font-size: 13px; white-space: nowrap; }
 
 /* The plate: the rank and the four figures, two halves of the same width with a
-   stitch between them. It is not a box, no border and no well: the card's dot
-   grid fades out behind it, edge to edge, and back in below it. */
+   stitch between them. It is not a box: no border and no well, just the card's
+   plain surface. */
 .plate {
   container: plate / inline-size;
   margin-top: 2px;
   padding: 10px 20px 8px;
-  background: linear-gradient(to bottom, transparent, var(--surface) 12px, var(--surface) calc(100% - 12px), transparent);
 }
 .plate__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
 .plate__rank { display: flex; align-items: center; justify-content: center; min-width: 0; }
@@ -402,7 +440,7 @@ html.is-invaded .pcard__splash { filter: grayscale(0) sepia(.35) saturate(.8) br
 }
 /* The stitch under the plate sits as far below the figures as the match line
    sits below it. */
-.pcard__side > .stitch:first-child { margin-top: 8px; }
+.plate + .stitch { margin-top: 8px; }
 .stitch + .mline, .stitch + .pcard__respawn { margin-block: 0; }
 .mline + .stitch, .pcard__respawn + .stitch { margin-top: 0; }
 
@@ -413,6 +451,11 @@ html.is-invaded .pcard__splash { filter: grayscale(0) sepia(.35) saturate(.8) br
 /* The podium's hint is only its icon; the padding gives the pointer a larger
    target without moving it. */
 .pcard__champs .info-hint { padding: 5px; margin: -5px; }
+/* The switch spans the panel as the stitches above do: its left edge lines up
+   with the portraits and tiles below, the hint closes the line on the right
+   edge, and the options share the width in between. */
+.pcard__champs .segmented { flex: 1; min-width: 0; }
+.pcard__champs .segmented button { flex: 1 1 auto; }
 /* Every view of the panel starts at the same distance below the switch and
    stands as tall as the five-champion list, so switching views never changes
    the card's height. */
@@ -507,10 +550,24 @@ a.mline:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); 
 .mline.is-empty { margin: 0; color: var(--text-3); font-size: 13px; }
 .mline__icon { flex: none; width: 30px; height: 30px; border-radius: 8px; overflow: hidden; background: var(--track); }
 .mline__icon img { width: 100%; height: 100%; transform: scale(1.1); }
-.mline__body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.mline__body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; container: mline / inline-size; }
 .mline__top { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
 .mline__age { margin-left: auto; color: var(--text-3); font-size: 12px; }
-.mline__sub { color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The game's figures, each its own item spread across the line: the champion
+   (with the role played) first, the K/D/A, the length, the company last. A
+   narrower line drops the ratio, then the length; the champion's name is the
+   one that ellipsises. */
+.mline__stats { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.mline__champ { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--text-2); }
+.mline__champ > span { overflow: hidden; text-overflow: ellipsis; }
+.mline__champ svg { flex: none; color: var(--text-3); }
+.mline__kda b, b.mline__kda { color: var(--text); font-weight: 500; }
+.mline__kda small { margin-left: 6px; font-size: 11px; }
+.mline__time { display: inline-flex; align-items: center; gap: 4px; }
+.mline__time svg { flex: none; color: var(--text-4); }
+.mline__with { color: var(--text-2); }
+@container mline (max-width: 290px) { .mline__kda small { display: none; } }
+@container mline (max-width: 225px) { .mline__time { display: none; } }
 .mline__chevron { flex: none; color: var(--text-3); transition: transform var(--fast) var(--ease), color var(--fast) ease; }
 a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2); }
 .mline.is-old .mline__icon { opacity: .75; }
@@ -605,6 +662,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .srow__detail { overflow: hidden; }
 
 .detail {
+  --halo: var(--inset);
   display: grid; grid-template-columns: 1.25fr 1fr 1.2fr .9fr; gap: 40px;
   padding: 24px 20px 28px 80px;
   border-top: 1px solid var(--line-soft);
@@ -614,7 +672,6 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 }
 .detail__block { min-width: 0; }
 .detail__block .champ-row__name { width: 84px; }
-.detail__hint { margin-top: 10px; }
 /* One highlight per switch: a thumb that slides to the chosen option (see
    Segmented) under labels that fade their colour. The thumb lives in the chosen
    button, so the group is isolated and every label sits above it, the ones it
@@ -759,18 +816,16 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 }
 .gaspi__dust i.is-orb { box-shadow: none; filter: blur(calc(var(--size) / 4)); }
 .gaspi__frame { position: fixed; inset: 24px; border: 1px solid rgb(217 178 106 / 13%); border-radius: 20px; pointer-events: none; }
-.gaspi__bar { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 52px 56px 0; }
-.gaspi__back {
-  display: flex; align-items: center; gap: 8px;
-  height: 40px; padding: 0 16px 0 12px;
-  border: 1px solid #5a4a2c; border-radius: 10px;
-  background: rgb(21 19 15 / 82%); color: #f0e2bf;
-  font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: background-color var(--fast) ease;
-}
-.gaspi__back:hover { background: #1c1913; }
-.gaspi__esc { display: flex; align-items: center; gap: 8px; color: #a8966c; font-size: 12px; }
+.gaspi__bar { position: relative; display: flex; align-items: center; justify-content: flex-end; padding: 52px 56px 0; }
+.gaspi { cursor: pointer; }
+.gaspi__esc, .gaspi__tap { display: flex; align-items: center; gap: 8px; color: #a8966c; font-size: 12px; }
 .gaspi__esc kbd { padding: 2px 6px; border: 1px solid #3a3222; border-radius: 5px; color: #cdbb92; font-family: var(--font-mono); font-size: 11px; }
+/* A touch screen has no Esc: its notice asks for the tap that closes the card. */
+.gaspi__tap { display: none; }
+@media (hover: none) {
+  .gaspi__esc { display: none; }
+  .gaspi__tap { display: flex; }
+}
 .gaspi__stage { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px 76px; text-align: center; }
 .gaspi__kicker { padding-left: .42em; color: #b89c62; font-family: var(--font-mono); font-size: 12px; letter-spacing: .42em; text-transform: uppercase; }
 .gaspi__beam { display: flex; align-items: center; gap: 16px; width: min(680px, 80vw); margin: 24px 0 28px; }
@@ -874,20 +929,15 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .pcard.place-1 { grid-column: 1 / -1; }
 }
 
-/* The leader's card turns horizontal as soon as it has the width for it. */
-@container pcard (min-width: 820px) {
-  .pcard__body { display: grid; grid-template-columns: 150px minmax(0, 1.3fr) minmax(0, 1fr); }
-  .pcard__art { height: auto; min-height: 100%; }
-  .pcard__splash { position: absolute; inset: 0; object-position: 60% 40%; }
-  .pcard__main { padding: 20px; border-right: 1px solid var(--line); }
-  .pcard__identity { margin-top: 0; padding-inline: 0; align-items: center; }
-  .pcard__avatar { width: 48px; height: 48px; border: 0; border-radius: 12px; }
-  .pcard__who { padding-top: 0; }
-  .pcard__main .plate { margin: 2px -20px 0; }
-  .pcard__side { padding: 8px 0 4px; }
-  .pcard__side > .stitch:first-child { display: none; }
-  .pcard__side .mline { padding-inline: 20px; }
-  .pcard__side .champ-row__name { width: 84px; }
+/* The leader's card, once it spans the two-column podium, keeps its banner and
+   splits the body into two columns of the same width: name, plate and last
+   match on the left, the panel on its dot grid on the right. */
+@container pcard (min-width: 640px) {
+  .pcard.place-1 .pcard__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto 1fr; }
+  .pcard.place-1 .pcard__art { grid-column: 1 / -1; }
+  .pcard.place-1 .pcard__main { padding-bottom: 14px; border-right: 1px solid var(--line); }
+  .pcard.place-1 .pcard__main > .stitch:last-child { display: none; }
+  .pcard.place-1 .pcard__side .champ-row__name { width: 84px; }
 }
 
 /* Compact rows: two lines per player, the table heading goes away. */
@@ -943,7 +993,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .topbar__nav { margin-left: auto; }
   .topbar__spacer { display: none; }
   .gaspi-button { width: 44px; height: 44px; justify-content: center; padding: 0; margin-left: 0; border-radius: 12px; }
-  .gaspi-button svg { width: 18px; height: 18px; }
+  .gaspi-mark { font-size: 22px; }
   .page { gap: 24px; padding-top: 16px; }
   .podium__grid { grid-template-columns: 1fr; gap: 12px; }
   .pcard.place-2 .pcard__art, .pcard.place-3 .pcard__art { height: 72px; }
@@ -951,11 +1001,27 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .pcard.place-2 .pcard__identity, .pcard.place-3 .pcard__identity { margin-top: -22px; }
   .pcard.place-2 .pcard__avatar, .pcard.place-3 .pcard__avatar { width: 50px; height: 50px; border-radius: 13px; }
   .pcard.place-2 .pcard__who, .pcard.place-3 .pcard__who { padding-top: 26px; }
-  .pcard.place-2 .pcard__champs-bars, .pcard.place-3 .pcard__champs-bars,
-  .pcard.place-2 .pcard__champs .info-hint, .pcard.place-3 .pcard__champs .info-hint { display: none; }
+  .pcard.place-2 .pcard__champs-bars, .pcard.place-3 .pcard__champs-bars { display: none; }
+  /* A touch screen cannot open the hint's tooltip, so the switch takes the whole line. */
+  .pcard__champs .info-hint { display: none; }
   .pcard.place-2 .pcard__champs-tiles, .pcard.place-3 .pcard__champs-tiles { display: block; }
-  .pcard.place-2 .pcard__panel, .pcard.place-3 .pcard__panel { min-height: 0; }
-  .pcard__champs-tiles .champ-tiles { justify-content: space-between; }
+  /* The second and third keep one compact height in every view: champions and
+     roles as tiles, the summary as three short lines. */
+  .pcard:is(.place-2, .place-3) .pcard__panel { min-height: 78px; }
+  .pcard:is(.place-2, .place-3) .role-list { flex-direction: row; justify-content: space-between; gap: 0; margin-inline: -8px; }
+  .pcard:is(.place-2, .place-3) .role-list li { flex-direction: column; gap: 4px; width: 52px; height: auto; }
+  /* A role tile stands as tall as a champion's: its icon on a 36px square like the portrait. */
+  .pcard:is(.place-2, .place-3) .role-list svg { width: 36px; height: 36px; padding: 9px; border-radius: 8px; background: var(--raised); color: var(--text-2); }
+  .pcard:is(.place-2, .place-3) :is(.role-list__bar, .role-list__games) { display: none; }
+  .pcard:is(.place-2, .place-3) :is(.role-list__name, .role-list__value) { width: auto; text-align: center; }
+  .pcard:is(.place-2, .place-3) .role-list__name { font-size: 12px; }
+  .pcard:is(.place-2, .place-3) .summary { gap: 6px; }
+  .pcard:is(.place-2, .place-3) .summary dt { white-space: nowrap; }
+  .pcard:is(.place-2, .place-3) .summary > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 22px; }
+  .pcard:is(.place-2, .place-3) .summary dd { margin: 0; font-size: 13px; }
+  /* Tiles are 52px with a 36px image centred, so the row reaches 8px past each
+     edge: the first and last images then line up with the switch above. */
+  .pcard__champs-tiles .champ-tiles { justify-content: space-between; gap: 0; margin-inline: -8px; }
   .pcard__champs-tiles .champ-tile { width: 52px; }
   .pcard__identity, .stitch { margin-inline: 16px; }
   .plate { padding-inline: 16px; }
@@ -968,8 +1034,6 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .footer__nav { margin-block: 0; }
   .footer__nav a { min-height: 44px; display: inline-flex; align-items: center; }
   .gaspi__bar { padding: 36px 32px 0; }
-  .gaspi__back { height: 44px; }
-  .gaspi__esc { display: none; }
   .gaspi__frame { inset: 12px; border-radius: 16px; }
   .gaspi__dust i:nth-child(n+33) { display: none; }
   .gaspi__kicker { padding-left: .36em; font-size: 11px; letter-spacing: .36em; }
@@ -981,6 +1045,8 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 
 @media (max-width: 359px) {
   .brand__name { display: none; }
+  /* The compact summary's dúo line keeps to one row: the name stays, its game count goes. */
+  .pcard:is(.place-2, .place-3) .summary__duo small { display: none; }
 }
 
 @media (max-width: 479px) {

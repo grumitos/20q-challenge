@@ -1,6 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import type { CSSProperties } from "react";
-import { ArrowLeftIcon } from "./icons";
 
 /**
  * Los Juegos de Gaspi. The top-bar badge opens this title card, and opening it
@@ -72,7 +71,8 @@ export function GaspiDialog({ open, seen, onOpenChange }: {
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="gaspi-overlay" />
-        <Dialog.Content className={`gaspi${seen ? " is-seen" : ""}`} aria-describedby={undefined}>
+        {/* Nothing on the card is interactive, so a click or a tap anywhere is the way back. */}
+        <Dialog.Content className={`gaspi${seen ? " is-seen" : ""}`} aria-describedby={undefined} onClick={() => onOpenChange(false)}>
           <div className="gaspi__light" aria-hidden="true">
             <span className="gaspi__rays"><i /><i /><i /><i /><i /></span>
           </div>
@@ -80,12 +80,12 @@ export function GaspiDialog({ open, seen, onOpenChange }: {
             {PARTICLES.map(({ style, orb }, index) => <i key={index} className={orb ? "is-orb" : undefined} style={style} />)}
           </div>
           <div className="gaspi__frame" aria-hidden="true" />
+          {/* The way back is a notice, not a button: Esc on a keyboard, a tap on a
+              touch screen. Screen readers still get a named close button. */}
           <div className="gaspi__bar">
-            <Dialog.Close className="gaspi__back">
-              <ArrowLeftIcon size={16} />
-              Volver al ranking
-            </Dialog.Close>
+            <Dialog.Close className="sr-only">Volver al ranking</Dialog.Close>
             <span className="gaspi__esc" aria-hidden="true"><kbd>Esc</kbd> para volver</span>
+            <span className="gaspi__tap" aria-hidden="true">Toca para volver</span>
           </div>
           <div className="gaspi__stage">
             <span className="gaspi__kicker">20Q Challenge</span>

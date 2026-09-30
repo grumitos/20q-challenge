@@ -23,18 +23,6 @@ function StrokeIcon({ size = 16, children, ...props }: IconProps & { children: R
   );
 }
 
-export function TrophyIcon(props: IconProps) {
-  return (
-    <StrokeIcon {...props}>
-      <path d="M8 21h8" />
-      <path d="M12 17v4" />
-      <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
-      <path d="M17 5h2.5A1.5 1.5 0 0 1 21 6.5V7a3 3 0 0 1-3 3h-1" />
-      <path d="M7 5H4.5A1.5 1.5 0 0 0 3 6.5V7a3 3 0 0 0 3 3h1" />
-    </StrokeIcon>
-  );
-}
-
 export function ChevronDownIcon(props: IconProps) {
   return (
     <StrokeIcon {...props}>
@@ -78,11 +66,11 @@ export function InfoIcon(props: IconProps) {
   );
 }
 
-export function ArrowLeftIcon(props: IconProps) {
+export function ClockIcon(props: IconProps) {
   return (
     <StrokeIcon {...props}>
-      <path d="M19 12H5" />
-      <path d="m11 18-6-6 6-6" />
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
     </StrokeIcon>
   );
 }

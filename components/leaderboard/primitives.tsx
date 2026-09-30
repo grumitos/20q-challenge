@@ -32,7 +32,7 @@ import {
   type ChampionView,
   type MatchOutcome,
 } from "../../lib/ui-format";
-import { ChevronRightIcon, InfoIcon, MoonIcon, RoleIcon } from "./icons";
+import { ChevronRightIcon, ClockIcon, InfoIcon, MoonIcon, RoleIcon } from "./icons";
 
 export function Avatar({ player, version, size, className = "" }: {
   player: Pick<PlayerSnapshot, "gameName" | "profileIconId" | "riotIdFound">;
@@ -233,7 +233,8 @@ export function RoleList({ player }: { player: PlayerSnapshot }) {
           <RoleIcon role={entry.role} size={14} />
           <span className="role-list__name">{entry.label}</span>
           <span className="role-list__bar" aria-hidden="true"><i style={{ width: `${entry.bar}%` }} /></span>
-          <span className="mono role-list__value">{entry.games} · {entry.share}%</span>
+          {/* The games stand apart so a compact list can show just the share. */}
+          <span className="mono role-list__value"><span className="role-list__games">{entry.games} · </span>{entry.share}%</span>
         </li>
       ))}
     </ul>
@@ -324,7 +325,10 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
             <b className="mono" role="timer" aria-label={`En partida desde hace ${formatDuration(elapsed)}`}>{formatDuration(elapsed)}</b>
             {compact ? null : <span className="mline__age">desde {formatLimaTime(live.gameStartedAt)}</span>}
           </span>
-          <span className="mline__sub">{[live.championName, compact ? "" : company].filter(Boolean).join(" · ") || company}</span>
+          <span className="mline__stats">
+            <span className="mline__champ">{live.championName}</span>
+            {compact || !company ? null : <span className="mline__with">{company}</span>}
+          </span>
         </span>
       </div>
     );
@@ -341,9 +345,7 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
   const kda = `${match.kills}/${match.deaths}/${match.assists}`;
   const company = peerText(peerNames(match.participants, player.id, roster));
   const age = formatAge(match.gameStartTimestamp, now);
-  const detail = compact
-    ? `${kda} · ${age}`
-    : [match.championName, kda, formatDuration(match.durationSeconds), company].filter(Boolean).join(" · ");
+  const role = match.participants.find((participant) => participant.challengePlayerId === player.id)?.role;
 
   return (
     <a
@@ -363,7 +365,27 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
           {lp ? <span className={`mono lp-change is-${lpTone}`} title={lpEvidenceTitle(match.lpChangeEvidence, remake)}>{lp}</span> : null}
           {compact ? null : <span className="mline__age">{age}</span>}
         </span>
-        <span className="mline__sub">{detail}</span>
+        {/* The game's figures spread over the line, each its own item, rather
+            than one summary run together with dots. */}
+        {compact ? (
+          <span className="mline__stats">
+            <b className="mono mline__kda">{kda}</b>
+            <span className="mline__age">{age}</span>
+          </span>
+        ) : (
+          <span className="mline__stats">
+            <span className="mline__champ">
+              {role && role !== "UNKNOWN" ? <RoleIcon role={role} size={12} /> : null}
+              <span>{match.championName}</span>
+            </span>
+            <span className="mline__kda">
+              <b className="mono">{kda}</b>
+              <small className="mono">{kdaRatio(match.kills, match.deaths, match.assists)} KDA</small>
+            </span>
+            <span className="mline__time"><ClockIcon size={12} /><span className="mono">{formatDuration(match.durationSeconds)}</span></span>
+            {company ? <span className="mline__with">{company}</span> : null}
+          </span>
+        )}
       </span>
       {compact ? null : <ChevronRightIcon className="mline__chevron" size={14} />}
     </a>

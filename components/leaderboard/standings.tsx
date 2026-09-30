@@ -31,14 +31,12 @@ import {
   ChampionBars,
   ChampionTiles,
   FormPills,
-  InfoHint,
   MatchLine,
   PlayerSummary,
   RankEmblem,
   RespawnPill,
   RoleList,
   Segmented,
-  WINRATE_BAR_HINT,
   tierClass,
 } from "./primitives";
 
@@ -326,7 +324,6 @@ function RowDetail({ player, version, roster, now }: {
         <div key={order} className={chosen === null ? undefined : "swap-in"}>
           <ChampionBars champions={champions} version={version} label={`Campeones de ${player.gameName}`} />
         </div>
-        <div className="detail__hint"><InfoHint label={WINRATE_BAR_HINT}>Cómo leer las barras</InfoHint></div>
       </section>
 
       <section className="detail__block" aria-label={`Roles de ${player.gameName}`}>

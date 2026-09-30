@@ -46,7 +46,15 @@ test("moves cards and rows when the standings move", async () => {
 test("puts Los Juegos de Gaspi behind the top-bar badge, reveals it once and invades the palette", async () => {
   const { page, gaspi, topBar, css } = await sources();
   assert.match(topBar, /aria-label=\{`Abrir \$\{GASPI_TITLE\}`\}/);
+  // The door wears the tournament's own mark, the title's gilded Cinzel, the same on every screen.
+  assert.match(topBar, /<span className="gaspi-mark" aria-hidden="true">G<\/span>/);
+  assert.match(css, /\.gaspi-mark \{\s*font-family: var\(--font-display\);/);
   assert.match(gaspi, /export const GASPI_TITLE = "LOS JUEGOS DE GASPI"/);
+  // The way back is a notice (Esc, or a tap on touch screens) and a click anywhere; no visible back pill.
+  assert.doesNotMatch(gaspi + css, /gaspi__back/);
+  assert.match(gaspi, /onClick=\{\(\) => onOpenChange\(false\)\}/);
+  assert.match(gaspi, /<Dialog\.Close className="sr-only">Volver al ranking<\/Dialog\.Close>/);
+  assert.match(gaspi, /Toca para volver/);
   assert.match(gaspi, /<Dialog\.Root open=\{open\} onOpenChange=\{onOpenChange\}>/);
   assert.match(gaspi, /seen \? undefined : \{ animationDelay:/);
   assert.match(page, /setGaspiSeen\(gaspiRevealSpent\.current\);\s*gaspiRevealSpent\.current = true;/);
@@ -247,7 +255,9 @@ test("lays the board out for wide desktops, half screens and phones", async () =
   for (const breakpoint of [1359, 1199, 959, 719]) {
     assert.match(css, new RegExp(`@media \\(max-width: ${breakpoint}px\\)`));
   }
-  assert.match(css, /@container pcard \(min-width: 820px\)/);
+  // Spanning the two-column podium, the leader keeps its banner over two body columns of the same width.
+  assert.match(css, /@container pcard \(min-width: 640px\) \{\s*\.pcard\.place-1 \.pcard__body \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(css, /\.pcard\.place-1 \.pcard__art \{ grid-column: 1 \/ -1; \}/);
   // The plate is two equal halves, the rank and the 2×2 figures, with a stitch between them and no box
   // around either; only a plate too narrow for both side by side stacks them.
   assert.match(css, /\.plate__grid \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
@@ -255,6 +265,71 @@ test("lays the board out for wide desktops, half screens and phones", async () =
   assert.doesNotMatch(css, /\.plate(__stats)? \{[^}]*\bborder\b/);
   assert.match(css, /@container plate \(max-width: 269px\) \{\s*\.plate__grid \{ grid-template-columns: 1fr;/);
   assert.match(css, /\.srow__stats \{ display: contents; \}/);
+});
+
+test("covers the whole podium card with the dot grid and dims it only right behind text", async () => {
+  const { podium, css } = await sources();
+  // The last match sits between two stitches, under the plate and above the panel.
+  assert.match(podium, /<MatchLine player=\{player\} roster=\{roster\} version=\{version\} now=\{now\} \/>\}\s*<Stitch \/>\s*<\/div>\s*<div className="pcard__side">\s*<PodiumPanel /);
+  const block = (selector) => css.match(new RegExp(`\\n${selector} \\{[^}]*\\}`))?.[0] ?? "";
+  assert.match(block("\\.pcard"), /background-image: radial-gradient\(circle, var\(--card-dot, [^;]+\) 1px, transparent 1\.4px\);\s*background-size: 9px 9px;/);
+  assert.doesNotMatch(block("\\.pcard__side"), /background/);
+  assert.doesNotMatch(block("\\.plate"), /background/);
+  // A halo of the surface under every glyph dims the dots behind letters and numbers, with no box.
+  assert.match(css, /\.pcard, \.detail \{ text-shadow: 0 0 4px var\(--halo\), 0 0 1\.5px var\(--halo\); \}/);
+});
+
+test("spreads the last match's figures across the line instead of a dotted summary", async () => {
+  const { primitives, css } = await sources();
+  assert.doesNotMatch(primitives, /\.join\(" · "\)/);
+  assert.match(primitives, /<span className="mline__stats">/);
+  assert.match(primitives, /\{kdaRatio\(match\.kills, match\.deaths, match\.assists\)\} KDA/);
+  assert.match(css, /\.mline__stats \{ display: flex; align-items: baseline; justify-content: space-between;/);
+  assert.match(css, /@container mline \(max-width: 290px\) \{ \.mline__kda small \{ display: none; \} \}/);
+});
+
+test("lights the podium art from one pair of states on every screen, with matching filter lists", async () => {
+  const { css } = await sources();
+  // Every state spells the same four functions in the same sequence, or the change snaps instead of fading.
+  const fourFunctions = String.raw`grayscale\([^)]*\) sepia\([^)]*\) saturate\([^)]*\) brightness\([^)]*\)`;
+  assert.match(css, new RegExp(`--splash-rest: ${fourFunctions};`));
+  assert.match(css, new RegExp(`--splash-lit: ${fourFunctions};`));
+  assert.match(css, new RegExp(`html\\.is-invaded \\.pcard__splash \\{ --splash-rest: ${fourFunctions}; \\}`));
+  // Hover on desktop and the featured card on a touch screen share the lit state; nothing restates it.
+  assert.match(css, /\.pcard:hover \.pcard__splash \{ transform: scale\(1\.04\); filter: var\(--splash-lit\); \}/);
+  assert.match(css, /\.pcard\.is-featured \.pcard__splash \{ transform: scale\(1\.04\); filter: var\(--splash-lit\); \}/);
+  assert.doesNotMatch(css, /\.pcard__splash \{[^}]*filter: grayscale/);
+});
+
+test("gives the page a sober backdrop: a hairline grid that fades out below the top", async () => {
+  const { css } = await sources();
+  const backdrop = css.match(/\nbody::before \{[^}]*\}/)?.[0] ?? "";
+  assert.match(backdrop, /linear-gradient\(to right, rgb\(255 255 255 \/ 3\.5%\) 1px, transparent 1px\) 50% 0 \/ 56px 56px/);
+  assert.match(backdrop, /mask-image: radial-gradient\(/);
+  assert.match(backdrop, /z-index: -1;/);
+  assert.match(css, /\nbody \{[^}]*isolation: isolate;/);
+  assert.doesNotMatch(css, /feTurbulence/);
+});
+
+test("keeps the second and third podium cards compact and one height in every view on phones", async () => {
+  const { css } = await sources();
+  const phones = css.slice(css.indexOf("@media (max-width: 719px)"));
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) \.pcard__panel \{ min-height: 78px; \}/);
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) \.role-list \{ flex-direction: row;/);
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) :is\(\.role-list__bar, \.role-list__games\) \{ display: none; \}/);
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) \.summary > div \{ display: flex;/);
+});
+
+test("lines the podium's switch up with what sits above and below it", async () => {
+  const { css } = await sources();
+  // The switch spans the panel like the stitches; on phones the hint (a hover tooltip) gives way to it.
+  assert.match(css, /\.pcard__champs \.segmented \{ flex: 1; min-width: 0; \}/);
+  assert.match(css, /\.pcard__champs \.segmented button \{ flex: 1 1 auto; \}/);
+  const phones = css.slice(css.indexOf("@media (max-width: 719px)"));
+  assert.match(phones, /\.pcard__champs \.info-hint \{ display: none; \}/);
+  // 52px tiles centre a 36px image, so their rows reach 8px past each edge to put the outer images on it.
+  assert.match(phones, /\.pcard__champs-tiles \.champ-tiles \{ justify-content: space-between; gap: 0; margin-inline: -8px; \}/);
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) \.role-list \{[^}]*margin-inline: -8px; \}/);
 });
 
 test("respects reduced motion and keeps focus visible", async () => {
