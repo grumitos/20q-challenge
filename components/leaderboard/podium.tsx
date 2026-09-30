@@ -5,41 +5,25 @@ import { EASE, ENTRANCE } from "../../lib/motion";
 import {
   ROLE_LABELS,
   bestChampionViews,
+  byWinRate,
   championSplashUrl,
-  mostPlayedChampionViews,
   profileUrl,
   rankLabel,
-  type ChampionView,
 } from "../../lib/ui-format";
 import { RoleIcon } from "./icons";
+import { PlayerPanel } from "./player-panel";
 import {
   Avatar,
-  ChampionBars,
-  ChampionTiles,
   FormPills,
-  InfoHint,
   MatchLine,
   PlaceChip,
-  PlayerSummary,
   RankEmblem,
   RespawnClock,
-  RoleList,
-  Segmented,
   Stitch,
-  WINRATE_BAR_HINT,
   tierClass,
 } from "./primitives";
 
 export const PODIUM_CHAMPION_SLOTS = 5;
-
-/** What a podium card's lower panel can show: the same facts a row keeps in its detail. */
-const PANEL_VIEWS = [
-  ["best", "Mejores"],
-  ["most", "Más jugados"],
-  ["roles", "Roles"],
-  ["summary", "Resumen"],
-] as const;
-type PanelView = (typeof PANEL_VIEWS)[number][0];
 
 /** How much more of itself another card needs on screen to take the featured colour. */
 const FEATURE_SWITCH_MARGIN = 1.15;
@@ -146,10 +130,14 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
   /** The card being looked at on a touch screen; see `useFeaturedCard`. */
   featured: boolean;
 }) {
-  // The art follows the best champion whichever view the panel shows, so
-  // switching views never repaints the cover.
-  const best = player.riotIdFound ? bestChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS) : [];
-  const splash = best[0];
+  // The art follows the most trusted of the best champions (the Wilson pick,
+  // not the list's first line) whichever view the panel shows, so switching
+  // views never repaints the cover and one lucky game never takes it.
+  const picks = player.riotIdFound
+    ? bestChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS, player.recentChampions)
+    : [];
+  const splash = picks[0];
+  const best = byWinRate(picks);
   const role = player.riotIdFound ? player.analytics.mainRole : "UNKNOWN";
   const dead = respawnSeconds !== null;
   const games = player.wins + player.losses;
@@ -176,22 +164,24 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
 
       <div className="pcard__main">
         <div className="pcard__identity">
-          <Avatar player={player} version={version} size={52} className="pcard__avatar" />
-          <a className="pcard__who" href={profileUrl(player)} target="_blank" rel="noreferrer" aria-label={`Ver perfil de ${player.gameName} en League of Graphs`}>
+          {/* The photo, the name and the tag are one link to the profile: the
+              photo takes a frame on hover, so it is clear what the click opens. */}
+          <a className="pcard__profile" href={profileUrl(player)} target="_blank" rel="noreferrer" aria-label={`Ver perfil de ${player.gameName} en League of Graphs`}>
+            <Avatar player={player} version={version} size={52} className="pcard__avatar" />
             <span className="pcard__name" translate="no">
               <strong>{player.gameName}</strong>
               <small className="mono">#{player.tagLine}</small>
             </span>
-            {/* The role's icon and share sit at the row's far end; its name is
-                the tooltip. The games played are the record's V + D below. */}
-            <span
-              className="pcard__role"
-              title={player.riotIdFound ? `${ROLE_LABELS[role]} · ${player.analytics.roleShare}% de sus partidas` : ROLE_LABELS.UNKNOWN}
-            >
-              <RoleIcon role={role} />
-              <span className="mono">{player.riotIdFound ? `${player.analytics.roleShare}%` : "—"}</span>
-            </span>
           </a>
+          {/* The role's icon and share sit at the row's far end; its name is
+              the tooltip. The games played are the record's V + D below. */}
+          <span
+            className="pcard__role"
+            title={player.riotIdFound ? `${ROLE_LABELS[role]} · ${player.analytics.roleShare}% de sus partidas` : ROLE_LABELS.UNKNOWN}
+          >
+            <RoleIcon role={role} />
+            <span className="mono">{player.riotIdFound ? `${player.analytics.roleShare}%` : "—"}</span>
+          </span>
         </div>
 
         <div className="plate">
@@ -236,68 +226,12 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
       </div>
 
       <div className="pcard__side">
-        <PodiumPanel player={player} roster={roster} version={version} best={best} still={dead} />
+        <div className="pcard__champs">
+          <PlayerPanel player={player} roster={roster} version={version} best={best} slots={PODIUM_CHAMPION_SLOTS} still={dead} tiles />
+        </div>
       </div>
       </div>
     </m.article>
-  );
-}
-
-/**
- * The card's lower panel. It keeps the view to itself, so a switch re-renders
- * the panel and never the card: the card's layout animation is for the podium
- * moving, and on a phone, where the views are not all the same height, it
- * would stretch the whole card into its new size.
- */
-function PodiumPanel({ player, roster, version, best, still }: {
-  player: PlayerSnapshot;
-  roster: readonly PlayerSnapshot[];
-  version: string;
-  best: readonly ChampionView[];
-  /** On curfew the panel keeps its first view and loses the switch. */
-  still: boolean;
-}) {
-  // Null until the reader picks a view: only their switches bring a view in
-  // with motion, and the first paint keeps just the card's own entrance.
-  const [chosen, setChosen] = useState<PanelView | null>(null);
-  const view = still ? "best" : chosen ?? "best";
-  const champions = view === "most" && player.riotIdFound
-    ? mostPlayedChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS)
-    : best;
-  const showingChampions = view === "best" || view === "most";
-
-  return (
-    <div className="pcard__champs">
-      {still ? null : (
-        <div className="section-label">
-          <Segmented options={PANEL_VIEWS} value={view} onChange={setChosen} label={`Qué mostrar de ${player.gameName}`} />
-          {showingChampions ? <InfoHint label={WINRATE_BAR_HINT} /> : null}
-        </div>
-      )}
-      {/* The views swap in place at one height, so switching never moves the podium. */}
-      <div className="pcard__panel">
-        <div key={view} className={chosen === null ? undefined : "swap-in"}>
-          {showingChampions ? (
-            <>
-              <div className="pcard__champs-bars">
-                <ChampionBars
-                  champions={champions}
-                  version={version}
-                  label={`${view === "best" ? "Mejores campeones" : "Campeones más jugados"} de ${player.gameName}`}
-                />
-              </div>
-              <div className="pcard__champs-tiles">
-                <ChampionTiles champions={champions} version={version} showGames size={36} />
-              </div>
-            </>
-          ) : view === "roles" ? (
-            <RoleList player={player} />
-          ) : (
-            <PlayerSummary player={player} roster={roster} version={version} />
-          )}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -309,10 +243,12 @@ function PodiumSkeleton({ place }: { place: number }) {
       <div className="pcard__art"><PlaceChip place={place} /></div>
       <div className="pcard__main">
         <div className="pcard__identity">
-          <span className="avatar pcard__avatar sk" style={{ width: 52, height: 52 }} />
-          <span className="pcard__who">
-            <span className="sk sk-line" style={{ width: 120, height: 14 }} />
-            <span className="sk sk-line" style={{ width: 36, height: 12 }} />
+          <span className="pcard__profile">
+            <span className="avatar pcard__avatar sk" style={{ width: 52, height: 52 }} />
+            <span className="pcard__name">
+              <span className="sk sk-line" style={{ width: 120, height: 14 }} />
+              <span className="sk sk-line" style={{ width: 36, height: 12 }} />
+            </span>
           </span>
         </div>
         <div className="plate">

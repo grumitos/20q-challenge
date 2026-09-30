@@ -283,12 +283,14 @@ export default function Home() {
               </>
             )}
           </main>
+          {/* One row under the last section, on the page's own rhythm: the
+              disclaimer on the left, the legal links on the right. */}
           <footer className="footer shell">
+            <p lang="en">20Q Challenge is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
             <nav className="footer__nav" aria-label="Documentos legales">
               <a href="/privacy">Privacidad</a>
               <a href="/terms">Términos</a>
             </nav>
-            <p lang="en">20Q Challenge is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
           </footer>
           <GaspiDialog open={gaspiOpen} seen={gaspiSeen} onOpenChange={setGaspiOpen} />
         </Tooltip.Provider>
