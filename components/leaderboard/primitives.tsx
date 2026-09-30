@@ -1,5 +1,6 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
-import type { ReactNode } from "react";
+import { m } from "motion/react";
+import { useId, type ReactNode } from "react";
 import {
   formatRespawnClock,
   isRemakeMatch,
@@ -7,6 +8,7 @@ import {
   type PlayerSnapshot,
   type RankTier,
 } from "../../lib/leaderboard";
+import { DURATION, EASE } from "../../lib/motion";
 import {
   championIconUrl,
   firstName,
@@ -96,6 +98,51 @@ export function PlaceChip({ place }: { place: number }) {
   return (
     <span className={`place-chip place-chip--${place}`} aria-label={`Puesto ${place}`}>
       <b className="mono" aria-hidden="true">{place}</b>
+    </span>
+  );
+}
+
+/**
+ * A few options, one chosen: the podium panel's views and the row detail's
+ * champion lists. The highlight is one thumb that slides to the chosen option
+ * (a shared layout animation keyed to this switch) while the labels fade their
+ * colour. Choosing the option already chosen does nothing, so the view it
+ * shows never replays its entrance.
+ */
+export function Segmented<T extends string>({ options, value, onChange, label }: {
+  options: readonly (readonly [T, string])[];
+  value: T;
+  onChange: (value: T) => void;
+  label: string;
+}) {
+  const thumbId = useId();
+  return (
+    <span className="segmented" role="group" aria-label={label}>
+      {options.map(([key, text]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={value === key}
+          onClick={() => {
+            if (key !== value) onChange(key);
+          }}
+        >
+          {value === key ? (
+            // Measured only when the choice changes, or the clock's re-renders
+            // would finish a slide early. The radius rides in `style` so the
+            // slide's scale does not squash it.
+            <m.span
+              layoutId={thumbId}
+              layoutDependency={value}
+              className="segmented__thumb"
+              style={{ borderRadius: 6 }}
+              transition={{ duration: DURATION.switch, ease: EASE }}
+              aria-hidden="true"
+            />
+          ) : null}
+          <span className="segmented__label">{text}</span>
+        </button>
+      ))}
     </span>
   );
 }
