@@ -10,13 +10,19 @@ import {
 } from "../lib/habitual-duos";
 import { rankDuoRecords, type DuoRecord, type HabitualDuo, type LiveGame, type PlayerSnapshot } from "../lib/leaderboard";
 import { calculatePlaceDeltas } from "../lib/place-movement";
+import {
+  RECENT_CHAMPION_LOOKBACK_MS,
+  RECENT_CHAMPION_QUERY,
+  foldRecentChampions,
+  type RecentChampionRow,
+} from "../lib/recent-champions";
 import type { TrackerD1 } from "./lp-tracker-store";
 
 /**
  * Resolves the signals the leaderboard payload already had the raw material for
  * but never exposed: recent form, the habitual challenge duo, place movement
- * since the previous ranking, any live SoloQ game, and the board-wide ranking
- * of which pairs actually win together.
+ * since the previous ranking, any live SoloQ game, each champion's last month,
+ * and the board-wide ranking of which pairs actually win together.
  *
  * Every query is best-effort — a missing migration or a slow read degrades the
  * card to its static state instead of failing the whole request.
@@ -87,6 +93,14 @@ async function readRecentResults(d1: TrackerD1, playerIds: readonly string[], no
   // Collected newest-first above; the UI reads left-to-right as oldest-to-newest.
   for (const [playerId, results] of byPlayer) byPlayer.set(playerId, results.reverse());
   return byPlayer;
+}
+
+/** Each player's champions over the last month (see `RECENT_CHAMPION_QUERY`). */
+async function readRecentChampions(d1: TrackerD1, playerIds: readonly string[], now: number) {
+  const rows = await d1.prepare(RECENT_CHAMPION_QUERY)
+    .bind(JSON.stringify(playerIds), now - RECENT_CHAMPION_LOOKBACK_MS)
+    .all<RecentChampionRow>();
+  return foldRecentChampions(rows.results ?? []);
 }
 
 /** Most frequent challenge-member pairing per player. */
@@ -210,12 +224,15 @@ export async function enrichPlayers(
   }
 
   const playerIds = players.map((player) => player.id);
-  const [recentResults, habitualDuos, placeDeltas, liveGames, duos] = await Promise.all([
+  const [recentResults, habitualDuos, placeDeltas, liveGames, duos, recentChampions] = await Promise.all([
     readRecentResults(d1, playerIds, now).catch(() => new Map<string, boolean[]>()),
     readHabitualDuos(d1, players).catch(() => new Map<string, HabitualDuo>()),
     readPlaceDeltas(d1, players, rankScoreOf, now).catch(() => new Map<string, number>()),
     readLiveGames(d1, playerIds, now).catch(() => new Map<string, LiveGame>()),
     readDuoRecords(d1, playerIds).catch(() => [] as DuoRecord[]),
+    // A failed read leaves the field out rather than empty: empty would say
+    // nobody played anything this month, and every bar would go grey.
+    readRecentChampions(d1, playerIds, now).catch(() => null),
   ]);
 
   return {
@@ -225,6 +242,7 @@ export async function enrichPlayers(
       habitualDuo: habitualDuos.get(player.id) ?? null,
       placeDelta: placeDeltas.get(player.id) ?? 0,
       liveGame: liveGames.get(player.id) ?? null,
+      ...(recentChampions ? { recentChampions: recentChampions.get(player.id) ?? {} } : {}),
     })),
     duos,
   };

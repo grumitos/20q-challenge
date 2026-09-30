@@ -7,6 +7,7 @@ import { DUO_RECORD_QUERY, HABITUAL_DUO_QUERY, foldDuoRecords, pickHabitualDuos 
 
 import { calculatePlaceDeltas } from "../lib/place-movement.ts";
 import { rankDuoRecords, rankScore } from "../lib/leaderboard.ts";
+import { RECENT_CHAMPION_LOOKBACK_MS, RECENT_CHAMPION_QUERY, foldRecentChampions } from "../lib/recent-champions.ts";
 
 const players = [
   { id: "inti", gameName: "INTI VIRAC0NCHA" },
@@ -158,6 +159,32 @@ test("leaves a live tracker session out of a duo's record", async () => {
   assert.deepEqual(db.prepare(DUO_RECORD_QUERY).all(ids, 400, ids), []);
 });
 
+test("reads each champion's last month from the indexed games, one row per champion", async () => {
+  // The podium's bars draw this over the season: it must count only the window,
+  // count wins as wins, and come back as one small row per player and champion.
+  const db = await migratedDatabase();
+  const ids = JSON.stringify(players.map((player) => player.id));
+  const day = 24 * 60 * 60 * 1_000;
+  const now = 100 * day;
+  const insert = (playerId, matchId, at, champion, won) => db.exec(
+    `INSERT INTO player_match_stats (player_id, match_id, game_start_timestamp, champion_id, champion_name, kills, deaths, assists, won, role)
+     VALUES ('${playerId}', '${matchId}', ${at}, '${champion}', '${champion}', 1, 2, 3, ${won ? 1 : 0}, 'MIDDLE')`,
+  );
+  // Two Ahri games and a Lux game inside the month, and an Ahri game before it.
+  insert("inti", "LA2_1", now - 2 * day, "Ahri", true);
+  insert("inti", "LA2_2", now - 3 * day, "Ahri", false);
+  insert("inti", "LA2_3", now - 4 * day, "Lux", true);
+  insert("inti", "LA2_OLD", now - RECENT_CHAMPION_LOOKBACK_MS - 1, "Ahri", true);
+  insert("miqi", "LA2_4", now - day, "MonkeyKing", false);
+
+  const rows = db.prepare(RECENT_CHAMPION_QUERY).all(ids, now - RECENT_CHAMPION_LOOKBACK_MS);
+  const recent = foldRecentChampions(rows);
+
+  assert.equal(rows.length, 3, "one row per player and champion");
+  assert.deepEqual(recent.get("inti"), { Ahri: { games: 2, wins: 1 }, Lux: { games: 1, wins: 1 } });
+  assert.deepEqual(recent.get("miqi"), { MonkeyKing: { games: 1, wins: 0 } });
+});
+
 test("calculates movement from the ranked current order", () => {
   const previous = [
     { player_id: "falling", tier: "GOLD", division: "II", league_points: 90 },
@@ -201,11 +228,18 @@ test("bounds every enrichment query so a reader's cost cannot grow with history"
   };
   const duoSql = constant("HABITUAL_DUO_QUERY");
   const duoRecordSql = constant("DUO_RECORD_QUERY");
-  const queries = [...inline, duoSql, duoRecordSql];
-  assert.equal(queries.length, 5, "expected five enrichment queries");
+  // The recent-champion statement lives in lib/recent-champions.ts for the same reason.
+  const recent = (await readFile(new URL("../lib/recent-champions.ts", import.meta.url), "utf8"))
+    .replace(/\r\n/g, "\n");
+  const recentStart = recent.indexOf("`SELECT", recent.indexOf("export const RECENT_CHAMPION_QUERY ="));
+  const recentSql = recent.slice(recentStart, recent.indexOf("`;", recentStart));
+  assert.match(source, /d1\.prepare\(RECENT_CHAMPION_QUERY\)/);
+  const queries = [...inline, duoSql, duoRecordSql, recentSql];
+  assert.equal(queries.length, 6, "expected six enrichment queries");
 
   for (const query of queries) {
-    const bounded = /\bLIMIT\b/.test(query) || /ROW_NUMBER\(\)/.test(query) || /_at > \?/.test(query);
+    const bounded = /\bLIMIT\b/.test(query) || /ROW_NUMBER\(\)/.test(query) || /_at > \?/.test(query) ||
+      /game_start_timestamp > \?/.test(query);
     assert.ok(bounded, `an enrichment query has no bound on how much it reads:\n${query.slice(0, 160)}`);
   }
 
