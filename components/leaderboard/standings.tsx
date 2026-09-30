@@ -11,20 +11,16 @@ import {
   ROLE_LABELS,
   bestChampionViews,
   championIconUrl,
-  firstName,
   formatAge,
   formatDuration,
   formatLpChange,
-  gapText,
   kdaRatio,
   lpEvidenceTitle,
   matchDetailsUrl,
   mostPlayedChampionViews,
   outcomeLabel,
-  perGameAverages,
   profileUrl,
   rankLabel,
-  roleShares,
 } from "../../lib/ui-format";
 import { ChevronDownIcon, ExternalIcon, MoonIcon, RoleIcon } from "./icons";
 import {
@@ -34,13 +30,15 @@ import {
   FormPills,
   InfoHint,
   MatchLine,
+  PlayerSummary,
   RankEmblem,
   RespawnPill,
+  RoleList,
   WINRATE_BAR_HINT,
   tierClass,
 } from "./primitives";
 
-export const ROW_CHAMPION_SLOTS = 3;
+export const ROW_CHAMPION_SLOTS = 4;
 const DETAIL_CHAMPION_SLOTS = 5;
 
 type StandingsProps = {
@@ -79,8 +77,6 @@ export function Standings({ standings, version, now, respawnFor, pending }: Stan
                   key={player.id}
                   player={player}
                   place={index + 4}
-                  gap={gapText(standings, index + 3)}
-                  shortGap={gapText(standings, index + 3, true)}
                   version={version}
                   roster={standings}
                   now={now}
@@ -101,11 +97,9 @@ function PlaceDelta({ delta = 0 }: { delta?: number }) {
   return <small className="delta mono" aria-label="Sin cambio de puesto">—</small>;
 }
 
-function StandingRow({ player, place, gap, shortGap, version, roster, now, respawnSeconds, open, onToggle }: {
+function StandingRow({ player, place, version, roster, now, respawnSeconds, open, onToggle }: {
   player: PlayerSnapshot;
   place: number;
-  gap: string;
-  shortGap: string;
   version: string;
   roster: readonly PlayerSnapshot[];
   now: number;
@@ -158,12 +152,7 @@ function StandingRow({ player, place, gap, shortGap, version, roster, now, respa
                 <span>Reaparece en</span>
                 <b className="mono">{formatRespawnClock(respawnSeconds)}</b>
               </small>
-            ) : (
-              <small className="srow__gapline">
-                <span className="gap-long">{gap}</span>
-                <span className="gap-short" aria-hidden="true">{shortGap}</span>
-              </small>
-            )}
+            ) : null}
           </span>
           <RoleIcon role={role} size={12} className="srow__role-mark" />
         </a>
@@ -175,7 +164,6 @@ function StandingRow({ player, place, gap, shortGap, version, roster, now, respa
               <b className={tierClass(player.tier)}>{rankLabel(player)}</b>
               <span className="mono">{player.leaguePoints} PL</span>
             </span>
-            <small className="srow__gap">{gap}</small>
           </span>
         </span>
 
@@ -283,11 +271,7 @@ function RowDetail({ player, version, roster, now }: {
   const champions = order === "best"
     ? bestChampionViews(counts, DETAIL_CHAMPION_SLOTS)
     : mostPlayedChampionViews(counts, DETAIL_CHAMPION_SLOTS);
-  const roles = roleShares(player.analytics.roleCounts).slice(0, 5);
   const match = player.lastSoloQueueMatch;
-  const averages = perGameAverages(player.analytics);
-  const duo = player.habitualDuo;
-  const duoPlayer = duo ? roster.find((candidate) => candidate.id === duo.playerId) : undefined;
 
   let matchBlock = <p className="empty-note">Sin partidas SoloQ recientes</p>;
   if (match) {
@@ -336,18 +320,7 @@ function RowDetail({ player, version, roster, now }: {
 
       <section className="detail__block" aria-label={`Roles de ${player.gameName}`}>
         <div className="section-label"><span>Roles</span></div>
-        {roles.length > 0 ? (
-          <ul className="role-list">
-            {roles.map((entry) => (
-              <li key={entry.role}>
-                <RoleIcon role={entry.role} size={14} />
-                <span className="role-list__name">{entry.label}</span>
-                <span className="role-list__bar" aria-hidden="true"><i style={{ width: `${entry.bar}%` }} /></span>
-                <span className="mono role-list__value">{entry.games} · {entry.share}%</span>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="empty-note">Sin partidas analizadas</p>}
+        <RoleList player={player} />
       </section>
 
       <section className="detail__block" aria-label={`Última partida de ${player.gameName}`}>
@@ -364,28 +337,7 @@ function RowDetail({ player, version, roster, now }: {
 
       <section className="detail__block" aria-label={`Resumen de ${player.gameName}`}>
         <div className="section-label"><span>Resumen</span></div>
-        <dl className="summary">
-          <div>
-            <dt>Promedio por partida</dt>
-            <dd className="mono">{averages ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>Dúo habitual</dt>
-            <dd className="summary__duo">
-              {duo ? (
-                <>
-                  {duoPlayer ? <Avatar player={duoPlayer} version={version} size={22} /> : null}
-                  <b translate="no">{firstName(duoPlayer?.gameName ?? duo.gameName)}</b>
-                  <small className="mono">{duo.games} partidas</small>
-                </>
-              ) : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt>Partidas analizadas</dt>
-            <dd className="mono">{player.analytics.games}</dd>
-          </div>
-        </dl>
+        <PlayerSummary player={player} roster={roster} version={version} />
       </section>
     </div>
   );

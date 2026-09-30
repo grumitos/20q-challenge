@@ -96,13 +96,23 @@ test("reads the VPS API from production and its previews, and its own route anyw
   assert.match(page, /return "\/api\/leaderboard";/);
 });
 
-test("distinguishes loading, stale data and a first-load network error", async () => {
+test("distinguishes loading from a first-load network error, and keeps the top bar free of manual refresh", async () => {
   const { page, topBar, css } = await sources();
-  assert.match(page, /const STALE_AFTER_MS = 5 \* 60_000;/);
   assert.match(page, /aria-busy=\{pending && !unreachable\}/);
   assert.match(page, /role="alert"/);
-  assert.match(topBar, /stale \? "Sin actualizar desde" : "Actualizado"/);
-  assert.match(css, /\.topbar__status\.is-stale \.status-dot/);
+  // The board refreshes itself; the top bar only says something while a game is live.
+  assert.doesNotMatch(topBar, /Actualizar|Actualizado|RefreshIcon|onRefresh/);
+  assert.doesNotMatch(css, /\.topbar__status|\.status-dot|\.icon-button/);
+  assert.match(topBar, /liveCount > 0 \?/);
+});
+
+test("keeps the section links as plain scroll shortcuts that do not follow or force the scroll", async () => {
+  const { page, topBar } = await sources();
+  // They move the scroll and nothing else: no hash in the URL, no "current" state, no scroll listeners.
+  assert.match(topBar, /event\.preventDefault\(\);\s*target\.scrollIntoView\(\{ block: "start" \}\);/);
+  assert.doesNotMatch(topBar, /addEventListener|is-current|aria-current|useState|useEffect/);
+  // A hash left by an older visit is dropped once, when the page loads.
+  assert.match(page, /window\.history\.replaceState\(null, "", `\$\{pathname\}\$\{search\}`\)/);
 });
 
 test("draws champions as rows whose solid bar is the adjusted winrate and whose tail is the observed one", async () => {
@@ -140,6 +150,16 @@ test("opens a row's detail from its button, with the row itself as a pointer sho
   assert.match(standings, /is-peer/);
 });
 
+test("lets a podium card show a row detail's roles and summary in place, at one height", async () => {
+  const { podium, standings, css } = await sources();
+  assert.match(podium, /\["best", "Mejores"\],\s*\["most", "Más jugados"\],\s*\["roles", "Roles"\],\s*\["summary", "Resumen"\],/);
+  for (const source of [podium, standings]) {
+    assert.match(source, /<RoleList player=\{player\} \/>/);
+    assert.match(source, /<PlayerSummary player=\{player\} roster=\{roster\} version=\{version\} \/>/);
+  }
+  assert.match(css, /\.pcard__panel \{ margin-top: 12px; min-height: 164px; \}/);
+});
+
 test("gives the podium and the table their own headings and keeps the duos title visible", async () => {
   const { page, podium, standings, duos } = await sources();
   assert.match(page, /<h1 className="sr-only">20Q Challenge · Clasificación<\/h1>/);
@@ -164,7 +184,12 @@ test("lays the board out for wide desktops, half screens and phones", async () =
     assert.match(css, new RegExp(`@media \\(max-width: ${breakpoint}px\\)`));
   }
   assert.match(css, /@container pcard \(min-width: 820px\)/);
-  assert.match(css, /@container pmain \(max-width: 359px\)/);
+  // The plate is two equal halves, the rank and the 2×2 figures, with a stitch between them and no box
+  // around either; only a plate too narrow for both side by side stacks them.
+  assert.match(css, /\.plate__grid \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(css, /\.plate__stats::before \{/);
+  assert.doesNotMatch(css, /\.plate(__stats)? \{[^}]*\bborder\b/);
+  assert.match(css, /@container plate \(max-width: 269px\) \{\s*\.plate__grid \{ grid-template-columns: 1fr;/);
   assert.match(css, /\.srow__stats \{ display: contents; \}/);
 });
 

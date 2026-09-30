@@ -5,7 +5,7 @@ import {
   ROLE_LABELS,
   bestChampionViews,
   championSplashUrl,
-  gapText,
+  mostPlayedChampionViews,
   profileUrl,
   rankLabel,
 } from "../../lib/ui-format";
@@ -18,14 +18,25 @@ import {
   InfoHint,
   MatchLine,
   PlaceChip,
+  PlayerSummary,
   RankEmblem,
   RespawnPill,
+  RoleList,
   Stitch,
   WINRATE_BAR_HINT,
   tierClass,
 } from "./primitives";
 
 export const PODIUM_CHAMPION_SLOTS = 5;
+
+/** What a podium card's lower panel can show: the same facts a row keeps in its detail. */
+const PANEL_VIEWS = [
+  ["best", "Mejores"],
+  ["most", "Más jugados"],
+  ["roles", "Roles"],
+  ["summary", "Resumen"],
+] as const;
+type PanelView = (typeof PANEL_VIEWS)[number][0];
 
 /** How much more of itself another card needs on screen to take the featured colour. */
 const FEATURE_SWITCH_MARGIN = 1.15;
@@ -110,8 +121,6 @@ export function Podium({ standings, version, now, respawnFor, pending }: PodiumP
                 key={player.id}
                 player={player}
                 place={index + 1}
-                gap={gapText(standings, index)}
-                shortGap={gapText(standings, index, true)}
                 version={version}
                 roster={standings}
                 now={now}
@@ -124,11 +133,9 @@ export function Podium({ standings, version, now, respawnFor, pending }: PodiumP
   );
 }
 
-function PodiumCard({ player, place, gap, shortGap, version, roster, now, respawnSeconds, featured }: {
+function PodiumCard({ player, place, version, roster, now, respawnSeconds, featured }: {
   player: PlayerSnapshot;
   place: number;
-  gap: string;
-  shortGap: string;
   version: string;
   roster: readonly PlayerSnapshot[];
   now: number;
@@ -136,8 +143,14 @@ function PodiumCard({ player, place, gap, shortGap, version, roster, now, respaw
   /** The card being looked at on a touch screen; see `useFeaturedCard`. */
   featured: boolean;
 }) {
-  const champions = player.riotIdFound ? bestChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS) : [];
-  const splash = champions[0];
+  const [view, setView] = useState<PanelView>("best");
+  const counts = player.analytics.championCounts;
+  // The art follows the best champion whichever view is showing, so switching
+  // views never repaints the cover.
+  const best = player.riotIdFound ? bestChampionViews(counts, PODIUM_CHAMPION_SLOTS) : [];
+  const champions = !player.riotIdFound ? [] : view === "most" ? mostPlayedChampionViews(counts, PODIUM_CHAMPION_SLOTS) : best;
+  const showingChampions = view === "best" || view === "most";
+  const splash = best[0];
   const role = player.riotIdFound ? player.analytics.mainRole : "UNKNOWN";
   const dead = respawnSeconds !== null;
   const games = player.wins + player.losses;
@@ -168,53 +181,52 @@ function PodiumCard({ player, place, gap, shortGap, version, roster, now, respaw
               <strong>{player.gameName}</strong>
               <small className="mono">#{player.tagLine}</small>
             </span>
-            <span className="pcard__role">
+            {/* The role's icon and share sit at the row's far end; its name is
+                the tooltip. The games played are the record's V + D below. */}
+            <span
+              className="pcard__role"
+              title={player.riotIdFound ? `${ROLE_LABELS[role]} · ${player.analytics.roleShare}% de sus partidas` : ROLE_LABELS.UNKNOWN}
+            >
               <RoleIcon role={role} />
-              <span>{player.riotIdFound ? `${ROLE_LABELS[role]} ${player.analytics.roleShare}%` : ROLE_LABELS.UNKNOWN}</span>
-              <span aria-hidden="true">·</span>
-              <span>{player.analytics.games} partidas</span>
+              <span className="mono">{player.riotIdFound ? `${player.analytics.roleShare}%` : "—"}</span>
             </span>
           </a>
         </div>
 
         <div className="plate">
-          <div className="plate__rank">
-            <div className="plate__head">
-              <RankEmblem tier={player.tier} size={56} className="plate__emblem" />
-              <div className="plate__figures">
-                <span className={`plate__tier ${tierClass(player.tier)}`}>{rankLabel(player)}</span>
-                <span className="plate__lp" aria-label={`${player.leaguePoints} PL`}>
-                  <b className="mono" aria-hidden="true">{player.leaguePoints}</b>
-                  <small aria-hidden="true">PL</small>
-                </span>
-                {gap ? (
-                  <span className="plate__gap">
-                    <span className="gap-long">{gap}</span>
-                    <span className="gap-short" aria-hidden="true">{shortGap}</span>
+          <div className="plate__grid">
+            <div className="plate__rank">
+              <div className="plate__head">
+                <RankEmblem tier={player.tier} size={70} className="plate__emblem" />
+                <div className="plate__figures">
+                  <span className={`plate__tier ${tierClass(player.tier)}`}>{rankLabel(player)}</span>
+                  <span className="plate__lp" aria-label={`${player.leaguePoints} PL`}>
+                    <b className="mono" aria-hidden="true">{player.leaguePoints}</b>
+                    <small aria-hidden="true">PL</small>
                   </span>
-                ) : null}
+                </div>
               </div>
             </div>
-          </div>
 
-          <dl className="plate__stats">
-            <div>
-              <dt>Winrate</dt>
-              <dd className="mono">{games > 0 ? `${player.winRate.toFixed(1)}%` : "—"}</dd>
-            </div>
-            <div className="plate__record">
-              <dt>Récord</dt>
-              <dd className="mono">{player.wins}V {player.losses}D</dd>
-            </div>
-            <div>
-              <dt>KDA</dt>
-              <dd className="mono">{player.analytics.games > 0 ? player.analytics.kda.toFixed(1) : "—"}</dd>
-            </div>
-            <div>
-              <dt>Últimas 5</dt>
-              <dd><FormPills results={player.recentResults} /></dd>
-            </div>
-          </dl>
+            <dl className="plate__stats">
+              <div>
+                <dt>Winrate</dt>
+                <dd className="mono">{games > 0 ? `${player.winRate.toFixed(1)}%` : "—"}</dd>
+              </div>
+              <div className="plate__record">
+                <dt>Récord</dt>
+                <dd className="mono">{player.wins}V {player.losses}D</dd>
+              </div>
+              <div>
+                <dt>KDA</dt>
+                <dd className="mono">{player.analytics.games > 0 ? player.analytics.kda.toFixed(1) : "—"}</dd>
+              </div>
+              <div>
+                <dt>Últimas 5</dt>
+                <dd><FormPills results={player.recentResults} /></dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </div>
 
@@ -226,14 +238,33 @@ function PodiumCard({ player, place, gap, shortGap, version, roster, now, respaw
         <Stitch />
         <div className="pcard__champs">
           <div className="section-label">
-            <span>Mejores campeones</span>
-            <InfoHint label={WINRATE_BAR_HINT}>partidas · winrate</InfoHint>
+            <span className="segmented" role="group" aria-label={`Qué mostrar de ${player.gameName}`}>
+              {PANEL_VIEWS.map(([key, label]) => (
+                <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>
+              ))}
+            </span>
+            {showingChampions ? <InfoHint label={WINRATE_BAR_HINT} /> : null}
           </div>
-          <div className="pcard__champs-bars">
-            <ChampionBars champions={champions} version={version} label={`Mejores campeones de ${player.gameName}`} />
-          </div>
-          <div className="pcard__champs-tiles">
-            <ChampionTiles champions={champions} version={version} showGames size={36} />
+          {/* The views swap in place at one height, so switching never moves the podium. */}
+          <div className="pcard__panel">
+            {showingChampions ? (
+              <>
+                <div className="pcard__champs-bars">
+                  <ChampionBars
+                    champions={champions}
+                    version={version}
+                    label={`${view === "best" ? "Mejores campeones" : "Campeones más jugados"} de ${player.gameName}`}
+                  />
+                </div>
+                <div className="pcard__champs-tiles">
+                  <ChampionTiles champions={champions} version={version} showGames size={36} />
+                </div>
+              </>
+            ) : view === "roles" ? (
+              <RoleList player={player} />
+            ) : (
+              <PlayerSummary player={player} roster={roster} version={version} />
+            )}
           </div>
         </div>
       </div>
@@ -253,21 +284,23 @@ function PodiumSkeleton({ place }: { place: number }) {
           <span className="avatar pcard__avatar sk" style={{ width: 52, height: 52 }} />
           <span className="pcard__who">
             <span className="sk sk-line" style={{ width: 120, height: 14 }} />
-            <span className="sk sk-line" style={{ width: 150, height: 10 }} />
+            <span className="sk sk-line" style={{ width: 36, height: 12 }} />
           </span>
         </div>
         <div className="plate">
-          <div className="plate__rank">
-            <div className="plate__head">
-              <span className="sk" style={{ width: 48, height: 48, borderRadius: 12 }} />
-              <div className="plate__figures">
-                <span className="sk sk-line" style={{ width: 70, height: 10 }} />
-                <span className="sk sk-line" style={{ width: 54, height: 26 }} />
+          <div className="plate__grid">
+            <div className="plate__rank">
+              <div className="plate__head">
+                <span className="sk" style={{ width: 58, height: 48, borderRadius: 12 }} />
+                <div className="plate__figures">
+                  <span className="sk sk-line" style={{ width: 70, height: 10 }} />
+                  <span className="sk sk-line" style={{ width: 54, height: 26 }} />
+                </div>
               </div>
             </div>
-          </div>
-          <div className="plate__stats">
-            {Array.from({ length: 4 }, (_, index) => <span key={index} className="sk sk-line" style={{ width: 110, height: 10 }} />)}
+            <div className="plate__stats">
+              {Array.from({ length: 4 }, (_, index) => <span key={index} className="sk sk-line" style={{ width: 56, height: 28 }} />)}
+            </div>
           </div>
         </div>
       </div>

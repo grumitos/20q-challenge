@@ -1,10 +1,9 @@
 /**
  * Presentation helpers for the leaderboard page. Pure functions only: every
- * string the board shows about ranks, gaps, ages and matches is decided here,
+ * string the board shows about ranks, ages and matches is decided here,
  * so the components stay declarative and the wording is unit-tested.
  */
 import {
-  rankScore,
   selectBestChampions,
   wilsonLowerBound,
   type ChampionAggregate,
@@ -51,23 +50,6 @@ export function rankAsset(tier: RankTier) {
 /** The part of a Riot ID a person is actually called by: "INTI VIRAC0NCHA" → "INTI". */
 export function firstName(gameName: string) {
   return gameName.trim().split(/\s+/)[0] ?? gameName;
-}
-
-/**
- * The league-point distance that explains a placement: the distance to the
- * player directly above. The leader has none to state, since being first says
- * it. `short` drops the unit for the narrowest layouts.
- */
-export function gapText(players: readonly PlayerSnapshot[], index: number, short = false) {
-  const player = players[index];
-  if (!player) return "";
-  if (player.tier === "UNRANKED") return "Sin partidas clasificadas";
-  if (index === 0) return "";
-  const unit = short ? "" : " PL";
-  const above = players[index - 1];
-  if (!above || above.tier === "UNRANKED") return "";
-  const gap = Math.max(0, rankScore(above) - rankScore(player));
-  return `${gap}${unit} para ${firstName(above.gameName)}`;
 }
 
 export function formatDuration(totalSeconds: number) {
