@@ -257,8 +257,9 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 /* ── Podium ─────────────────────────────── */
 .podium__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 
-/* The dot grid is the card's surface, as it is the row detail's; the rank plate
-   stays a plain well so the number on it reads first. */
+/* The card itself is plain graphite: the name, the plate and the last match
+   read on a clean surface, and only the panel below carries the dot grid (see
+   .pcard__side), as the row detail does. */
 .pcard {
   position: relative;
   container: pcard / inline-size;
@@ -266,8 +267,6 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--r-card);
   background-color: var(--surface);
-  background-image: radial-gradient(circle, var(--card-dot, color-mix(in srgb, var(--dot) 70%, transparent)) 1px, transparent 1.4px);
-  background-size: 9px 9px;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
   overflow: hidden;
   transition: border-color var(--fast) ease;
@@ -326,13 +325,12 @@ html.is-invaded .pcard__splash { filter: grayscale(0) sepia(.35) saturate(.8) br
 .pcard__role { display: flex; align-items: center; gap: 5px; flex: none; color: var(--text-3); font-size: 13px; white-space: nowrap; }
 
 /* The plate: the rank and the four figures, two halves of the same width with a
-   stitch between them. It is not a box, no border and no well: the card's dot
-   grid fades out behind it, edge to edge, and back in below it. */
+   stitch between them. It is not a box: no border and no well, just the card's
+   plain surface. */
 .plate {
   container: plate / inline-size;
   margin-top: 2px;
   padding: 10px 20px 8px;
-  background: linear-gradient(to bottom, transparent, var(--surface) 12px, var(--surface) calc(100% - 12px), transparent);
 }
 .plate__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
 .plate__rank { display: flex; align-items: center; justify-content: center; min-width: 0; }
@@ -402,11 +400,19 @@ html.is-invaded .pcard__splash { filter: grayscale(0) sepia(.35) saturate(.8) br
 }
 /* The stitch under the plate sits as far below the figures as the match line
    sits below it. */
-.pcard__side > .stitch:first-child { margin-top: 8px; }
+.plate + .stitch { margin-top: 8px; }
 .stitch + .mline, .stitch + .pcard__respawn { margin-block: 0; }
 .mline + .stitch, .pcard__respawn + .stitch { margin-top: 0; }
 
-.pcard__side { display: flex; flex-direction: column; flex: 1; }
+/* The panel is the one part of the card on the dot grid. Its tiles start at
+   the panel's top edge and every dot sits in the middle of its tile, so the
+   first row lands half a step below the stitch above: the grid stops between
+   two rows, with no fade and no dot cut in half. */
+.pcard__side {
+  display: flex; flex-direction: column; flex: 1;
+  background-image: radial-gradient(circle, var(--card-dot, color-mix(in srgb, var(--dot) 70%, transparent)) 1px, transparent 1.4px);
+  background-size: 9px 9px;
+}
 .pcard__respawn { padding: 12px 20px; }
 .pcard__champs { padding: 14px 20px 18px; container: pchamps / inline-size; }
 .pcard__champs-tiles { display: none; }
@@ -874,20 +880,15 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .pcard.place-1 { grid-column: 1 / -1; }
 }
 
-/* The leader's card turns horizontal as soon as it has the width for it. */
-@container pcard (min-width: 820px) {
-  .pcard__body { display: grid; grid-template-columns: 150px minmax(0, 1.3fr) minmax(0, 1fr); }
-  .pcard__art { height: auto; min-height: 100%; }
-  .pcard__splash { position: absolute; inset: 0; object-position: 60% 40%; }
-  .pcard__main { padding: 20px; border-right: 1px solid var(--line); }
-  .pcard__identity { margin-top: 0; padding-inline: 0; align-items: center; }
-  .pcard__avatar { width: 48px; height: 48px; border: 0; border-radius: 12px; }
-  .pcard__who { padding-top: 0; }
-  .pcard__main .plate { margin: 2px -20px 0; }
-  .pcard__side { padding: 8px 0 4px; }
-  .pcard__side > .stitch:first-child { display: none; }
-  .pcard__side .mline { padding-inline: 20px; }
-  .pcard__side .champ-row__name { width: 84px; }
+/* The leader's card, once it spans the two-column podium, keeps its banner and
+   splits the body into two columns of the same width: name, plate and last
+   match on the left, the panel on its dot grid on the right. */
+@container pcard (min-width: 640px) {
+  .pcard.place-1 .pcard__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto 1fr; }
+  .pcard.place-1 .pcard__art { grid-column: 1 / -1; }
+  .pcard.place-1 .pcard__main { padding-bottom: 14px; border-right: 1px solid var(--line); }
+  .pcard.place-1 .pcard__main > .stitch:last-child { display: none; }
+  .pcard.place-1 .pcard__side .champ-row__name { width: 84px; }
 }
 
 /* Compact rows: two lines per player, the table heading goes away. */
@@ -954,7 +955,19 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .pcard.place-2 .pcard__champs-bars, .pcard.place-3 .pcard__champs-bars,
   .pcard.place-2 .pcard__champs .info-hint, .pcard.place-3 .pcard__champs .info-hint { display: none; }
   .pcard.place-2 .pcard__champs-tiles, .pcard.place-3 .pcard__champs-tiles { display: block; }
-  .pcard.place-2 .pcard__panel, .pcard.place-3 .pcard__panel { min-height: 0; }
+  /* The second and third keep one compact height in every view: champions and
+     roles as tiles, the summary as three short lines. */
+  .pcard:is(.place-2, .place-3) .pcard__panel { min-height: 78px; }
+  .pcard:is(.place-2, .place-3) .role-list { flex-direction: row; justify-content: space-between; gap: 0; }
+  .pcard:is(.place-2, .place-3) .role-list li { flex-direction: column; gap: 4px; width: 52px; height: auto; }
+  .pcard:is(.place-2, .place-3) .role-list svg { width: 18px; height: 18px; }
+  .pcard:is(.place-2, .place-3) :is(.role-list__bar, .role-list__games) { display: none; }
+  .pcard:is(.place-2, .place-3) :is(.role-list__name, .role-list__value) { width: auto; text-align: center; }
+  .pcard:is(.place-2, .place-3) .role-list__name { font-size: 12px; }
+  .pcard:is(.place-2, .place-3) .summary { gap: 6px; }
+  .pcard:is(.place-2, .place-3) .summary dt { white-space: nowrap; }
+  .pcard:is(.place-2, .place-3) .summary > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 22px; }
+  .pcard:is(.place-2, .place-3) .summary dd { margin: 0; font-size: 13px; }
   .pcard__champs-tiles .champ-tiles { justify-content: space-between; }
   .pcard__champs-tiles .champ-tile { width: 52px; }
   .pcard__identity, .stitch { margin-inline: 16px; }
@@ -981,6 +994,8 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 
 @media (max-width: 359px) {
   .brand__name { display: none; }
+  /* The compact summary's dúo line keeps to one row: the name stays, its game count goes. */
+  .pcard:is(.place-2, .place-3) .summary__duo small { display: none; }
 }
 
 @media (max-width: 479px) {

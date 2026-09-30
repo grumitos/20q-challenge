@@ -233,7 +233,8 @@ export function RoleList({ player }: { player: PlayerSnapshot }) {
           <RoleIcon role={entry.role} size={14} />
           <span className="role-list__name">{entry.label}</span>
           <span className="role-list__bar" aria-hidden="true"><i style={{ width: `${entry.bar}%` }} /></span>
-          <span className="mono role-list__value">{entry.games} · {entry.share}%</span>
+          {/* The games stand apart so a compact list can show just the share. */}
+          <span className="mono role-list__value"><span className="role-list__games">{entry.games} · </span>{entry.share}%</span>
         </li>
       ))}
     </ul>

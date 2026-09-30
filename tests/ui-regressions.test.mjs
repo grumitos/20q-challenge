@@ -247,7 +247,9 @@ test("lays the board out for wide desktops, half screens and phones", async () =
   for (const breakpoint of [1359, 1199, 959, 719]) {
     assert.match(css, new RegExp(`@media \\(max-width: ${breakpoint}px\\)`));
   }
-  assert.match(css, /@container pcard \(min-width: 820px\)/);
+  // Spanning the two-column podium, the leader keeps its banner over two body columns of the same width.
+  assert.match(css, /@container pcard \(min-width: 640px\) \{\s*\.pcard\.place-1 \.pcard__body \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(css, /\.pcard\.place-1 \.pcard__art \{ grid-column: 1 \/ -1; \}/);
   // The plate is two equal halves, the rank and the 2×2 figures, with a stitch between them and no box
   // around either; only a plate too narrow for both side by side stacks them.
   assert.match(css, /\.plate__grid \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
@@ -255,6 +257,26 @@ test("lays the board out for wide desktops, half screens and phones", async () =
   assert.doesNotMatch(css, /\.plate(__stats)? \{[^}]*\bborder\b/);
   assert.match(css, /@container plate \(max-width: 269px\) \{\s*\.plate__grid \{ grid-template-columns: 1fr;/);
   assert.match(css, /\.srow__stats \{ display: contents; \}/);
+});
+
+test("keeps the podium's dot grid to the panel, with the last match on the plain part", async () => {
+  const { podium, css } = await sources();
+  // Name, plate and last match share the plain part; the panel stands alone below the last stitch.
+  assert.match(podium, /<MatchLine player=\{player\} roster=\{roster\} version=\{version\} now=\{now\} \/>\}\s*<Stitch \/>\s*<\/div>\s*<div className="pcard__side">\s*<PodiumPanel /);
+  const block = (selector) => css.match(new RegExp(`\\n${selector} \\{[^}]*\\}`))?.[0] ?? "";
+  assert.doesNotMatch(block("\\.pcard"), /background-image/);
+  assert.doesNotMatch(block("\\.plate"), /background/);
+  // The grid starts at the panel's top edge, where every dot sits mid-tile: it stops between two rows, no fade.
+  assert.match(block("\\.pcard__side"), /background-image: radial-gradient\(circle, var\(--card-dot, [^;]+\) 1px, transparent 1\.4px\);\s*background-size: 9px 9px;/);
+});
+
+test("keeps the second and third podium cards compact and one height in every view on phones", async () => {
+  const { css } = await sources();
+  const phones = css.slice(css.indexOf("@media (max-width: 719px)"));
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) \.pcard__panel \{ min-height: 78px; \}/);
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) \.role-list \{ flex-direction: row;/);
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) :is\(\.role-list__bar, \.role-list__games\) \{ display: none; \}/);
+  assert.match(phones, /\.pcard:is\(\.place-2, \.place-3\) \.summary > div \{ display: flex;/);
 });
 
 test("respects reduced motion and keeps focus visible", async () => {
