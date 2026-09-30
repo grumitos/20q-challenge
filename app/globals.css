@@ -140,19 +140,29 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* The page is not a flat field: a hairline grid centred on the page, the card
-   dots' larger kin, under a faint light from the top. Both fade out on a wide
-   ellipse well before the rows end, and scroll away with the page. */
+/* The page is not a flat field: a drafting grid, the card dots' larger kin.
+   Hairlines every 56px, a firmer line every fourth and a point where the firm
+   lines cross, one line on the page's centre. It keeps quiet over the middle,
+   where the header and the cards are, shows in the margins, and fades out down
+   the page as it scrolls away with it. */
 body::before {
   content: "";
   position: absolute; inset: 0 0 auto; z-index: -1;
-  height: max(900px, 110vh);
+  height: max(1100px, 125vh);
   background:
-    radial-gradient(ellipse 70% 60% at 50% 0%, rgb(255 255 255 / 3%), transparent 70%),
-    linear-gradient(to right, rgb(255 255 255 / 3.5%) 1px, transparent 1px) 50% 0 / 56px 56px,
-    linear-gradient(to bottom, rgb(255 255 255 / 3.5%) 1px, transparent 1px) 50% 0 / 56px 56px;
-  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 0%, #000 35%, transparent 80%);
-  mask-image: radial-gradient(ellipse 85% 75% at 50% 0%, #000 35%, transparent 80%);
+    radial-gradient(circle, rgb(255 255 255 / 16%) 1px, transparent 1.6px) calc(50% + .5px) calc(-112px + .5px) / 224px 224px,
+    linear-gradient(to right, rgb(255 255 255 / 4.5%) 1px, transparent 1px) calc(50% + 112px) 0 / 224px 224px,
+    linear-gradient(to bottom, rgb(255 255 255 / 4.5%) 1px, transparent 1px) 0 0 / 224px 224px,
+    linear-gradient(to right, rgb(255 255 255 / 2.2%) 1px, transparent 1px) calc(50% + 28px) 0 / 56px 56px,
+    linear-gradient(to bottom, rgb(255 255 255 / 2.2%) 1px, transparent 1px) 0 0 / 56px 56px;
+  -webkit-mask-image:
+    linear-gradient(to right, #000, rgb(0 0 0 / 20%) 32%, rgb(0 0 0 / 20%) 68%, #000),
+    linear-gradient(to bottom, rgb(0 0 0 / 50%), #000 20%, #000 45%, transparent 96%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, #000, rgb(0 0 0 / 20%) 32%, rgb(0 0 0 / 20%) 68%, #000),
+    linear-gradient(to bottom, rgb(0 0 0 / 50%), #000 20%, #000 45%, transparent 96%);
+  mask-composite: intersect;
   pointer-events: none;
 }
 
@@ -236,9 +246,11 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-out infinite; }
 /* Los Juegos' door: a gilded rim, lit from the top left like the title's
    letters, around the tournament's mark; hovering warms it with a glow. */
+/* The mark, the name and the edition share one baseline; the line box fills
+   the door's height, so they still sit centred in it. */
 .gaspi-button {
-  display: flex; align-items: center; gap: 10px;
-  height: 36px; margin-left: 6px; padding: 0 14px 0 11px;
+  display: flex; align-items: baseline; gap: 10px;
+  height: 36px; margin-left: 6px; padding: 0 14px 0 11px; line-height: 34px;
   border: 1px solid transparent; border-radius: 10px;
   background:
     linear-gradient(#15130f, #15130f) padding-box,
@@ -258,6 +270,23 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
   filter: drop-shadow(0 0 6px rgb(233 190 110 / 35%));
 }
 .gaspi-button__edition { color: #a8966c; font-size: 12px; font-weight: 400; }
+/* Once metal-fx runs, its wrapper is the door's surface: it takes the fill and
+   the place in the bar, and the button goes clear (same border width) so the
+   liquid-gold ring shows where the still rim was. The wrapper stays visible
+   from the start and only the ring fades in. Two classes, because the
+   package's own sheet is injected after this one. */
+.gaspi-metal.metal-fx-root {
+  margin-left: 6px;
+  border-radius: 10px;
+  background: #15130f;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: transform var(--fast) ease;
+}
+.gaspi-metal .metal-fx-canvas { animation: fade-in .45s var(--ease); }
+.gaspi-metal .gaspi-button { margin-left: 0; border-color: transparent; background: transparent; }
+.gaspi-metal .gaspi-button:active { transform: none; }
+.gaspi-metal:has(.gaspi-button:active) { transform: translateY(1px); }
 
 .page { display: flex; flex-direction: column; gap: 32px; padding-top: 32px; }
 .notice {
@@ -357,12 +386,15 @@ html.is-invaded .pcard__splash { --splash-rest: grayscale(0) sepia(.35) saturate
 .avatar { flex: none; border-radius: 10px; background: var(--raised); object-fit: cover; }
 .avatar--empty { display: grid; place-items: center; color: var(--text-3); font-weight: 600; }
 .pcard__avatar { width: 58px; height: 58px; border: 3px solid var(--surface); border-radius: 15px; }
-.pcard__who { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 1; min-width: 0; padding-top: 34px; }
+/* The role's share sits on the name's baseline; its icon rides inline (a flex
+   box led by the icon would take the icon's foot as its baseline). */
+.pcard__who { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex: 1; min-width: 0; padding-top: 34px; }
 .pcard__name { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .pcard__name strong { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--fast) ease; }
 .pcard__name small { color: var(--text-3); font-size: 12px; }
 .pcard__who:hover .pcard__name strong { color: var(--gold); }
-.pcard__role { display: flex; align-items: center; gap: 5px; flex: none; color: var(--text-3); font-size: 13px; white-space: nowrap; }
+.pcard__role { flex: none; color: var(--text-3); font-size: 13px; white-space: nowrap; }
+.pcard__role svg { display: inline-block; margin-right: 5px; vertical-align: -3px; }
 
 /* The plate: the rank and the four figures, two halves of the same width with a
    stitch between them. It is not a box: no border and no well, just the card's
@@ -441,11 +473,10 @@ html.is-invaded .pcard__splash { --splash-rest: grayscale(0) sepia(.35) saturate
 /* The stitch under the plate sits as far below the figures as the match line
    sits below it. */
 .plate + .stitch { margin-top: 8px; }
-.stitch + .mline, .stitch + .pcard__respawn { margin-block: 0; }
-.mline + .stitch, .pcard__respawn + .stitch { margin-top: 0; }
+.stitch + .mline { margin-block: 0; }
+.mline + .stitch { margin-top: 0; }
 
 .pcard__side { display: flex; flex-direction: column; flex: 1; }
-.pcard__respawn { padding: 12px 20px; }
 .pcard__champs { padding: 14px 20px 18px; container: pchamps / inline-size; }
 .pcard__champs-tiles { display: none; }
 /* The podium's hint is only its icon; the padding gives the pointer a larger
@@ -479,6 +510,9 @@ html.is-invaded .pcard__splash { --splash-rest: grayscale(0) sepia(.35) saturate
   color: var(--text-3); font-size: 12px;
 }
 .section-label > span:first-child { font-weight: 500; }
+/* The detail's headings are all as tall as the one holding a switch, so the
+   four read on one line. */
+.detail .section-label { min-height: 28px; }
 
 .info-hint {
   display: inline-flex; align-items: center; gap: 6px;
@@ -503,7 +537,12 @@ html.is-invaded .pcard__splash { --splash-rest: grayscale(0) sepia(.35) saturate
 
 /* ── Champion lists ─────────────────────── */
 .champ-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
-.champ-row { display: flex; align-items: center; gap: 12px; height: 28px; }
+/* Text on one baseline, names and figures alike: each line box is the row's
+   height, so the baselines meet and the text still sits centred; the portrait
+   and the bar centre on their own. Centring alone leaves the mono figures a
+   pixel off the names, the fonts' metrics differing. */
+.champ-row { display: flex; align-items: baseline; gap: 12px; height: 28px; line-height: 28px; }
+.champ-row > :is(.portrait, .wr-track) { align-self: center; }
 .portrait {
   flex: none;
   display: block;
@@ -545,33 +584,56 @@ html.is-invaded .pcard__splash { --splash-rest: grayscale(0) sepia(.35) saturate
 .pill.is-loss { background: var(--loss); box-shadow: none; }
 .form__text { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 
+/* A game's K/D/A: the figures in the text colour, the slashes quiet. */
+.kda { color: var(--text); font-size: 13px; font-weight: 500; }
+.kda i { color: var(--text-4); font-style: normal; font-weight: 400; }
+
 .mline { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: var(--text); transition: background-color var(--fast) ease; }
+.mline:not(.is-compact) { container: mline / inline-size; }
 a.mline:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); }
 .mline.is-empty { margin: 0; color: var(--text-3); font-size: 13px; }
 .mline__icon { flex: none; width: 30px; height: 30px; border-radius: 8px; overflow: hidden; background: var(--track); }
 .mline__icon img { width: 100%; height: 100%; transform: scale(1.1); }
-.mline__body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; container: mline / inline-size; }
-.mline__top { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-.mline__age { margin-left: auto; color: var(--text-3); font-size: 12px; }
-/* The game's figures, each its own item spread across the line: the champion
-   (with the role played) first, the K/D/A, the length, the company last. A
-   narrower line drops the ratio, then the length; the champion's name is the
-   one that ellipsises. */
-.mline__stats { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; color: var(--text-3); font-size: 12px; white-space: nowrap; }
-.mline__champ { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--text-2); }
-.mline__champ > span { overflow: hidden; text-overflow: ellipsis; }
-.mline__champ svg { flex: none; color: var(--text-3); }
-.mline__kda b, b.mline__kda { color: var(--text); font-weight: 500; }
-.mline__kda small { margin-left: 6px; font-size: 11px; }
-.mline__time { display: inline-flex; align-items: center; gap: 4px; }
-.mline__time svg { flex: none; color: var(--text-4); }
-.mline__with { color: var(--text-2); }
-@container mline (max-width: 290px) { .mline__kda small { display: none; } }
-@container mline (max-width: 225px) { .mline__time { display: none; } }
+/* The figures sit on a grid of two rows. Above: the result with its PL, the
+   K/D/A and the age; below: the champion (the role's icon before it, the
+   company after it), the ratio and the length. The two figure columns have one
+   width on every card, with a duo or without, and each sits flush right, so
+   the podium's lines read as one table. Every cell sits on its row's baseline;
+   the icons ride inline in the text, since a flex item that starts with an icon
+   takes the icon's bottom edge as its baseline. A narrow line keeps two
+   columns: the age beside the result, the K/D/A beside the champion. */
+.mline__body {
+  display: grid; flex: 1; min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 62px 68px;
+  grid-template-areas: "result kda age" "champ ratio time";
+  align-items: baseline; gap: 3px 14px;
+  color: var(--text-3); font-size: 12px; white-space: nowrap;
+}
+.mline__body > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mline__body svg { display: inline-block; margin-right: 4px; vertical-align: -2px; color: var(--text-4); }
+/* The top row's cells share the K/D/A's size, so the row's baseline is the
+   same with a live game, which has no K/D/A, as without. */
+.mline__result { grid-area: result; font-size: 13px; }
+.mline__result > * + * { margin-left: 8px; }
+.mline__kda { grid-area: kda; justify-self: end; }
+.mline__age { grid-area: age; justify-self: end; }
+.mline__champ { grid-area: champ; color: var(--text-2); }
+.mline__with { color: var(--text-3); }
+.mline__ratio { grid-area: ratio; justify-self: end; font-size: 12px; }
+.mline__time { grid-area: time; justify-self: end; }
+@container mline (max-width: 335px) {
+  .mline__body { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "result age" "champ kda"; }
+  .mline__ratio, .mline__time { display: none; }
+}
 .mline__chevron { flex: none; color: var(--text-3); transition: transform var(--fast) var(--ease), color var(--fast) ease; }
 a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2); }
+.mline__chevron-room { flex: none; width: 14px; }
 .mline.is-old .mline__icon { opacity: .75; }
+/* The table's form: the result across, then the K/D/A and the age. */
 .mline.is-compact { padding: 0; gap: 10px; }
+.mline.is-compact .mline__body { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "result result" "kda age"; }
+.mline.is-compact.is-live .mline__body { grid-template-areas: "result result" "champ champ"; }
+.mline.is-compact .kda { font-size: 12px; }
 .outcome { font-size: 13px; font-weight: 600; }
 .outcome.is-win { color: var(--win); }
 .outcome.is-loss { color: var(--loss); }
@@ -580,22 +642,29 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .lp-change.is-win { color: var(--win); }
 .lp-change.is-loss { color: var(--loss); }
 .lp-change.is-pending, .lp-change.is-neutral { color: var(--text-2); }
-.live-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
-.live-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-out infinite; }
+/* Inline, not flex: the dot leading a flex badge would set its baseline. */
+.live-badge { color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+.live-badge i { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--accent); vertical-align: 1px; animation: pulse 1.6s ease-out infinite; }
 .mline.is-live b { font-size: 13px; font-weight: 500; }
 
-.respawn { display: flex; flex-direction: column; gap: 5px; }
-.respawn__pill {
-  display: inline-flex; align-items: center; align-self: flex-start; gap: 8px;
-  height: 28px; padding: 0 11px 0 9px;
-  border: 1px solid var(--line-strong); border-radius: 999px;
-  background: var(--raised); color: var(--text-2);
-  font-size: 12px; white-space: nowrap;
+/* Papipu's curfew, after the respawn overlay from before the redesign: the
+   clock takes the card, or the row's figures, and what lies under it goes grey,
+   dim and soft (the blur keeps the figures from competing with the clock) and
+   inert. The row's player stays legible, only greyed; the podium keeps its
+   medal edge and its place. */
+.respawn { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; white-space: nowrap; }
+.respawn__label { color: var(--text-2); font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.respawn__label svg { display: inline-block; margin-right: 6px; vertical-align: -2px; color: var(--text-3); }
+.respawn__clock { color: var(--text); font-size: 38px; font-weight: 500; letter-spacing: -.02em; line-height: 1; text-shadow: 0 2px 18px rgb(0 0 0 / 60%); }
+.respawn__note { color: var(--text-3); font-size: 12px; font-style: italic; }
+.pcard__respawn {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; place-items: center;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--surface) 72%, transparent), transparent);
+  pointer-events: none;
 }
-.respawn__pill b { color: var(--text); font-size: 13px; font-weight: 500; }
-.respawn__note { padding-left: 10px; color: var(--text-3); font-size: 12px; font-style: italic; }
-.pcard.is-dead img, .srow.is-dead .avatar, .srow.is-dead .emblem, .srow.is-dead .champ-tile img { filter: grayscale(1) brightness(.7); }
-.pcard.is-dead .plate__grid, .pcard.is-dead .pcard__champs { opacity: .5; }
+.pcard.is-dead .pcard__splash { --splash-rest: grayscale(1) sepia(0) saturate(1) brightness(.42); --splash-lit: grayscale(1) sepia(0) saturate(1) brightness(.42); }
+.pcard.is-dead :is(.pcard__main, .pcard__side) { filter: grayscale(1) blur(1.5px); opacity: .3; }
 
 /* ── Standings board ────────────────────── */
 .board { border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); overflow: hidden; }
@@ -616,9 +685,22 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .srow { border-top: 1px solid var(--line-soft); transition: background-color var(--fast) ease; }
 .srow:hover { background: color-mix(in srgb, var(--raised) 45%, transparent); }
 .srow.is-open { background: color-mix(in srgb, var(--raised) 70%, transparent); }
-.srow.is-dead { background: color-mix(in srgb, var(--inset) 80%, transparent); }
+.srow.is-dead, .srow.is-dead:hover { background: color-mix(in srgb, var(--inset) 80%, transparent); }
 .srow__main { align-items: center; min-height: 68px; padding-inline: 20px; cursor: pointer; }
-.srow.is-pending .srow__main { cursor: default; }
+.srow:is(.is-pending, .is-dead) .srow__main { cursor: default; }
+/* On curfew the clock lies over the figures, from the rank to the row's end
+   (its grid area is the positioned box), with the player beside it. */
+.srow.is-dead .srow__main { position: relative; }
+.srow.is-dead :is(.srow__place, .srow__player) { filter: grayscale(1); opacity: .55; }
+.srow.is-dead :is(.srow__rank, .srow__wr, .srow__kda, .srow__form, .srow__champs, .srow__match) { filter: grayscale(1) blur(1.5px); opacity: .25; }
+.srow__respawn {
+  position: absolute; inset: 0; z-index: 1; grid-column: 3 / -1;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--inset) 80%, transparent), transparent);
+  pointer-events: none;
+}
+.srow__respawn .respawn { flex-flow: row wrap; justify-content: center; align-items: baseline; gap: 0 12px; }
+.srow__respawn .respawn__clock { font-size: 22px; }
 .srow__stats { display: contents; }
 .srow__place { display: flex; flex-direction: column; gap: 2px; }
 .srow__place b { font-size: 14px; font-weight: 600; }
@@ -631,9 +713,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .srow__who strong { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--fast) ease; }
 .srow__player:hover .srow__who strong { color: var(--gold); }
 .srow__meta { display: flex; align-items: center; gap: 6px; color: var(--text-3); font-size: 12px; white-space: nowrap; }
-.srow__respawn-inline, .srow__role-mark { display: none; }
-.srow__respawn-inline { align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; white-space: nowrap; }
-.srow__respawn-inline b { color: var(--text); font-weight: 500; }
+.srow__role-mark { display: none; }
 .srow__rank { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .srow__emblem { width: 40px; height: 40px; margin: -4px; }
 .srow__rank-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -646,9 +726,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .wr-bar { position: relative; display: block; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
 .wr-bar i { display: block; height: 100%; background: var(--bar); transition: width .8s var(--ease); }
 .wr-bar::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--surface); }
-.srow.is-dead .wr-bar i { background: var(--text-4); }
 .srow__kda { font-size: 14px; }
-.srow.is-dead :is(.srow__rank, .srow__wr, .srow__kda, .srow__form, .srow__champs) { opacity: .45; }
 .srow__toggle {
   display: grid; place-items: center;
   width: 24px; height: 24px; padding: 0;
@@ -689,17 +767,20 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .segmented__thumb { position: absolute; inset: 0; z-index: 0; background: var(--line); }
 .segmented__label { position: relative; z-index: 1; }
 .role-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
-.role-list li { display: flex; align-items: center; gap: 10px; height: 26px; color: var(--text-2); }
+.role-list li { display: flex; align-items: baseline; gap: 10px; height: 26px; line-height: 26px; color: var(--text-2); }
+.role-list li > :is(svg, .role-list__bar) { align-self: center; }
 .role-list__name { width: 56px; color: #d4d5da; font-size: 13px; }
 .role-list__bar { flex: 1; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .role-list__bar i { display: block; height: 100%; border-radius: 3px; background: #6b6d76; }
 .role-list__value { width: 76px; text-align: right; color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .text-link { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 12px; transition: color var(--fast) ease; }
 .text-link:hover { color: var(--text); }
-.detail__result { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 14px 0 0; font-size: 12px; }
-.detail__kda { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 0; }
-.detail__kda b { font-size: 16px; font-weight: 500; }
+.detail__result { display: flex; align-items: baseline; gap: 10px; margin: 14px 0 0; font-size: 12px; white-space: nowrap; }
+.detail__kda { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 0; white-space: nowrap; }
+.detail__kda .kda { font-size: 16px; }
 .detail__kda small { color: var(--text-3); font-size: 12px; }
+.detail__when { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.detail__when svg { display: inline-block; margin-right: 4px; vertical-align: -2px; color: var(--text-4); }
 .roster { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
 .roster__row { display: flex; align-items: center; gap: 12px; }
 .roster__label { width: 60px; flex: none; color: var(--text-3); font-size: 12px; }
@@ -910,8 +991,6 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .board__head, .srow__main { padding-inline: 16px; }
   .srow__champs .champ-tiles { gap: 7px; }
   .srow__champs .champ-tile { width: 34px; }
-  .srow.is-dead .srow__meta { display: none; }
-  .srow.is-dead .srow__respawn-inline { display: flex; }
   .detail { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 40px; padding: 22px 16px 26px 64px; }
   .drow-grid { grid-template-columns: 36px minmax(0, 1fr) 120px 200px 84px; column-gap: 16px; }
   .drow__main, .board--duos .board__head { padding-inline: 16px; }
@@ -952,8 +1031,11 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .srow__meta { display: none; }
   .srow__role-mark { display: block; flex: none; color: var(--text-3); }
   .srow__who { flex: 1; }
-  .srow.is-dead .srow__respawn-inline { display: flex; }
   .srow__rank { grid-column: 3; grid-row: 1; justify-self: end; gap: 6px; }
+  /* Here the figures are the second line, so the clock takes that line and the
+     rank, up beside the player, is only greyed. */
+  .srow__respawn { grid-column: 2 / -1; grid-row: 2; }
+  .srow.is-dead .srow__rank { filter: grayscale(1); opacity: .55; }
   .srow__emblem { width: 30px; height: 30px; margin: -3px; }
   .srow__rank-text { align-items: flex-end; }
   .srow__tier { flex-direction: column; align-items: flex-end; gap: 2px; }
@@ -992,7 +1074,8 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .nav-short { display: inline; }
   .topbar__nav { margin-left: auto; }
   .topbar__spacer { display: none; }
-  .gaspi-button { width: 44px; height: 44px; justify-content: center; padding: 0; margin-left: 0; border-radius: 12px; }
+  .gaspi-button { width: 44px; height: 44px; align-items: center; justify-content: center; padding: 0; margin-left: 0; border-radius: 12px; }
+  .gaspi-metal.metal-fx-root { margin-left: 0; border-radius: 12px; }
   .gaspi-mark { font-size: 22px; }
   .page { gap: 24px; padding-top: 16px; }
   .podium__grid { grid-template-columns: 1fr; gap: 12px; }
@@ -1009,7 +1092,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
      roles as tiles, the summary as three short lines. */
   .pcard:is(.place-2, .place-3) .pcard__panel { min-height: 78px; }
   .pcard:is(.place-2, .place-3) .role-list { flex-direction: row; justify-content: space-between; gap: 0; margin-inline: -8px; }
-  .pcard:is(.place-2, .place-3) .role-list li { flex-direction: column; gap: 4px; width: 52px; height: auto; }
+  .pcard:is(.place-2, .place-3) .role-list li { flex-direction: column; align-items: center; gap: 4px; width: 52px; height: auto; line-height: 1.4; }
   /* A role tile stands as tall as a champion's: its icon on a 36px square like the portrait. */
   .pcard:is(.place-2, .place-3) .role-list svg { width: 36px; height: 36px; padding: 9px; border-radius: 8px; background: var(--raised); color: var(--text-2); }
   .pcard:is(.place-2, .place-3) :is(.role-list__bar, .role-list__games) { display: none; }

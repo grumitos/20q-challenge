@@ -22,6 +22,7 @@
     "@radix-ui/react-dialog": "1.1.23",
     "@radix-ui/react-tooltip": "1.2.16",
     "drizzle-orm": "0.45.2",
+    "metal-fx": "1.0.4",
     "motion": "13.4.5",
     "next": "16.2.6",
     "react": "19.2.6",

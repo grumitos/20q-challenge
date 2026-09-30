@@ -22,7 +22,7 @@ import {
   PlaceChip,
   PlayerSummary,
   RankEmblem,
-  RespawnPill,
+  RespawnClock,
   RoleList,
   Segmented,
   Stitch,
@@ -163,7 +163,9 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
       className={`pcard place-${place}${dead ? " is-dead" : ""}${featured ? " is-featured" : ""}`}
       data-ranking-id={player.id}
     >
-      <div className="pcard__body">
+      {/* On curfew the clock takes the card, and nothing under it answers. */}
+      {respawnSeconds !== null ? <div className="pcard__respawn"><RespawnClock seconds={respawnSeconds} playerName={player.gameName} /></div> : null}
+      <div className="pcard__body" inert={dead}>
       <div className="pcard__art">
         {splash ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -229,14 +231,12 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
         </div>
         {/* The last match sits between two stitches, under the plate and above the panel. */}
         <Stitch />
-        {respawnSeconds !== null
-          ? <div className="pcard__respawn"><RespawnPill seconds={respawnSeconds} playerName={player.gameName} /></div>
-          : <MatchLine player={player} roster={roster} version={version} now={now} />}
+        <MatchLine player={player} roster={roster} version={version} now={now} />
         <Stitch />
       </div>
 
       <div className="pcard__side">
-        <PodiumPanel player={player} roster={roster} version={version} best={best} />
+        <PodiumPanel player={player} roster={roster} version={version} best={best} still={dead} />
       </div>
       </div>
     </m.article>
@@ -249,16 +249,18 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
  * moving, and on a phone, where the views are not all the same height, it
  * would stretch the whole card into its new size.
  */
-function PodiumPanel({ player, roster, version, best }: {
+function PodiumPanel({ player, roster, version, best, still }: {
   player: PlayerSnapshot;
   roster: readonly PlayerSnapshot[];
   version: string;
   best: readonly ChampionView[];
+  /** On curfew the panel keeps its first view and loses the switch. */
+  still: boolean;
 }) {
   // Null until the reader picks a view: only their switches bring a view in
   // with motion, and the first paint keeps just the card's own entrance.
   const [chosen, setChosen] = useState<PanelView | null>(null);
-  const view = chosen ?? "best";
+  const view = still ? "best" : chosen ?? "best";
   const champions = view === "most" && player.riotIdFound
     ? mostPlayedChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS)
     : best;
@@ -266,10 +268,12 @@ function PodiumPanel({ player, roster, version, best }: {
 
   return (
     <div className="pcard__champs">
-      <div className="section-label">
-        <Segmented options={PANEL_VIEWS} value={view} onChange={setChosen} label={`Qué mostrar de ${player.gameName}`} />
-        {showingChampions ? <InfoHint label={WINRATE_BAR_HINT} /> : null}
-      </div>
+      {still ? null : (
+        <div className="section-label">
+          <Segmented options={PANEL_VIEWS} value={view} onChange={setChosen} label={`Qué mostrar de ${player.gameName}`} />
+          {showingChampions ? <InfoHint label={WINRATE_BAR_HINT} /> : null}
+        </div>
+      )}
       {/* The views swap in place at one height, so switching never moves the podium. */}
       <div className="pcard__panel">
         <div key={view} className={chosen === null ? undefined : "swap-in"}>

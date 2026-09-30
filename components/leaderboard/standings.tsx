@@ -1,7 +1,6 @@
 import { AnimatePresence, m } from "motion/react";
 import { useState, type MouseEvent } from "react";
 import {
-  formatRespawnClock,
   isRemakeMatch,
   orderMatchRoster,
   type PlayerSnapshot,
@@ -25,16 +24,17 @@ import {
   rankLabel,
   winRateTone,
 } from "../../lib/ui-format";
-import { ChevronDownIcon, ExternalIcon, MoonIcon, RoleIcon } from "./icons";
+import { ChevronDownIcon, ClockIcon, ExternalIcon, RoleIcon } from "./icons";
 import {
   Avatar,
   ChampionBars,
   ChampionTiles,
   FormPills,
+  KdaFigures,
   MatchLine,
   PlayerSummary,
   RankEmblem,
-  RespawnPill,
+  RespawnClock,
   RoleList,
   Segmented,
   tierClass,
@@ -117,6 +117,9 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
   onToggle: () => void;
 }) {
   const dead = respawnSeconds !== null;
+  // On curfew the row is closed and still: no detail, no toggle, and every cell
+  // under the clock inert.
+  const isOpen = open && !dead;
   const unranked = player.tier === "UNRANKED";
   const role = player.riotIdFound ? player.analytics.mainRole : "UNKNOWN";
   const champions = player.riotIdFound ? bestChampionViews(player.analytics.championCounts, ROW_CHAMPION_SLOTS) : [];
@@ -126,7 +129,7 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
   // The whole row opens the detail for a pointer; keyboards use the toggle
   // button, and links inside the row keep doing what links do.
   const handleRowClick = (event: MouseEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("a, button")) return;
+    if (dead || (event.target as HTMLElement).closest("a, button")) return;
     onToggle();
   };
 
@@ -136,16 +139,16 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: ENTRANCE.row.duration, delay: Math.min(ENTRANCE.row.maxDelay, (place - 4) * ENTRANCE.row.step), ease: EASE }}
-      className={`srow${open ? " is-open" : ""}${dead ? " is-dead" : ""}${unranked ? " is-unranked" : ""}`}
+      className={`srow${isOpen ? " is-open" : ""}${dead ? " is-dead" : ""}${unranked ? " is-unranked" : ""}`}
       data-ranking-id={player.id}
     >
       <div className="srow__main srow-grid" onClick={handleRowClick}>
-        <span className="srow__place">
+        <span className="srow__place" inert={dead}>
           <b className="mono">{place}</b>
           <PlaceDelta delta={player.placeDelta} />
         </span>
 
-        <a className="srow__player" href={profileUrl(player)} target="_blank" rel="noreferrer" aria-label={`Ver perfil de ${player.gameName} en League of Graphs`}>
+        <a className="srow__player" href={profileUrl(player)} target="_blank" rel="noreferrer" aria-label={`Ver perfil de ${player.gameName} en League of Graphs`} inert={dead}>
           <Avatar player={player} version={version} size={36} className="srow__avatar" />
           <span className="srow__who" translate="no">
             <strong>{player.gameName}</strong>
@@ -155,18 +158,14 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
               <RoleIcon role={role} size={12} />
               <span>{ROLE_LABELS[role]}</span>
             </small>
-            {respawnSeconds !== null ? (
-              <small className="srow__respawn-inline">
-                <MoonIcon size={12} />
-                <span>Reaparece en</span>
-                <b className="mono">{formatRespawnClock(respawnSeconds)}</b>
-              </small>
-            ) : null}
           </span>
           <RoleIcon role={role} size={12} className="srow__role-mark" />
         </a>
 
-        <span className="srow__rank">
+        {/* The clock lies over the row's figures, from the rank to the end. */}
+        {respawnSeconds !== null ? <div className="srow__respawn"><RespawnClock seconds={respawnSeconds} playerName={player.gameName} /></div> : null}
+
+        <span className="srow__rank" inert={dead}>
           <RankEmblem tier={player.tier} size={40} className="srow__emblem" />
           <span className="srow__rank-text">
             <span className="srow__tier">
@@ -176,7 +175,7 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
           </span>
         </span>
 
-        <div className="srow__stats">
+        <div className="srow__stats" inert={dead}>
         <span
           className="srow__wr"
           role="group"
@@ -200,26 +199,26 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
         </span>
 
         <span className="srow__match col-match">
-          {respawnSeconds !== null
-            ? <RespawnPill seconds={respawnSeconds} playerName={player.gameName} />
-            : <MatchLine player={player} roster={roster} version={version} now={now} compact />}
+          <MatchLine player={player} roster={roster} version={version} now={now} compact />
         </span>
         </div>
 
-        <button
-          type="button"
-          className="srow__toggle"
-          aria-expanded={open}
-          aria-controls={detailId}
-          aria-label={`${open ? "Ocultar" : "Ver"} el detalle de ${player.gameName}`}
-          onClick={onToggle}
-        >
-          <ChevronDownIcon size={16} />
-        </button>
+        {dead ? null : (
+          <button
+            type="button"
+            className="srow__toggle"
+            aria-expanded={isOpen}
+            aria-controls={detailId}
+            aria-label={`${isOpen ? "Ocultar" : "Ver"} el detalle de ${player.gameName}`}
+            onClick={onToggle}
+          >
+            <ChevronDownIcon size={16} />
+          </button>
+        )}
       </div>
 
       <AnimatePresence initial={false}>
-        {open ? (
+        {isOpen ? (
           <m.div
             key="detail"
             id={detailId}
@@ -294,14 +293,17 @@ function RowDetail({ player, version, roster, now }: {
     const { allies, enemies } = orderMatchRoster(match.participants, player.id);
     matchBlock = (
       <>
+        {/* The podium line's figures, in the same words: the result and the
+            age, then the K/D/A, its ratio and the length, the time flush right. */}
         <p className="detail__result">
           <b className={`outcome is-${outcome}`}>{outcomeLabel(outcome)}</b>
           {lp ? <span className={`mono lp-change is-${lpTone}`} title={lpEvidenceTitle(match.lpChangeEvidence, remake)}>{lp}</span> : null}
-          <span className="muted">{formatDuration(match.durationSeconds)} · {formatAge(match.gameStartTimestamp, now)}</span>
+          <span className="detail__when">{formatAge(match.gameStartTimestamp, now)}</span>
         </p>
         <p className="detail__kda">
-          <b className="mono">{match.kills} / {match.deaths} / {match.assists}</b>
-          <small className="mono">KDA {kdaRatio(match.kills, match.deaths, match.assists)}</small>
+          <KdaFigures kills={match.kills} deaths={match.deaths} assists={match.assists} />
+          <small className="mono">{kdaRatio(match.kills, match.deaths, match.assists)} KDA</small>
+          <span className="detail__when mono"><ClockIcon size={12} />{formatDuration(match.durationSeconds)}</span>
         </p>
         {allies.length > 0 ? (
           <div className="roster">
