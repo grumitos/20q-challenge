@@ -12,6 +12,7 @@ import {
   type PlayerRole,
   type PlayerSnapshot,
   type RankTier,
+  type RecentChampionRecord,
 } from "./leaderboard.ts";
 import { peruDateParts } from "./peru-time.ts";
 
@@ -148,6 +149,14 @@ export function winRateTone(winRate: number, games: number, decimals = 0): WinRa
   return shown > 50 ? "win" : shown < 50 ? "loss" : "even";
 }
 
+/** A champion's last month, in the same terms as its season. */
+export type RecentChampionView = {
+  games: number;
+  wins: number;
+  winRate: number;
+  tone: WinRateTone;
+};
+
 export type ChampionView = {
   id: string;
   name: string;
@@ -155,12 +164,33 @@ export type ChampionView = {
   winRate: number;
   adjusted: number;
   tone: WinRateTone;
+  /**
+   * The last month: null when the champion was not played in it, and absent
+   * when the payload carries no recent records at all (an older API, or a
+   * payload cached before it did), so the bar can fall back to the season.
+   */
+  recent?: RecentChampionView | null;
 };
 
-/** Winrate as displayed (rounded) and the Wilson lower bound the list is ordered by. */
-export function championView(champion: ChampionAggregate): ChampionView {
+/**
+ * A champion's recent record. Keys are Match-V5 ids on both sides, but the
+ * season seed and Match-V5 have spelled a few differently ("Fiddlesticks" and
+ * "FiddleSticks"), so a miss retries without case.
+ */
+function recentRecordFor(records: Readonly<Record<string, RecentChampionRecord>>, id: string) {
+  const exact = records[id];
+  if (exact) return exact;
+  const lower = id.toLowerCase();
+  return Object.entries(records).find(([key]) => key.toLowerCase() === lower)?.[1];
+}
+
+/** Winrate as displayed (rounded), the Wilson lower bound the list is picked by, and the last month when known. */
+export function championView(
+  champion: ChampionAggregate,
+  recentRecords?: Readonly<Record<string, RecentChampionRecord>>,
+): ChampionView {
   const winRate = champion.games > 0 ? Math.round((champion.wins / champion.games) * 100) : 0;
-  return {
+  const view: ChampionView = {
     id: champion.id,
     name: championDisplayName(champion),
     games: champion.games,
@@ -168,17 +198,50 @@ export function championView(champion: ChampionAggregate): ChampionView {
     adjusted: Math.round(wilsonLowerBound(champion.wins, champion.games) * 100),
     tone: winRateTone(winRate, champion.games),
   };
+  if (!recentRecords) return view;
+  const record = recentRecordFor(recentRecords, champion.id);
+  const games = Math.max(0, record?.games ?? 0);
+  if (games === 0) return { ...view, recent: null };
+  const wins = Math.min(games, Math.max(0, record?.wins ?? 0));
+  const recentWinRate = Math.round((wins / games) * 100);
+  return { ...view, recent: { games, wins, winRate: recentWinRate, tone: winRateTone(recentWinRate, games) } };
 }
 
-export function bestChampionViews(championCounts: Record<string, ChampionAggregate>, limit: number) {
-  return selectBestChampions(championCounts, limit).map(championView);
+/**
+ * The best champions, picked by the Wilson lower bound so that one lucky game
+ * cannot lead the list. Returned in that order: the podium's art follows the
+ * first. Lists that print the winrate show them with `byWinRate`.
+ */
+export function bestChampionViews(
+  championCounts: Record<string, ChampionAggregate>,
+  limit: number,
+  recentRecords?: Readonly<Record<string, RecentChampionRecord>>,
+) {
+  return selectBestChampions(championCounts, limit).map((champion) => championView(champion, recentRecords));
 }
 
-export function mostPlayedChampionViews(championCounts: Record<string, ChampionAggregate>, limit: number) {
+export function mostPlayedChampionViews(
+  championCounts: Record<string, ChampionAggregate>,
+  limit: number,
+  recentRecords?: Readonly<Record<string, RecentChampionRecord>>,
+) {
   return Object.values(championCounts)
     .sort((a, b) => b.games - a.games || b.wins - a.wins || a.name.localeCompare(b.name))
     .slice(0, Math.max(0, limit))
-    .map(championView);
+    .map((champion) => championView(champion, recentRecords));
+}
+
+/** The picked champions as a reader scans them: highest winrate first, then the larger sample. */
+export function byWinRate(champions: readonly ChampionView[]) {
+  return [...champions].sort((a, b) => b.winRate - a.winRate || b.games - a.games || a.name.localeCompare(b.name));
+}
+
+/** The last month in words, for a champion row's tooltip and label. */
+export function recentRecordText(champion: Pick<ChampionView, "recent">) {
+  if (champion.recent === undefined) return "";
+  if (champion.recent === null) return "sin partidas en los últimos 30 días";
+  const { games, winRate } = champion.recent;
+  return `últimos 30 días: ${winRate}% en ${games} ${games === 1 ? "partida" : "partidas"}`;
 }
 
 const DISPLAY_NAMES: Record<string, string> = {
@@ -210,6 +273,20 @@ const DISPLAY_NAMES: Record<string, string> = {
 export function championDisplayName(champion: Pick<ChampionAggregate, "id" | "name">) {
   if (champion.name && champion.name !== champion.id) return champion.name;
   return DISPLAY_NAMES[champion.id] ?? champion.name ?? champion.id;
+}
+
+/**
+ * Where a name has to fit a champion row's name column. That column is sized
+ * for the longest one-word name, Heimerdinger; the only name longer than it
+ * goes by its first word, as players call it anyway.
+ */
+const SHORT_NAMES: Record<string, string> = {
+  "Nunu y Willump": "Nunu",
+  "Nunu & Willump": "Nunu",
+};
+
+export function championShortName(name: string) {
+  return SHORT_NAMES[name] ?? name;
 }
 
 /** Data Dragon keys that differ from the ids Match-V5 reports. */

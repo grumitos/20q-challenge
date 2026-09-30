@@ -19,10 +19,11 @@ export function TopBar({ liveCount, onOpenGaspi }: {
   liveCount: number;
   onOpenGaspi: () => void;
 }) {
-  const liveText = liveCount === 1 ? "1 en partida" : `${liveCount} en partida`;
+  const liveText = liveCount === 1 ? "1 jugador in-game" : `${liveCount} jugadores in-game`;
 
   return (
-    <header className="topbar">
+    // While someone plays, a phone's bar gives the section links' room to the live count.
+    <header className={`topbar${liveCount > 0 ? " has-live" : ""}`}>
       <div className="topbar__inner shell">
         <span className="brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -31,6 +32,8 @@ export function TopBar({ liveCount, onOpenGaspi }: {
         </span>
         <span className="topbar__rule" aria-hidden="true" />
         <span className="topbar__meta">LAS · Solo/Duo · Temporada 2026</span>
+        {/* The same rule sets the section links apart from the season's line. */}
+        <span className="topbar__rule topbar__rule--nav" aria-hidden="true" />
         <nav className="topbar__nav" aria-label="Secciones">
           {/* Phones say "Top": both links fit the bar, so neither has to hide. */}
           <a href="#clasificacion" aria-label="Clasificación" onClick={(event) => goToSection(event, "clasificacion")}>
@@ -41,12 +44,12 @@ export function TopBar({ liveCount, onOpenGaspi }: {
         </nav>
         <span className="topbar__spacer" />
         {/* The board refreshes itself, so the only status here is a live one:
-            it appears while someone is in a game and is absent otherwise. */}
+            a recording light and the count, while someone is in a game. */}
         {liveCount > 0 ? (
           <span className="topbar__live">
             <i className="live-dot" aria-hidden="true" />
             <span className="sr-only">{liveText}</span>
-            <span aria-hidden="true">{liveCount}<span className="topbar__live-text"> en partida</span></span>
+            <span aria-hidden="true">{liveCount} In-game</span>
           </span>
         ) : null}
         <GaspiDoor onOpen={onOpenGaspi} />

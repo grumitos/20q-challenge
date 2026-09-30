@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   bestChampionViews,
+  byWinRate,
   championDisplayName,
+  championShortName,
   championIconUrl,
   championKey,
   championView,
@@ -23,6 +25,7 @@ import {
   profileUrl,
   rankAsset,
   rankLabel,
+  recentRecordText,
   roleShares,
   winRateTone,
 } from "../lib/ui-format.ts";
@@ -91,6 +94,36 @@ test("orders champions by the Wilson bound and colours them by the rounded winra
   assert.equal(championView({ id: "A", name: "A", games: 1000, wins: 546 }).tone, "win");
   assert.equal(championView({ id: "B", name: "B", games: 1000, wins: 502 }).tone, "even");
   assert.equal(championView({ id: "C", name: "C", games: 100, wins: 49 }).tone, "loss");
+});
+
+test("lists the picked champions by winrate and carries each one's last month", () => {
+  const counts = {
+    Nautilus: { id: "Nautilus", name: "Nautilus", games: 20, wins: 12 },
+    Maokai: { id: "Maokai", name: "Maokai", games: 3, wins: 3 },
+    MissFortune: { id: "MissFortune", name: "MissFortune", games: 28, wins: 14 },
+    Fiddlesticks: { id: "Fiddlesticks", name: "Fiddlesticks", games: 9, wins: 5 },
+  };
+  // Picked by confidence (Nautilus first, for the art), read by winrate.
+  const picks = bestChampionViews(counts, 3);
+  assert.equal(picks[0].id, "Nautilus");
+  assert.deepEqual(byWinRate(picks).map((champion) => champion.id), ["Maokai", "Nautilus", "MissFortune"]);
+
+  // Without recent records the views say nothing about the month; with them, a
+  // champion not played lately is null and a played one carries its record.
+  assert.equal(picks[0].recent, undefined);
+  const recent = { Nautilus: { games: 4, wins: 1 }, FiddleSticks: { games: 2, wins: 2 } };
+  const views = bestChampionViews(counts, 4, recent);
+  const byId = Object.fromEntries(views.map((champion) => [champion.id, champion]));
+  assert.deepEqual(byId.Nautilus.recent, { games: 4, wins: 1, winRate: 25, tone: "loss" });
+  assert.equal(byId.Maokai.recent, null);
+  // Match-V5 and the seed spell a few ids differently; the month still finds them.
+  assert.deepEqual(byId.Fiddlesticks.recent, { games: 2, wins: 2, winRate: 100, tone: "win" });
+  assert.equal(recentRecordText(byId.Nautilus), "últimos 30 días: 25% en 4 partidas");
+  assert.equal(recentRecordText(byId.Maokai), "sin partidas en los últimos 30 días");
+  assert.equal(recentRecordText(picks[0]), "");
+  // The one name longer than the column goes by its first word.
+  assert.equal(championShortName("Nunu y Willump"), "Nunu");
+  assert.equal(championShortName("Heimerdinger"), "Heimerdinger");
 });
 
 test("inks results green, red or grey, judged on what the board prints", () => {

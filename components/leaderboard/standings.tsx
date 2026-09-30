@@ -1,5 +1,5 @@
 import { AnimatePresence, m } from "motion/react";
-import { useState, type MouseEvent } from "react";
+import { useState, useSyncExternalStore, type MouseEvent } from "react";
 import {
   isRemakeMatch,
   orderMatchRoster,
@@ -10,6 +10,8 @@ import { DURATION, EASE, ENTRANCE } from "../../lib/motion";
 import {
   ROLE_LABELS,
   bestChampionViews,
+  byWinRate,
+  championDisplayName,
   championIconUrl,
   formatAge,
   formatDuration,
@@ -20,28 +22,56 @@ import {
   matchDetailsUrl,
   mostPlayedChampionViews,
   outcomeLabel,
+  peerNames,
   profileUrl,
   rankLabel,
   winRateTone,
 } from "../../lib/ui-format";
 import { ChevronDownIcon, ClockIcon, ExternalIcon, RoleIcon } from "./icons";
+import { PlayerPanel } from "./player-panel";
 import {
   Avatar,
   ChampionBars,
   ChampionTiles,
   FormPills,
+  InfoHint,
   KdaFigures,
+  LiveBadge,
   MatchLine,
   PlayerSummary,
   RankEmblem,
   RespawnClock,
   RoleList,
   Segmented,
+  WINRATE_BAR_HINT,
   tierClass,
 } from "./primitives";
 
 export const ROW_CHAMPION_SLOTS = 4;
 const DETAIL_CHAMPION_SLOTS = 5;
+
+/**
+ * Where the row detail stops laying its four blocks side by side and becomes
+ * the last match over the podium's switchable panel (stacked on a phone, side
+ * by side on a half screen), so it stays short where vertical space is scarce.
+ * It is only read after a click (a detail never renders on the server), so the
+ * server snapshot is never used.
+ */
+const NARROW_DETAIL_QUERY = "(max-width: 959px)";
+
+function subscribeNarrowDetail(onChange: () => void) {
+  const list = window.matchMedia(NARROW_DETAIL_QUERY);
+  list.addEventListener("change", onChange);
+  return () => list.removeEventListener("change", onChange);
+}
+
+function useNarrowDetail() {
+  return useSyncExternalStore(
+    subscribeNarrowDetail,
+    () => window.matchMedia(NARROW_DETAIL_QUERY).matches,
+    () => false,
+  );
+}
 
 /** The two ways the detail lists a player's champions. */
 const DETAIL_ORDERS = [
@@ -121,8 +151,12 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
   // under the clock inert.
   const isOpen = open && !dead;
   const unranked = player.tier === "UNRANKED";
+  const live = player.liveGame ?? null;
   const role = player.riotIdFound ? player.analytics.mainRole : "UNKNOWN";
-  const champions = player.riotIdFound ? bestChampionViews(player.analytics.championCounts, ROW_CHAMPION_SLOTS) : [];
+  // Picked by the Wilson bound, shown by winrate so the percentages read in order.
+  const champions = player.riotIdFound
+    ? byWinRate(bestChampionViews(player.analytics.championCounts, ROW_CHAMPION_SLOTS, player.recentChampions))
+    : [];
   const games = player.wins + player.losses;
   const detailId = `detalle-${player.id}`;
 
@@ -139,31 +173,44 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: ENTRANCE.row.duration, delay: Math.min(ENTRANCE.row.maxDelay, (place - 4) * ENTRANCE.row.step), ease: EASE }}
-      className={`srow${isOpen ? " is-open" : ""}${dead ? " is-dead" : ""}${unranked ? " is-unranked" : ""}`}
+      className={`srow${isOpen ? " is-open" : ""}${dead ? " is-dead" : ""}${live ? " is-live" : ""}${unranked ? " is-unranked" : ""}`}
       data-ranking-id={player.id}
     >
       <div className="srow__main srow-grid" onClick={handleRowClick}>
+        {/* On curfew the clock lies centred over the whole row, the player
+            included, and everything under it goes soft and inert. */}
+        {respawnSeconds !== null ? <div className="srow__respawn"><RespawnClock seconds={respawnSeconds} playerName={player.gameName} /></div> : null}
+
         <span className="srow__place" inert={dead}>
           <b className="mono">{place}</b>
           <PlaceDelta delta={player.placeDelta} />
         </span>
 
+        {/* The photo, the name and the tag are one link to the profile; the
+            photo takes a frame on hover, apart from the row's own highlight. */}
         <a className="srow__player" href={profileUrl(player)} target="_blank" rel="noreferrer" aria-label={`Ver perfil de ${player.gameName} en League of Graphs`} inert={dead}>
           <Avatar player={player} version={version} size={36} className="srow__avatar" />
           <span className="srow__who" translate="no">
             <strong>{player.gameName}</strong>
             <small className="srow__meta">
-              <span className="mono">#{player.tagLine}</span>
-              <span aria-hidden="true">·</span>
-              <RoleIcon role={role} size={12} />
-              <span>{ROLE_LABELS[role]}</span>
+              <span className="mono srow__tag">#{player.tagLine}</span>
+              <span className="srow__meta-sep" aria-hidden="true">·</span>
+              <span className="srow__role" title={player.riotIdFound ? `${ROLE_LABELS[role]} · ${player.analytics.roleShare}% de sus partidas` : undefined}>
+                <RoleIcon role={role} size={12} />
+                {ROLE_LABELS[role]}
+                {player.riotIdFound ? <span className="mono srow__role-share">{player.analytics.roleShare}%</span> : null}
+              </span>
             </small>
+            {/* Where the table has no last-match column, the game in progress
+                is named here with its clock, in place of the tag and role. */}
+            {live ? (
+              <small className="srow__live">
+                <LiveBadge />
+                <b className="mono">{formatDuration(Math.max(0, Math.floor((now - live.gameStartedAt) / 1000)))}</b>
+              </small>
+            ) : null}
           </span>
-          <RoleIcon role={role} size={12} className="srow__role-mark" />
         </a>
-
-        {/* The clock lies over the row's figures, from the rank to the end. */}
-        {respawnSeconds !== null ? <div className="srow__respawn"><RespawnClock seconds={respawnSeconds} playerName={player.gameName} /></div> : null}
 
         <span className="srow__rank" inert={dead}>
           <RankEmblem tier={player.tier} size={40} className="srow__emblem" />
@@ -236,6 +283,7 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
   );
 }
 
+/** One side of the last match: its five champions, flush right, the player's own ringed and challenge members' in gold. */
 function RosterRow({ label, slots, playerId, version }: {
   label: string;
   slots: readonly RosterSlot[];
@@ -250,15 +298,16 @@ function RosterRow({ label, slots, playerId, version }: {
           if (!participant) return <span key={index} className="roster__slot is-empty" />;
           const isSelf = participant.challengePlayerId === playerId;
           const isPeer = participant.challengePlayerId !== null && !isSelf;
+          const champion = championDisplayName({ id: participant.championId, name: participant.championName });
           return (
             <span
               key={index}
               className={`roster__slot${isSelf ? " is-self" : ""}${isPeer ? " is-peer" : ""}`}
-              title={`${participant.championName} · ${participant.gameName}`}
+              title={`${champion} · ${participant.gameName}`}
             >
               {participant.championId
                 // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={championIconUrl(version, participant.championId)} alt={participant.championName} width={28} height={28} loading="lazy" decoding="async" />
+                ? <img src={championIconUrl(version, participant.championId)} alt={champion} width={28} height={28} loading="lazy" decoding="async" />
                 : null}
             </span>
           );
@@ -268,33 +317,32 @@ function RosterRow({ label, slots, playerId, version }: {
   );
 }
 
-function RowDetail({ player, version, roster, now }: {
+/**
+ * The last match in full: the podium line's figures in the same words (the
+ * result and the age, the K/D/A with its ratio and the length, the lane and the
+ * champion with any challenge company), then both teams.
+ */
+function LastMatchBlock({ player, version, roster, now }: {
   player: PlayerSnapshot;
   version: string;
   roster: readonly PlayerSnapshot[];
   now: number;
 }) {
-  // Null until the reader picks a list, as in the podium's panel: only their
-  // switches bring the list in with motion.
-  const [chosen, setChosen] = useState<DetailOrder | null>(null);
-  const order = chosen ?? "best";
-  const counts = player.analytics.championCounts;
-  const champions = order === "best"
-    ? bestChampionViews(counts, DETAIL_CHAMPION_SLOTS)
-    : mostPlayedChampionViews(counts, DETAIL_CHAMPION_SLOTS);
   const match = player.lastSoloQueueMatch;
+  const matchHref = match ? matchDetailsUrl(match.matchId) : null;
 
-  let matchBlock = <p className="empty-note">Sin partidas SoloQ recientes</p>;
+  let body = <p className="empty-note">Sin partidas SoloQ recientes</p>;
   if (match) {
     const remake = isRemakeMatch(match);
     const outcome = remake ? "remake" : match.win ? "win" : "loss";
     const lp = formatLpChange(match.lpChangeEvidence, remake);
     const lpTone = lpChangeTone(match.lpChangeEvidence, remake);
     const { allies, enemies } = orderMatchRoster(match.participants, player.id);
-    matchBlock = (
+    const role = match.participants.find((participant) => participant.challengePlayerId === player.id)?.role;
+    const lane = role && role !== "UNKNOWN" ? role : null;
+    const company = peerNames(match.participants, player.id, roster);
+    body = (
       <>
-        {/* The podium line's figures, in the same words: the result and the
-            age, then the K/D/A, its ratio and the length, the time flush right. */}
         <p className="detail__result">
           <b className={`outcome is-${outcome}`}>{outcomeLabel(outcome)}</b>
           {lp ? <span className={`mono lp-change is-${lpTone}`} title={lpEvidenceTitle(match.lpChangeEvidence, remake)}>{lp}</span> : null}
@@ -305,23 +353,75 @@ function RowDetail({ player, version, roster, now }: {
           <small className="mono">{kdaRatio(match.kills, match.deaths, match.assists)} KDA</small>
           <span className="detail__when mono"><ClockIcon size={12} />{formatDuration(match.durationSeconds)}</span>
         </p>
+        <p className="detail__champ">
+          {lane ? <><RoleIcon role={lane} size={13} /><span className="detail__lane">{ROLE_LABELS[lane]}</span><span className="detail__sep" aria-hidden="true">·</span></> : null}
+          <span className="detail__champ-name">{championDisplayName({ id: match.championId, name: match.championName })}</span>
+          {company.length > 0 ? <span className="detail__with" translate="no">con <b>{company.join(", ")}</b></span> : null}
+        </p>
         {allies.length > 0 ? (
           <div className="roster">
-            <RosterRow label="Su equipo" slots={allies} playerId={player.id} version={version} />
-            {enemies.length > 0 ? <RosterRow label="Rivales" slots={enemies} playerId={player.id} version={version} /> : null}
+            <RosterRow label="Equipo" slots={allies} playerId={player.id} version={version} />
+            {enemies.length > 0 ? <RosterRow label="Enemigo" slots={enemies} playerId={player.id} version={version} /> : null}
           </div>
         ) : null}
       </>
     );
   }
-  const matchHref = match ? matchDetailsUrl(match.matchId) : null;
 
+  return (
+    <section className="detail__block detail__match" aria-label={`Última partida de ${player.gameName}`}>
+      <div className="section-label">
+        <span>Última partida</span>
+        {matchHref ? (
+          <a href={matchHref} target="_blank" rel="noreferrer" className="text-link">
+            Ver en League of Graphs <ExternalIcon size={12} />
+          </a>
+        ) : null}
+      </div>
+      {body}
+    </section>
+  );
+}
+
+function RowDetail({ player, version, roster, now }: {
+  player: PlayerSnapshot;
+  version: string;
+  roster: readonly PlayerSnapshot[];
+  now: number;
+}) {
+  const narrow = useNarrowDetail();
+  // Null until the reader picks a list, as in the podium's panel: only their
+  // switches bring the list in with motion.
+  const [chosen, setChosen] = useState<DetailOrder | null>(null);
+  const order = chosen ?? "best";
+  const counts = player.analytics.championCounts;
+  const recent = player.recentChampions;
+  // Picked by the Wilson bound, shown by winrate, as everywhere else.
+  const best = byWinRate(bestChampionViews(counts, DETAIL_CHAMPION_SLOTS, recent));
+
+  // A narrow screen gets the podium's arrangement: the last match, then one
+  // panel whose switch shows the champions, the roles or the summary.
+  if (narrow) {
+    return (
+      <div className="detail is-narrow">
+        <LastMatchBlock player={player} version={version} roster={roster} now={now} />
+        <section className="detail__block" aria-label={`Campeones, roles y resumen de ${player.gameName}`}>
+          <PlayerPanel player={player} roster={roster} version={version} best={best} slots={DETAIL_CHAMPION_SLOTS} />
+        </section>
+      </div>
+    );
+  }
+
+  const champions = order === "best" ? best : mostPlayedChampionViews(counts, DETAIL_CHAMPION_SLOTS, recent);
   return (
     <div className="detail">
       <section className="detail__block" aria-label={`Campeones de ${player.gameName}`}>
         <div className="section-label">
           <span>Campeones</span>
-          <Segmented options={DETAIL_ORDERS} value={order} onChange={setChosen} label="Ordenar campeones" />
+          <span className="detail__switch">
+            <Segmented options={DETAIL_ORDERS} value={order} onChange={setChosen} label="Ordenar campeones" />
+            <InfoHint label={WINRATE_BAR_HINT} />
+          </span>
         </div>
         <div key={order} className={chosen === null ? undefined : "swap-in"}>
           <ChampionBars champions={champions} version={version} label={`Campeones de ${player.gameName}`} />
@@ -333,17 +433,7 @@ function RowDetail({ player, version, roster, now }: {
         <RoleList player={player} />
       </section>
 
-      <section className="detail__block" aria-label={`Última partida de ${player.gameName}`}>
-        <div className="section-label">
-          <span>Última partida</span>
-          {matchHref ? (
-            <a href={matchHref} target="_blank" rel="noreferrer" className="text-link">
-              Ver en League of Graphs <ExternalIcon size={12} />
-            </a>
-          ) : null}
-        </div>
-        {matchBlock}
-      </section>
+      <LastMatchBlock player={player} version={version} roster={roster} now={now} />
 
       <section className="detail__block" aria-label={`Resumen de ${player.gameName}`}>
         <div className="section-label"><span>Resumen</span></div>
