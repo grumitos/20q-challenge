@@ -102,6 +102,19 @@ export type LastSoloQueueMatch = {
   participants: LastMatchParticipant[];
 };
 
+/**
+ * A champion's record over the recent window (`RECENT_CHAMPION_WINDOW_DAYS`),
+ * keyed on the player's snapshot by the champion's Match-V5 id, the same key
+ * `ChampionAggregate.id` carries.
+ */
+export type RecentChampionRecord = {
+  games: number;
+  wins: number;
+};
+
+/** How far back a champion's recent record reaches: the last month of games. */
+export const RECENT_CHAMPION_WINDOW_DAYS = 30;
+
 /** Most frequent challenge teammate, aggregated over the indexed history. */
 export type HabitualDuo = {
   playerId: string;
@@ -213,6 +226,12 @@ export type PlayerSnapshot = {
   habitualDuo?: HabitualDuo | null;
   liveGame?: LiveGame | null;
   placeDelta?: number;
+  /**
+   * Each champion's record over the last month, resolved on the read path like
+   * the enrichments above. Absent (not empty) when the API could not tell: an
+   * older API or a payload cached before it existed.
+   */
+  recentChampions?: Record<string, RecentChampionRecord>;
 };
 
 /**
@@ -666,6 +685,13 @@ function isDuoRecord(value: unknown): value is DuoRecord {
     typeof value.score === "number";
 }
 
+function isRecentChampions(value: unknown): value is Record<string, RecentChampionRecord> {
+  return isRecord(value) && Object.values(value).every((entry) =>
+    isRecord(entry) &&
+    typeof entry.games === "number" && Number.isFinite(entry.games) &&
+    typeof entry.wins === "number" && Number.isFinite(entry.wins));
+}
+
 function isLiveGame(value: unknown): value is LiveGame {
   return isRecord(value) &&
     typeof value.platformGameId === "string" &&
@@ -686,6 +712,7 @@ function isPlayerSnapshot(value: unknown): value is PlayerSnapshot {
   if (value.habitualDuo !== undefined && value.habitualDuo !== null && !isHabitualDuo(value.habitualDuo)) return false;
   if (value.liveGame !== undefined && value.liveGame !== null && !isLiveGame(value.liveGame)) return false;
   if (value.placeDelta !== undefined && typeof value.placeDelta !== "number") return false;
+  if (value.recentChampions !== undefined && !isRecentChampions(value.recentChampions)) return false;
   return (
     typeof value.id === "string" &&
     typeof value.gameName === "string" &&
@@ -747,6 +774,7 @@ export function parseLeaderboardSnapshot(serialized: string): LeaderboardSnapsho
       ...(player.habitualDuo !== undefined ? { habitualDuo: player.habitualDuo } : {}),
       ...(player.liveGame !== undefined ? { liveGame: player.liveGame } : {}),
       ...(player.placeDelta !== undefined ? { placeDelta: player.placeDelta } : {}),
+      ...(player.recentChampions !== undefined ? { recentChampions: player.recentChampions } : {}),
       analytics: {
         ...player.analytics,
         backfillStatus: player.analytics.backfillStatus ?? (

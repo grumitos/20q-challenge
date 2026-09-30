@@ -306,6 +306,23 @@ test("recalculates best champions when cached top champions use the legacy games
   assert.notEqual(parsed?.players.find((player) => player.gameName === "Papipu")?.analytics.topChampions[0]?.id, "Lucky");
 });
 
+test("carries each champion's last month only when the API sent it, and rejects a malformed one", async () => {
+  const { createDemoSnapshot } = await import("../lib/leaderboard.ts");
+  const cached = createDemoSnapshot(new Date("2026-07-13T18:00:00.000Z"));
+
+  // Absent stays absent: an older API or cache must not read as "nothing played this month".
+  assert.ok(parseLeaderboardSnapshot(JSON.stringify(cached))?.players.every((player) => !("recentChampions" in player)));
+
+  cached.players[0].recentChampions = { Ahri: { games: 3, wins: 2 } };
+  cached.players[1].recentChampions = {};
+  const parsed = parseLeaderboardSnapshot(JSON.stringify(cached));
+  assert.deepEqual(parsed?.players[0].recentChampions, { Ahri: { games: 3, wins: 2 } });
+  assert.deepEqual(parsed?.players[1].recentChampions, {});
+
+  cached.players[0].recentChampions = { Ahri: { games: "3", wins: 2 } };
+  assert.equal(parseLeaderboardSnapshot(JSON.stringify(cached)), null);
+});
+
 test("validates the browser payload before rendering API data", async () => {
   const { createDemoSnapshot } = await import("../lib/leaderboard.ts");
   const data = createDemoSnapshot(new Date("2026-07-13T18:00:00.000Z"));
