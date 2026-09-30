@@ -60,7 +60,7 @@ test("server-renders the 20Q Challenge dashboard", async () => {
   assert.match(html, /aria-busy="true"/);
   assert.match(html, /class="pcard place-1 is-pending"/);
   assert.match(html, /class="srow is-pending"/);
-  assert.match(html, /Cargando/);
+  assert.doesNotMatch(html, /Actualizado|Actualizar/);
   assert.match(html, /href="\/privacy"/);
   assert.match(html, /href="\/terms"/);
   assert.match(html, /is not endorsed by Riot Games/i);

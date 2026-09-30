@@ -9,6 +9,7 @@ import {
 } from "../../lib/leaderboard";
 import {
   championIconUrl,
+  firstName,
   formSlots,
   formatAge,
   formatDuration,
@@ -20,13 +21,15 @@ import {
   outcomeLabel,
   peerNames,
   peerText,
+  perGameAverages,
   profileIconUrl,
   profileUrl,
   rankAsset,
+  roleShares,
   type ChampionView,
   type MatchOutcome,
 } from "../../lib/ui-format";
-import { ChevronRightIcon, InfoIcon, MoonIcon } from "./icons";
+import { ChevronRightIcon, InfoIcon, MoonIcon, RoleIcon } from "./icons";
 
 export function Avatar({ player, version, size, className = "" }: {
   player: Pick<PlayerSnapshot, "gameName" | "profileIconId" | "riotIdFound">;
@@ -97,7 +100,8 @@ export function PlaceChip({ place }: { place: number }) {
   );
 }
 
-export function InfoHint({ label, children }: { label: string; children: ReactNode }) {
+/** An "i" that explains itself on hover; `children` is an optional visible caption before it. */
+export function InfoHint({ label, children }: { label: string; children?: ReactNode }) {
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
@@ -116,7 +120,7 @@ export function InfoHint({ label, children }: { label: string; children: ReactNo
 }
 
 export const WINRATE_BAR_HINT =
-  "Barra sólida: winrate ajustado por número de partidas (99% de confianza). Barra clara: winrate observado.";
+  "Barra sólida: winrate ajustado por número de partidas (99% de confianza).\nBarra clara: winrate observado.";
 
 /** Rows with the adjusted winrate as the solid bar and the observed winrate as its lighter tail. */
 export function ChampionBars({ champions, version, label }: { champions: readonly ChampionView[]; version: string; label: string }) {
@@ -167,6 +171,59 @@ export function ChampionTiles({ champions, version, showGames = false, size = 30
         </li>
       ))}
     </ul>
+  );
+}
+
+/** The roles a player has played, most played first, each against the top one. */
+export function RoleList({ player }: { player: PlayerSnapshot }) {
+  const roles = roleShares(player.analytics.roleCounts).slice(0, 5);
+  if (roles.length === 0) return <p className="empty-note">Sin partidas analizadas</p>;
+  return (
+    <ul className="role-list" aria-label={`Roles de ${player.gameName}`}>
+      {roles.map((entry) => (
+        <li key={entry.role}>
+          <RoleIcon role={entry.role} size={14} />
+          <span className="role-list__name">{entry.label}</span>
+          <span className="role-list__bar" aria-hidden="true"><i style={{ width: `${entry.bar}%` }} /></span>
+          <span className="mono role-list__value">{entry.games} · {entry.share}%</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Per-game averages, the habitual duo and how many games the analysis rests on. */
+export function PlayerSummary({ player, roster, version }: {
+  player: PlayerSnapshot;
+  roster: readonly PlayerSnapshot[];
+  version: string;
+}) {
+  const averages = perGameAverages(player.analytics);
+  const duo = player.habitualDuo;
+  const duoPlayer = duo ? roster.find((candidate) => candidate.id === duo.playerId) : undefined;
+  return (
+    <dl className="summary">
+      <div>
+        <dt>Promedio por partida</dt>
+        <dd className="mono">{averages ?? "—"}</dd>
+      </div>
+      <div>
+        <dt>Dúo habitual</dt>
+        <dd className="summary__duo">
+          {duo ? (
+            <>
+              {duoPlayer ? <Avatar player={duoPlayer} version={version} size={22} /> : null}
+              <b translate="no">{firstName(duoPlayer?.gameName ?? duo.gameName)}</b>
+              <small className="mono">{duo.games} partidas</small>
+            </>
+          ) : "—"}
+        </dd>
+      </div>
+      <div>
+        <dt>Partidas analizadas</dt>
+        <dd className="mono">{player.analytics.games}</dd>
+      </div>
+    </dl>
   );
 }
 

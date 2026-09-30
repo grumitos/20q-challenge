@@ -11,17 +11,14 @@ import {
   type PlayerSnapshot,
 } from "../lib/leaderboard";
 import { nextPeruHourUtc } from "../lib/peru-time";
-import { formatLimaTime } from "../lib/ui-format";
 import { Duos } from "../components/leaderboard/duos";
 import { GASPI_TITLE, GaspiDialog, playHelicopter } from "../components/leaderboard/gaspi";
 import { Podium } from "../components/leaderboard/podium";
 import { Standings } from "../components/leaderboard/standings";
-import { TopBar, useBoardSection } from "../components/leaderboard/top-bar";
+import { TopBar } from "../components/leaderboard/top-bar";
 
 const LEADERBOARD_STORAGE_KEY = "20q-leaderboard-payload-v1";
 const LEADERBOARD_REFRESH_MS = 60_000;
-/** Past this age the board says the data is old instead of passing it off as fresh. */
-const STALE_AFTER_MS = 5 * 60_000;
 const PRODUCTION_API_ORIGIN = "https://20q-api.yasmiau.com";
 const configuredLeaderboardApiOrigin = process.env.NEXT_PUBLIC_LEADERBOARD_API_ORIGIN?.trim().replace(/\/+$/, "");
 
@@ -85,8 +82,6 @@ export default function Home() {
   const version = payload?.data.dataDragonVersion ?? "16.19.1";
   const pending = payload === null;
   const liveCount = standings.filter((player) => player.liveGame).length;
-  const fetchedAt = payload ? Date.parse(payload.data.fetchedAt) : null;
-  const stale = fetchedAt !== null && Number.isFinite(fetchedAt) && clockNow - fetchedAt > STALE_AFTER_MS;
   const papipuSeconds = papipuRespawnSeconds(clockNow);
   const respawnFor = useCallback(
     (player: PlayerSnapshot) => (player.gameName.toLocaleLowerCase("es-PE") === "papipu" ? papipuSeconds : null),
@@ -210,6 +205,15 @@ export default function Home() {
     document.title = homeTitle();
   }, [homeTitle]);
 
+  // Earlier visits left "#duos" or "#clasificacion" in the address bar. Some
+  // mobile browsers re-apply an anchor whenever their toolbar resizes, which
+  // pulled the page back while it was being scrolled. The section links no
+  // longer set one, and this drops any that a bookmark or old tab still carries.
+  useEffect(() => {
+    const { hash, pathname, search } = window.location;
+    if (hash === "#duos" || hash === "#clasificacion") window.history.replaceState(null, "", `${pathname}${search}`);
+  }, []);
+
   useEffect(() => {
     let isAway = false;
     // Drawn without replacement, so a session's worth of tab-aways works
@@ -251,10 +255,7 @@ export default function Home() {
     };
   }, [homeTitle]);
 
-  const updatedAt = payload ? formatLimaTime(payload.data.fetchedAt) : null;
   const unreachable = loadError && payload === null;
-  const hasDuos = Boolean(payload?.data.duos?.length) && !unreachable;
-  const section = useBoardSection(hasDuos);
 
   return (
     <LazyMotion features={domMax} strict>
@@ -262,11 +263,7 @@ export default function Home() {
         <Tooltip.Provider delayDuration={150} skipDelayDuration={300}>
           <a className="skip-link" href="#clasificacion">Ir al ranking</a>
           <TopBar
-            updatedAt={updatedAt}
-            stale={stale || (loadError && payload !== null)}
             liveCount={liveCount}
-            section={section}
-            onRefresh={() => reloadBoard.current()}
             onOpenGaspi={openGaspi}
           />
           <main className="page" aria-busy={pending && !unreachable}>
@@ -287,13 +284,10 @@ export default function Home() {
             )}
           </main>
           <footer className="footer shell">
-            <div className="footer__row">
-              <span>Datos de la API de Riot Games · el marcador se actualiza solo cada minuto</span>
-              <nav aria-label="Documentos legales">
-                <a href="/privacy">Privacidad</a>
-                <a href="/terms">Términos</a>
-              </nav>
-            </div>
+            <nav className="footer__nav" aria-label="Documentos legales">
+              <a href="/privacy">Privacidad</a>
+              <a href="/terms">Términos</a>
+            </nav>
             <p lang="en">20Q Challenge is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
           </footer>
           <GaspiDialog open={gaspiOpen} seen={gaspiSeen} onOpenChange={setGaspiOpen} />

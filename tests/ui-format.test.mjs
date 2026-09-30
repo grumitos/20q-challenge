@@ -14,7 +14,6 @@ import {
   formatDuration,
   formatLimaTime,
   formatLpChange,
-  gapText,
   kdaRatio,
   matchDetailsUrl,
   mostPlayedChampionViews,
@@ -26,15 +25,6 @@ import {
   roleShares,
 } from "../lib/ui-format.ts";
 
-const player = (overrides) => ({
-  id: overrides.id ?? overrides.gameName.toLowerCase(),
-  gameName: "Player",
-  tier: "SILVER",
-  division: "IV",
-  leaguePoints: 0,
-  ...overrides,
-});
-
 test("names ranks and crests the way the board prints them", () => {
   assert.equal(rankLabel({ tier: "PLATINUM", division: "IV" }), "Platino IV");
   assert.equal(rankLabel({ tier: "MASTER", division: "" }), "Maestro");
@@ -43,19 +33,9 @@ test("names ranks and crests the way the board prints them", () => {
   assert.equal(rankAsset("UNRANKED"), "/ranks/iron.png");
 });
 
-test("states the distance to the player above by first name, and nothing for the leader", () => {
-  const standings = [
-    player({ gameName: "Mamimu", tier: "PLATINUM", division: "IV", leaguePoints: 27 }),
-    player({ gameName: "INTI VIRAC0NCHA", tier: "PLATINUM", division: "IV", leaguePoints: 0 }),
-    player({ gameName: "RVN", tier: "GOLD", division: "IV", leaguePoints: 61 }),
-    player({ gameName: "Nuevo", tier: "UNRANKED", division: "", leaguePoints: 0 }),
-  ];
-  assert.equal(gapText(standings, 0), "", "the leader's lead is redundant: being first says it");
-  assert.equal(gapText(standings, 1), "27 PL para Mamimu");
-  assert.equal(gapText(standings, 2), "339 PL para INTI");
-  assert.equal(gapText(standings, 2, true), "339 para INTI");
-  assert.equal(gapText(standings, 3), "Sin partidas clasificadas");
+test("calls a player by the first word of their Riot ID", () => {
   assert.equal(firstName("  INTI   VIRAC0NCHA "), "INTI");
+  assert.equal(firstName("Mamimu"), "Mamimu");
 });
 
 test("formats ages, durations and Lima wall-clock time", () => {
