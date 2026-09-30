@@ -174,16 +174,19 @@ export function InfoHint({ label, children }: { label: string; children?: ReactN
 
 /** What each panel view's "i" explains; the podium's switch keeps it in every view, so the switch never changes width. */
 export const WINRATE_BAR_HINT =
-  "Barra de color: winrate de los últimos 30 días (pasa el cursor por un campeón para ver sus partidas).\nBarra gris y porcentaje: winrate de toda la temporada.";
+  "Barra y porcentaje: winrate de toda la temporada.\nMarca: winrate de los últimos 30 días; hueca si fueron 1 o 2 partidas (pasa el cursor para ver cuántas).";
 export const ROLES_HINT = "Partidas de la temporada en cada rol y su porcentaje; la barra compara cada rol con el más jugado.";
 export const SUMMARY_HINT = "Promedios y dúo habitual sobre las partidas analizadas de la temporada.";
 
 /**
- * One row per champion, its bar two layers on one track: grey for the whole
- * season (the percentage beside it) and, over it, the result's ink for the last
- * month. A champion running hot or cold shows at a glance, and one not played
- * lately is only grey. Without recent records (an older payload) the ink shows
- * the season instead, so the bars never go blank.
+ * One row per champion. The bar and the percentage are the season, the bar in
+ * the muted ink of its own result, so the two always agree. The last month is
+ * a mark in the bright ink of its own result, standing where that month's
+ * winrate falls: past the bar's end the champion is running hot, inside it
+ * cold, and at either edge the month still shows (a lost month sits on the
+ * left). A mark is hollow when the month rests on one or two games, and there
+ * is none when the champion was not played in it, or when the payload carries
+ * no month at all (an older API).
  */
 export function ChampionBars({ champions, version, label }: { champions: readonly ChampionView[]; version: string; label: string }) {
   if (champions.length === 0) return <p className="empty-note">Sin campeones registrados todavía</p>;
@@ -191,9 +194,7 @@ export function ChampionBars({ champions, version, label }: { champions: readonl
     <ul className="champ-list" aria-label={label}>
       {champions.map((champion) => {
         const recent = recentRecordText(champion);
-        const ink = champion.recent === undefined
-          ? { winRate: champion.winRate, tone: champion.tone }
-          : champion.recent;
+        const month = champion.recent;
         return (
           <li
             key={champion.id}
@@ -207,10 +208,16 @@ export function ChampionBars({ champions, version, label }: { champions: readonl
             </span>
             <span className="champ-row__name" aria-hidden="true">{championShortName(champion.name)}</span>
             <span className="champ-row__games mono" aria-hidden="true">{champion.games}p</span>
-            <span className={`wr-track${ink ? ` is-${ink.tone}` : ""}`} aria-hidden="true">
+            <span className={`wr-track is-${champion.tone}`} aria-hidden="true">
               <i className="wr-track__season" style={{ width: `${champion.winRate}%` }} />
-              {/* A month without a win still shows a sliver of red: played, and lost. */}
-              {ink ? <i className="wr-track__recent" style={{ width: `${Math.max(2, ink.winRate)}%` }} /> : null}
+              {/* Clamped inside the track, so 0% and 100% stay on it. Not an <i>:
+                  the switch's bar-fill animation is for the bars, not the mark. */}
+              {month ? (
+                <b
+                  className={`wr-track__month is-${month.tone}${month.games < 3 ? " is-few" : ""}`}
+                  style={{ left: `clamp(0px, calc(${month.winRate}% - 2px), calc(100% - 4px))` }}
+                />
+              ) : null}
             </span>
             <span className={`champ-row__wr mono tone-${champion.tone}`} aria-hidden="true">{champion.winRate}%</span>
           </li>
@@ -369,13 +376,14 @@ function MatchCompany({ names }: { names: readonly string[] }) {
 /**
  * The player's most recent game: a live game while they are in one, otherwise
  * the last SoloQ match with its inferred PL change. Its figures sit on a grid
- * of two rows: the result, the K/D/A and the age above; the lane and champion
- * below, then either the ratio and the length or, when challenge members
- * shared the game, who they were across both of those columns (in a duo the
- * company says more than the length). The figure columns are the same width
- * on every wide card, so the podium reads as one table; narrower cards size
- * them to their content, and the narrowest stack the figures in two columns.
- * `compact` is the table's two-line form: the result, then the K/D/A and the age.
+ * of two rows: the result, the K/D/A and the age above; the lane and champion,
+ * the ratio and the length below, where a game shared with challenge members
+ * names them instead of the length (in a duo the company says more). The
+ * figure columns are the same width on every wide card, so the podium reads as
+ * one table; narrower cards size them to their content, and the narrowest
+ * stack the figures in two columns. `compact` is the table's three-line form,
+ * the same facts in a narrow column: the result and the age, the lane and
+ * champion and the K/D/A, then the length (or the company) and the ratio.
  */
 export function MatchLine({ player, roster, version, now, compact = false }: {
   player: PlayerSnapshot;
@@ -387,8 +395,7 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
   const live = player.liveGame;
   if (live) {
     const elapsed = Math.max(0, Math.floor((now - live.gameStartedAt) / 1000));
-    // The table's form leaves the company out.
-    const company = compact ? [] : peerNames(live.participants, player.id, roster);
+    const company = peerNames(live.participants, player.id, roster);
     return (
       <div className={`mline is-live${compact ? " is-compact" : ""}${company.length > 0 ? " has-company" : ""}`}>
         <span className="mline__icon">
@@ -402,7 +409,7 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
             <LiveBadge />
             <b className="mono mline__clock" role="timer" aria-label={`In-game desde hace ${formatDuration(elapsed)}`}>{formatDuration(elapsed)}</b>
           </span>
-          {compact ? null : <span className="mline__age">desde {formatLimaTime(live.gameStartedAt)}</span>}
+          <span className="mline__age">desde {formatLimaTime(live.gameStartedAt)}</span>
           {/* Spectator data has no lane, so a live game names only the champion. */}
           <MatchChampion name={championDisplayName({ id: live.championId, name: live.championName })} />
           {company.length > 0 ? <MatchCompany names={company} /> : null}
@@ -422,7 +429,7 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
   const lpTone = lpChangeTone(match.lpChangeEvidence, remake);
   const href = matchDetailsUrl(match.matchId) ?? profileUrl(player);
   const kda = `${match.kills}/${match.deaths}/${match.assists}`;
-  const company = compact ? [] : peerNames(match.participants, player.id, roster);
+  const company = peerNames(match.participants, player.id, roster);
   const age = formatAge(match.gameStartTimestamp, now);
   const role = match.participants.find((participant) => participant.challengePlayerId === player.id)?.role;
   const lane = role && role !== "UNKNOWN" ? ROLE_LABELS[role] : null;
@@ -447,17 +454,12 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
         </span>
         <span className="mline__kda"><KdaFigures kills={match.kills} deaths={match.deaths} assists={match.assists} /></span>
         <span className="mline__age">{age}</span>
-        {compact ? null : (
-          <>
-            <MatchChampion name={champion} role={role} />
-            {company.length > 0 ? <MatchCompany names={company} /> : (
-              <>
-                <small className="mline__ratio mono">{kdaRatio(match.kills, match.deaths, match.assists)} KDA</small>
-                <span className="mline__time mono"><ClockIcon size={12} />{formatDuration(match.durationSeconds)}</span>
-              </>
-            )}
-          </>
-        )}
+        <MatchChampion name={champion} role={role} />
+        <small className="mline__ratio mono">{kdaRatio(match.kills, match.deaths, match.assists)} KDA</small>
+        {/* In a shared game the company takes the length's place: who played says more than how long. */}
+        {company.length > 0
+          ? <MatchCompany names={company} />
+          : <span className="mline__time mono"><ClockIcon size={12} />{formatDuration(match.durationSeconds)}</span>}
       </span>
       {compact ? null : <ChevronRightIcon className="mline__chevron" size={14} />}
     </a>
