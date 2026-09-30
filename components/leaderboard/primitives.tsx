@@ -350,6 +350,8 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
           {/* Spectator data has no lane, so a live game names no role; the table's form leaves out the company. */}
           <MatchChampion name={live.championName} company={compact ? "" : company} />
         </span>
+        {/* A live game links nowhere, but keeps the chevron's room so its columns meet the other cards'. */}
+        {compact ? null : <span className="mline__chevron-room" aria-hidden="true" />}
       </div>
     );
   }

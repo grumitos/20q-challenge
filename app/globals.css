@@ -611,7 +611,9 @@ a.mline:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); 
 }
 .mline__body > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mline__body svg { display: inline-block; margin-right: 4px; vertical-align: -2px; color: var(--text-4); }
-.mline__result { grid-area: result; }
+/* The top row's cells share the K/D/A's size, so the row's baseline is the
+   same with a live game, which has no K/D/A, as without. */
+.mline__result { grid-area: result; font-size: 13px; }
 .mline__result > * + * { margin-left: 8px; }
 .mline__kda { grid-area: kda; justify-self: end; }
 .mline__age { grid-area: age; justify-self: end; }
@@ -625,6 +627,7 @@ a.mline:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); 
 }
 .mline__chevron { flex: none; color: var(--text-3); transition: transform var(--fast) var(--ease), color var(--fast) ease; }
 a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2); }
+.mline__chevron-room { flex: none; width: 14px; }
 .mline.is-old .mline__icon { opacity: .75; }
 /* The table's form: the result across, then the K/D/A and the age. */
 .mline.is-compact { padding: 0; gap: 10px; }
