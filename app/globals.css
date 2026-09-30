@@ -128,18 +128,32 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  /* Not a flat field: a faint light from the top and a fine grain, both white
-     at a few percent over the palette's --bg (which Los Juegos repaint). */
-  background:
-    radial-gradient(ellipse 90% 45% at 50% 0%, rgb(255 255 255 / 2.5%), transparent 70%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .055 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
-    var(--bg);
+  background: var(--bg);
+  /* Its own stacking context, so the backdrop below paints over the background
+     and under everything else. */
+  isolation: isolate;
   color: var(--text);
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* The page is not a flat field: a hairline grid centred on the page, the card
+   dots' larger kin, under a faint light from the top. Both fade out on a wide
+   ellipse well before the rows end, and scroll away with the page. */
+body::before {
+  content: "";
+  position: absolute; inset: 0 0 auto; z-index: -1;
+  height: max(900px, 110vh);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgb(255 255 255 / 3%), transparent 70%),
+    linear-gradient(to right, rgb(255 255 255 / 3.5%) 1px, transparent 1px) 50% 0 / 56px 56px,
+    linear-gradient(to bottom, rgb(255 255 255 / 3.5%) 1px, transparent 1px) 50% 0 / 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 0%, #000 35%, transparent 80%);
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 0%, #000 35%, transparent 80%);
+  pointer-events: none;
 }
 
 img { display: block; max-width: 100%; }
@@ -273,16 +287,23 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 /* ── Podium ─────────────────────────────── */
 .podium__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 
-/* The card itself is plain graphite: the name, the plate and the last match
-   read on a clean surface, and only the panel below carries the dot grid (see
-   .pcard__side), as the row detail does. */
+/* Where a dot grid meets text, every glyph wears a soft halo of the surface
+   under it: the dots right behind letters and numbers dim away, the rest of
+   the grid stays as it is, and no box is drawn anywhere. Each grid sets its
+   own --halo to the colour it lies on. */
+.pcard, .detail { text-shadow: 0 0 4px var(--halo), 0 0 1.5px var(--halo); }
+
+/* The dot grid is the whole card's surface, as it is the row detail's. */
 .pcard {
+  --halo: var(--surface);
   position: relative;
   container: pcard / inline-size;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--r-card);
   background-color: var(--surface);
+  background-image: radial-gradient(circle, var(--card-dot, color-mix(in srgb, var(--dot) 70%, transparent)) 1px, transparent 1.4px);
+  background-size: 9px 9px;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
   overflow: hidden;
   transition: border-color var(--fast) ease;
@@ -421,17 +442,9 @@ html.is-invaded .pcard__splash { --splash-rest: grayscale(0) sepia(.35) saturate
    sits below it. */
 .plate + .stitch { margin-top: 8px; }
 .stitch + .mline, .stitch + .pcard__respawn { margin-block: 0; }
+.mline + .stitch, .pcard__respawn + .stitch { margin-top: 0; }
 
-/* The panel is the one part of the card on the dot grid, and its first row of
-   dots is what parts it from the last match, in place of a stitch: the rows
-   sit 3px above the tiles' middle, so that first row lies whole along the
-   panel's top edge (its dots' centres 1.5px below it). No fade, no dot cut. */
-.pcard__side {
-  display: flex; flex-direction: column; flex: 1;
-  background-image: radial-gradient(circle, var(--card-dot, color-mix(in srgb, var(--dot) 70%, transparent)) 1px, transparent 1.4px);
-  background-size: 9px 9px;
-  background-position: 0 -3px;
-}
+.pcard__side { display: flex; flex-direction: column; flex: 1; }
 .pcard__respawn { padding: 12px 20px; }
 .pcard__champs { padding: 14px 20px 18px; container: pchamps / inline-size; }
 .pcard__champs-tiles { display: none; }
@@ -537,10 +550,24 @@ a.mline:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); 
 .mline.is-empty { margin: 0; color: var(--text-3); font-size: 13px; }
 .mline__icon { flex: none; width: 30px; height: 30px; border-radius: 8px; overflow: hidden; background: var(--track); }
 .mline__icon img { width: 100%; height: 100%; transform: scale(1.1); }
-.mline__body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.mline__body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; container: mline / inline-size; }
 .mline__top { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
 .mline__age { margin-left: auto; color: var(--text-3); font-size: 12px; }
-.mline__sub { color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The game's figures, each its own item spread across the line: the champion
+   (with the role played) first, the K/D/A, the length, the company last. A
+   narrower line drops the ratio, then the length; the champion's name is the
+   one that ellipsises. */
+.mline__stats { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.mline__champ { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--text-2); }
+.mline__champ > span { overflow: hidden; text-overflow: ellipsis; }
+.mline__champ svg { flex: none; color: var(--text-3); }
+.mline__kda b, b.mline__kda { color: var(--text); font-weight: 500; }
+.mline__kda small { margin-left: 6px; font-size: 11px; }
+.mline__time { display: inline-flex; align-items: center; gap: 4px; }
+.mline__time svg { flex: none; color: var(--text-4); }
+.mline__with { color: var(--text-2); }
+@container mline (max-width: 290px) { .mline__kda small { display: none; } }
+@container mline (max-width: 225px) { .mline__time { display: none; } }
 .mline__chevron { flex: none; color: var(--text-3); transition: transform var(--fast) var(--ease), color var(--fast) ease; }
 a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2); }
 .mline.is-old .mline__icon { opacity: .75; }
@@ -635,6 +662,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .srow__detail { overflow: hidden; }
 
 .detail {
+  --halo: var(--inset);
   display: grid; grid-template-columns: 1.25fr 1fr 1.2fr .9fr; gap: 40px;
   padding: 24px 20px 28px 80px;
   border-top: 1px solid var(--line-soft);
@@ -788,18 +816,16 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 }
 .gaspi__dust i.is-orb { box-shadow: none; filter: blur(calc(var(--size) / 4)); }
 .gaspi__frame { position: fixed; inset: 24px; border: 1px solid rgb(217 178 106 / 13%); border-radius: 20px; pointer-events: none; }
-.gaspi__bar { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 52px 56px 0; }
-.gaspi__back {
-  display: flex; align-items: center; gap: 8px;
-  height: 40px; padding: 0 16px 0 12px;
-  border: 1px solid #5a4a2c; border-radius: 10px;
-  background: rgb(21 19 15 / 82%); color: #f0e2bf;
-  font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: background-color var(--fast) ease;
-}
-.gaspi__back:hover { background: #1c1913; }
-.gaspi__esc { display: flex; align-items: center; gap: 8px; color: #a8966c; font-size: 12px; }
+.gaspi__bar { position: relative; display: flex; align-items: center; justify-content: flex-end; padding: 52px 56px 0; }
+.gaspi { cursor: pointer; }
+.gaspi__esc, .gaspi__tap { display: flex; align-items: center; gap: 8px; color: #a8966c; font-size: 12px; }
 .gaspi__esc kbd { padding: 2px 6px; border: 1px solid #3a3222; border-radius: 5px; color: #cdbb92; font-family: var(--font-mono); font-size: 11px; }
+/* A touch screen has no Esc: its notice asks for the tap that closes the card. */
+.gaspi__tap { display: none; }
+@media (hover: none) {
+  .gaspi__esc { display: none; }
+  .gaspi__tap { display: flex; }
+}
 .gaspi__stage { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px 76px; text-align: center; }
 .gaspi__kicker { padding-left: .42em; color: #b89c62; font-family: var(--font-mono); font-size: 12px; letter-spacing: .42em; text-transform: uppercase; }
 .gaspi__beam { display: flex; align-items: center; gap: 16px; width: min(680px, 80vw); margin: 24px 0 28px; }
@@ -910,6 +936,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .pcard.place-1 .pcard__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto 1fr; }
   .pcard.place-1 .pcard__art { grid-column: 1 / -1; }
   .pcard.place-1 .pcard__main { padding-bottom: 14px; border-right: 1px solid var(--line); }
+  .pcard.place-1 .pcard__main > .stitch:last-child { display: none; }
   .pcard.place-1 .pcard__side .champ-row__name { width: 84px; }
 }
 
@@ -1007,8 +1034,6 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
   .footer__nav { margin-block: 0; }
   .footer__nav a { min-height: 44px; display: inline-flex; align-items: center; }
   .gaspi__bar { padding: 36px 32px 0; }
-  .gaspi__back { height: 44px; }
-  .gaspi__esc { display: none; }
   .gaspi__frame { inset: 12px; border-radius: 16px; }
   .gaspi__dust i:nth-child(n+33) { display: none; }
   .gaspi__kicker { padding-left: .36em; font-size: 11px; letter-spacing: .36em; }

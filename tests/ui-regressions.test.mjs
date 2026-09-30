@@ -50,6 +50,11 @@ test("puts Los Juegos de Gaspi behind the top-bar badge, reveals it once and inv
   assert.match(topBar, /<span className="gaspi-mark" aria-hidden="true">G<\/span>/);
   assert.match(css, /\.gaspi-mark \{\s*font-family: var\(--font-display\);/);
   assert.match(gaspi, /export const GASPI_TITLE = "LOS JUEGOS DE GASPI"/);
+  // The way back is a notice (Esc, or a tap on touch screens) and a click anywhere; no visible back pill.
+  assert.doesNotMatch(gaspi + css, /gaspi__back/);
+  assert.match(gaspi, /onClick=\{\(\) => onOpenChange\(false\)\}/);
+  assert.match(gaspi, /<Dialog\.Close className="sr-only">Volver al ranking<\/Dialog\.Close>/);
+  assert.match(gaspi, /Toca para volver/);
   assert.match(gaspi, /<Dialog\.Root open=\{open\} onOpenChange=\{onOpenChange\}>/);
   assert.match(gaspi, /seen \? undefined : \{ animationDelay:/);
   assert.match(page, /setGaspiSeen\(gaspiRevealSpent\.current\);\s*gaspiRevealSpent\.current = true;/);
@@ -262,15 +267,25 @@ test("lays the board out for wide desktops, half screens and phones", async () =
   assert.match(css, /\.srow__stats \{ display: contents; \}/);
 });
 
-test("keeps the podium's dot grid to the panel, with the last match on the plain part", async () => {
+test("covers the whole podium card with the dot grid and dims it only right behind text", async () => {
   const { podium, css } = await sources();
-  // Name, plate and last match share the plain part; the panel follows the last match with no stitch between.
-  assert.match(podium, /<MatchLine player=\{player\} roster=\{roster\} version=\{version\} now=\{now\} \/>\}\s*<\/div>\s*<div className="pcard__side">\s*<PodiumPanel /);
+  // The last match sits between two stitches, under the plate and above the panel.
+  assert.match(podium, /<MatchLine player=\{player\} roster=\{roster\} version=\{version\} now=\{now\} \/>\}\s*<Stitch \/>\s*<\/div>\s*<div className="pcard__side">\s*<PodiumPanel /);
   const block = (selector) => css.match(new RegExp(`\\n${selector} \\{[^}]*\\}`))?.[0] ?? "";
-  assert.doesNotMatch(block("\\.pcard"), /background-image/);
+  assert.match(block("\\.pcard"), /background-image: radial-gradient\(circle, var\(--card-dot, [^;]+\) 1px, transparent 1\.4px\);\s*background-size: 9px 9px;/);
+  assert.doesNotMatch(block("\\.pcard__side"), /background/);
   assert.doesNotMatch(block("\\.plate"), /background/);
-  // The grid's first row is the separator: whole along the panel's top edge (centres 1.5px in), no fade, no cut dot.
-  assert.match(block("\\.pcard__side"), /background-image: radial-gradient\(circle, var\(--card-dot, [^;]+\) 1px, transparent 1\.4px\);\s*background-size: 9px 9px;\s*background-position: 0 -3px;/);
+  // A halo of the surface under every glyph dims the dots behind letters and numbers, with no box.
+  assert.match(css, /\.pcard, \.detail \{ text-shadow: 0 0 4px var\(--halo\), 0 0 1\.5px var\(--halo\); \}/);
+});
+
+test("spreads the last match's figures across the line instead of a dotted summary", async () => {
+  const { primitives, css } = await sources();
+  assert.doesNotMatch(primitives, /\.join\(" · "\)/);
+  assert.match(primitives, /<span className="mline__stats">/);
+  assert.match(primitives, /\{kdaRatio\(match\.kills, match\.deaths, match\.assists\)\} KDA/);
+  assert.match(css, /\.mline__stats \{ display: flex; align-items: baseline; justify-content: space-between;/);
+  assert.match(css, /@container mline \(max-width: 290px\) \{ \.mline__kda small \{ display: none; \} \}/);
 });
 
 test("lights the podium art from one pair of states on every screen, with matching filter lists", async () => {
@@ -286,11 +301,14 @@ test("lights the podium art from one pair of states on every screen, with matchi
   assert.doesNotMatch(css, /\.pcard__splash \{[^}]*filter: grayscale/);
 });
 
-test("gives the page a sober texture over the palette's background", async () => {
+test("gives the page a sober backdrop: a hairline grid that fades out below the top", async () => {
   const { css } = await sources();
-  const body = css.match(/\nbody \{[^}]*\}/)?.[0] ?? "";
-  assert.match(body, /feTurbulence/);
-  assert.match(body, /var\(--bg\);/);
+  const backdrop = css.match(/\nbody::before \{[^}]*\}/)?.[0] ?? "";
+  assert.match(backdrop, /linear-gradient\(to right, rgb\(255 255 255 \/ 3\.5%\) 1px, transparent 1px\) 50% 0 \/ 56px 56px/);
+  assert.match(backdrop, /mask-image: radial-gradient\(/);
+  assert.match(backdrop, /z-index: -1;/);
+  assert.match(css, /\nbody \{[^}]*isolation: isolate;/);
+  assert.doesNotMatch(css, /feTurbulence/);
 });
 
 test("keeps the second and third podium cards compact and one height in every view on phones", async () => {
