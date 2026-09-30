@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { GASPI_TITLE } from "./gaspi";
+import { GaspiDoor } from "./gaspi-door";
 
 /**
  * The section links only move the scroll. They leave the URL alone (a hash
@@ -49,12 +49,7 @@ export function TopBar({ liveCount, onOpenGaspi }: {
             <span aria-hidden="true">{liveCount}<span className="topbar__live-text"> en partida</span></span>
           </span>
         ) : null}
-        <button type="button" className="gaspi-button" onClick={onOpenGaspi} aria-label={`Abrir ${GASPI_TITLE}`}>
-          {/* The tournament's own mark: the title's gilded Cinzel, in one letter. */}
-          <span className="gaspi-mark" aria-hidden="true">G</span>
-          <span className="gaspi-button__label">Los Juegos de Gaspi</span>
-          <span className="gaspi-button__edition mono">Ed. I</span>
-        </button>
+        <GaspiDoor onOpen={onOpenGaspi} />
       </div>
     </header>
   );

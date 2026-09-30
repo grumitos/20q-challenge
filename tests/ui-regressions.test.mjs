@@ -7,17 +7,18 @@ import test from "node:test";
 // default) is normalised first so the patterns never depend on line endings.
 const read = async (path) => (await readFile(new URL(`../${path}`, import.meta.url), "utf8")).replace(/\r\n/g, "\n");
 const sources = async () => {
-  const [page, podium, standings, duos, gaspi, topBar, primitives, css] = await Promise.all([
+  const [page, podium, standings, duos, gaspi, gaspiDoor, topBar, primitives, css] = await Promise.all([
     read("app/page.tsx"),
     read("components/leaderboard/podium.tsx"),
     read("components/leaderboard/standings.tsx"),
     read("components/leaderboard/duos.tsx"),
     read("components/leaderboard/gaspi.tsx"),
+    read("components/leaderboard/gaspi-door.tsx"),
     read("components/leaderboard/top-bar.tsx"),
     read("components/leaderboard/primitives.tsx"),
     read("app/globals.css"),
   ]);
-  return { page, podium, standings, duos, gaspi, topBar, primitives, css };
+  return { page, podium, standings, duos, gaspi, gaspiDoor, topBar, primitives, css };
 };
 
 test("ranks everyone on one sorted list, podium first, so places and arrows count the same players", async () => {
@@ -44,11 +45,21 @@ test("moves cards and rows when the standings move", async () => {
 });
 
 test("puts Los Juegos de Gaspi behind the top-bar badge, reveals it once and invades the palette", async () => {
-  const { page, gaspi, topBar, css } = await sources();
-  assert.match(topBar, /aria-label=\{`Abrir \$\{GASPI_TITLE\}`\}/);
+  const { page, gaspi, gaspiDoor, topBar, css } = await sources();
+  assert.match(topBar, /<GaspiDoor onOpen=\{onOpenGaspi\} \/>/);
+  assert.match(gaspiDoor, /aria-label=\{`Abrir \$\{GASPI_TITLE\}`\}/);
   // The door wears the tournament's own mark, the title's gilded Cinzel, the same on every screen.
-  assert.match(topBar, /<span className="gaspi-mark" aria-hidden="true">G<\/span>/);
+  assert.match(gaspiDoor, /<span className="gaspi-mark" aria-hidden="true">G<\/span>/);
   assert.match(css, /\.gaspi-mark \{\s*font-family: var\(--font-display\);/);
+  // Its rim is metal-fx's liquid gold, loaded on the client in its own chunk, pinned to the dark tuning; without
+  // WebGL, or should the metal fail, the still gilded rim stays. The wrapper never hides the door.
+  assert.match(gaspiDoor, /import\("metal-fx"\)/);
+  assert.match(gaspiDoor, /if \(!canRunMetal\(\)\) return;/);
+  assert.match(gaspiDoor, /<MetalFallback fallback=\{door\}>/);
+  assert.match(gaspiDoor, /preset="gold" theme="dark"/);
+  assert.match(gaspiDoor, /paused=\{reduceMotion\} normalizeHostStyles=\{false\}/);
+  assert.match(css, /\.gaspi-metal\.metal-fx-root \{[^}]*opacity: 1 !important;\s*visibility: visible !important;/);
+  assert.match(css, /\.gaspi-metal \.gaspi-button \{ margin-left: 0; border-color: transparent; background: transparent; \}/);
   assert.match(gaspi, /export const GASPI_TITLE = "LOS JUEGOS DE GASPI"/);
   // The way back is a notice (Esc, or a tap on touch screens) and a click anywhere; no visible back pill.
   assert.doesNotMatch(gaspi + css, /gaspi__back/);
@@ -76,8 +87,26 @@ test("sends Papipu to respawn after the curfew and ticks while anyone is countin
   assert.match(primitives, /Reaparece en/);
   assert.match(primitives, /Papipu, ya son las 11/);
   assert.match(primitives, /role="timer"/);
-  assert.match(standings, /<RespawnPill seconds=\{respawnSeconds\}/);
-  assert.match(podium, /<RespawnPill seconds=\{respawnSeconds\}/);
+  assert.match(standings, /<RespawnClock seconds=\{respawnSeconds\}/);
+  assert.match(podium, /<RespawnClock seconds=\{respawnSeconds\}/);
+});
+
+test("puts Papipu's whole card or row out of reach while the curfew clock runs", async () => {
+  const { standings, podium, css } = await sources();
+  // The row stays closed, loses its toggle and ignores clicks; its cells are inert under the clock.
+  assert.match(standings, /const isOpen = open && !dead;/);
+  assert.match(standings, /if \(dead \|\| \(event\.target as HTMLElement\)\.closest\("a, button"\)\) return;/);
+  assert.match(standings, /\{dead \? null : \(\s*<button\s+type="button"\s+className="srow__toggle"/);
+  assert.match(standings, /<div className="srow__stats" inert=\{dead\}>/);
+  // The podium card goes inert under the clock and its panel loses the switch.
+  assert.match(podium, /<div className="pcard__body" inert=\{dead\}>/);
+  assert.match(podium, /still=\{dead\}/);
+  assert.match(podium, /\{still \? null : \(\s*<div className="section-label">/);
+  // Everything under the clock goes grey: the form's pills and the winrate colours included.
+  assert.match(css, /\.pcard\.is-dead :is\(\.pcard__main, \.pcard__side\) \{ filter: grayscale\(1\) blur\(1\.5px\); opacity: \.3; \}/);
+  assert.match(css, /\.srow\.is-dead :is\(\.srow__rank, \.srow__wr, \.srow__kda, \.srow__form, \.srow__champs, \.srow__match\) \{ filter: grayscale\(1\) blur\(1\.5px\);/);
+  assert.match(css, /\.srow__respawn \{\s*position: absolute; inset: 0; z-index: 1; grid-column: 3 \/ -1;/);
+  assert.match(css, /\.pcard__respawn \{\s*position: absolute; inset: 0;/);
 });
 
 test("rotates a playful tab title while the page is away, one line at a time", async () => {
@@ -165,9 +194,9 @@ test("names the live game, remakes and missing PL evidence honestly", async () =
 
 test("opens a row's detail from its button, with the row itself as a pointer shortcut", async () => {
   const { standings, primitives } = await sources();
-  assert.match(standings, /aria-expanded=\{open\}/);
+  assert.match(standings, /aria-expanded=\{isOpen\}/);
   assert.match(standings, /aria-controls=\{detailId\}/);
-  assert.match(standings, /if \(\(event\.target as HTMLElement\)\.closest\("a, button"\)\) return;/);
+  assert.match(standings, /\(event\.target as HTMLElement\)\.closest\("a, button"\)\) return;/);
   // The champion list's switch is a labelled group of pressed-state buttons, best first.
   assert.match(standings, /\["best", "Mejores"\],\s*\["most", "Más jugados"\],/);
   assert.match(standings, /const order = chosen \?\? "best";/);
@@ -206,7 +235,7 @@ test("switches views with one shared pill whose thumb slides, and fades the new 
   // The panel keeps its view to itself: a switch never re-renders the card, whose
   // layout animation would otherwise stretch it on a phone.
   const card = podium.match(/\nfunction PodiumCard\([\s\S]*?\n\}\n/)?.[0] ?? "";
-  assert.match(card, /<PodiumPanel player=\{player\} roster=\{roster\} version=\{version\} best=\{best\} \/>/);
+  assert.match(card, /<PodiumPanel player=\{player\} roster=\{roster\} version=\{version\} best=\{best\} still=\{dead\} \/>/);
   assert.doesNotMatch(card, /useState/);
   // The shown view is keyed, and it only fades in once the reader has switched,
   // so the first paint keeps the entrances it had.
@@ -270,7 +299,7 @@ test("lays the board out for wide desktops, half screens and phones", async () =
 test("covers the whole podium card with the dot grid and dims it only right behind text", async () => {
   const { podium, css } = await sources();
   // The last match sits between two stitches, under the plate and above the panel.
-  assert.match(podium, /<MatchLine player=\{player\} roster=\{roster\} version=\{version\} now=\{now\} \/>\}\s*<Stitch \/>\s*<\/div>\s*<div className="pcard__side">\s*<PodiumPanel /);
+  assert.match(podium, /<MatchLine player=\{player\} roster=\{roster\} version=\{version\} now=\{now\} \/>\s*<Stitch \/>\s*<\/div>\s*<div className="pcard__side">\s*<PodiumPanel /);
   const block = (selector) => css.match(new RegExp(`\\n${selector} \\{[^}]*\\}`))?.[0] ?? "";
   assert.match(block("\\.pcard"), /background-image: radial-gradient\(circle, var\(--card-dot, [^;]+\) 1px, transparent 1\.4px\);\s*background-size: 9px 9px;/);
   assert.doesNotMatch(block("\\.pcard__side"), /background/);
@@ -279,13 +308,21 @@ test("covers the whole podium card with the dot grid and dims it only right behi
   assert.match(css, /\.pcard, \.detail \{ text-shadow: 0 0 4px var\(--halo\), 0 0 1\.5px var\(--halo\); \}/);
 });
 
-test("spreads the last match's figures across the line instead of a dotted summary", async () => {
-  const { primitives, css } = await sources();
+test("sets the last match on a two-row grid whose figure columns line up on every card", async () => {
+  const { primitives, standings, css } = await sources();
   assert.doesNotMatch(primitives, /\.join\(" · "\)/);
-  assert.match(primitives, /<span className="mline__stats">/);
   assert.match(primitives, /\{kdaRatio\(match\.kills, match\.deaths, match\.assists\)\} KDA/);
-  assert.match(css, /\.mline__stats \{ display: flex; align-items: baseline; justify-content: space-between;/);
-  assert.match(css, /@container mline \(max-width: 290px\) \{ \.mline__kda small \{ display: none; \} \}/);
+  // Fixed figure columns, duo or not, every cell on its row's baseline.
+  assert.match(css, /grid-template-columns: minmax\(0, 1fr\) 62px 68px;\s*grid-template-areas: "result kda age" "champ ratio time";\s*align-items: baseline;/);
+  // Icons ride inline in the text: a flex item led by an icon takes the icon's bottom edge as its baseline.
+  assert.match(css, /\.mline__body svg \{ display: inline-block; margin-right: 4px; vertical-align: -2px;/);
+  assert.doesNotMatch(css, /\.mline__(champ|time|stats) \{[^}]*display: (inline-)?flex/);
+  assert.match(css, /@container mline \(max-width: 335px\) \{\s*\.mline__body \{ grid-template-columns: minmax\(0, 1fr\) auto; grid-template-areas: "result age" "champ kda"; \}/);
+  // One K/D/A everywhere a match shows, and the row detail speaks the same words without dots.
+  assert.match(primitives, /export function KdaFigures/);
+  assert.match(standings, /<KdaFigures kills=\{match\.kills\} deaths=\{match\.deaths\} assists=\{match\.assists\} \/>/);
+  assert.doesNotMatch(standings, /formatDuration\(match\.durationSeconds\)\} · /);
+  assert.doesNotMatch(standings, />KDA \{kdaRatio/);
 });
 
 test("lights the podium art from one pair of states on every screen, with matching filter lists", async () => {
@@ -301,11 +338,17 @@ test("lights the podium art from one pair of states on every screen, with matchi
   assert.doesNotMatch(css, /\.pcard__splash \{[^}]*filter: grayscale/);
 });
 
-test("gives the page a sober backdrop: a hairline grid that fades out below the top", async () => {
+test("gives the page a sober drafting grid that stays quiet over the middle and fades down the page", async () => {
   const { css } = await sources();
   const backdrop = css.match(/\nbody::before \{[^}]*\}/)?.[0] ?? "";
-  assert.match(backdrop, /linear-gradient\(to right, rgb\(255 255 255 \/ 3\.5%\) 1px, transparent 1px\) 50% 0 \/ 56px 56px/);
-  assert.match(backdrop, /mask-image: radial-gradient\(/);
+  // Hairlines every 56px, firmer lines every 224px with a point where they cross, one line on the centre.
+  assert.match(backdrop, /linear-gradient\(to right, rgb\(255 255 255 \/ 2\.2%\) 1px, transparent 1px\) calc\(50% \+ 28px\) 0 \/ 56px 56px/);
+  assert.match(backdrop, /linear-gradient\(to right, rgb\(255 255 255 \/ 4\.5%\) 1px, transparent 1px\) calc\(50% \+ 112px\) 0 \/ 224px 224px/);
+  assert.match(backdrop, /radial-gradient\(circle, [^)]+\) 1px, transparent 1\.6px\) calc\(50% \+ \.5px\) calc\(-112px \+ \.5px\) \/ 224px 224px/);
+  // Quiet over the middle (the header and the cards), shown in the margins, faded towards the bottom.
+  assert.match(backdrop, /mask-image:\s*linear-gradient\(to right, #000, rgb\(0 0 0 \/ 20%\) 32%, rgb\(0 0 0 \/ 20%\) 68%, #000\),/);
+  assert.match(backdrop, /mask-composite: intersect;/);
+  assert.match(backdrop, /-webkit-mask-composite: source-in;/);
   assert.match(backdrop, /z-index: -1;/);
   assert.match(css, /\nbody \{[^}]*isolation: isolate;/);
   assert.doesNotMatch(css, /feTurbulence/);

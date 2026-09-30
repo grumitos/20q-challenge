@@ -5,6 +5,7 @@ import {
   formatRespawnClock,
   isRemakeMatch,
   isStaleMatch,
+  type PlayerRole,
   type PlayerSnapshot,
   type RankTier,
 } from "../../lib/leaderboard";
@@ -78,7 +79,7 @@ export function tierClass(tier: RankTier) {
   return `tier-${tier.toLowerCase()}`;
 }
 
-/** Five slots, oldest first: filled blue for a win, red for a loss, an outline when empty. */
+/** Five slots, oldest first: filled green for a win, red for a loss, an outline when empty. */
 export function FormPills({ results, withText = false }: { results?: readonly boolean[]; withText?: boolean }) {
   const form = formSlots(results);
   return (
@@ -276,16 +277,18 @@ export function PlayerSummary({ player, roster, version }: {
   );
 }
 
-export function RespawnPill({ seconds, playerName }: { seconds: number; playerName: string }) {
+/**
+ * Papipu's curfew clock. It takes over the card or the row it belongs to, whose
+ * contents go grey, soft and inert underneath, as the respawn overlay did
+ * before the redesign.
+ */
+export function RespawnClock({ seconds, playerName }: { seconds: number; playerName: string }) {
   const clock = formatRespawnClock(seconds);
   return (
     <span className="respawn" role="timer" aria-label={`${playerName} reaparece en ${clock}`}>
-      <span className="respawn__pill">
-        <MoonIcon size={13} />
-        <span>Reaparece en</span>
-        <b className="mono">{clock}</b>
-      </span>
-      <small className="respawn__note">Papipu, ya son las 11</small>
+      <span className="respawn__label" aria-hidden="true"><MoonIcon size={13} />Reaparece en</span>
+      <b className="respawn__clock mono" aria-hidden="true">{clock}</b>
+      <small className="respawn__note" aria-hidden="true">Papipu, ya son las 11</small>
     </span>
   );
 }
@@ -295,10 +298,29 @@ function matchOutcome(match: NonNullable<PlayerSnapshot["lastSoloQueueMatch"]>):
   return match.win ? "win" : "loss";
 }
 
+/** A game's K/D/A with quiet slashes: the same figures wherever a match shows. */
+export function KdaFigures({ kills, deaths, assists }: { kills: number; deaths: number; assists: number }) {
+  return <b className="kda mono">{kills}<i>/</i>{deaths}<i>/</i>{assists}</b>;
+}
+
+/** The champion played, the role's icon before it and the company after it. */
+function MatchChampion({ name, role, company }: { name: string; role?: PlayerRole; company: string }) {
+  return (
+    <span className="mline__champ">
+      {role && role !== "UNKNOWN" ? <RoleIcon role={role} size={12} /> : null}
+      {name}
+      {company ? <span className="mline__with"> {company}</span> : null}
+    </span>
+  );
+}
+
 /**
  * The player's most recent game: a live game while they are in one, otherwise
- * the last SoloQ match with its inferred PL change. `compact` is the table's
- * two-line form without the company and duration.
+ * the last SoloQ match with its inferred PL change. Its figures sit on a grid
+ * of two rows: the result, the K/D/A and the age above; the champion (and the
+ * company), the ratio and the length below. The K/D/A and time columns are the
+ * same width on every card, duo or not, so the cards read as one table.
+ * `compact` is the table's two-line form: the result, then the K/D/A and the age.
  */
 export function MatchLine({ player, roster, version, now, compact = false }: {
   player: PlayerSnapshot;
@@ -320,15 +342,13 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
             : null}
         </span>
         <span className="mline__body">
-          <span className="mline__top">
+          <span className="mline__result">
             <span className="live-badge"><i aria-hidden="true" />En partida</span>
             <b className="mono" role="timer" aria-label={`En partida desde hace ${formatDuration(elapsed)}`}>{formatDuration(elapsed)}</b>
-            {compact ? null : <span className="mline__age">desde {formatLimaTime(live.gameStartedAt)}</span>}
           </span>
-          <span className="mline__stats">
-            <span className="mline__champ">{live.championName}</span>
-            {compact || !company ? null : <span className="mline__with">{company}</span>}
-          </span>
+          {compact ? null : <span className="mline__age">desde {formatLimaTime(live.gameStartedAt)}</span>}
+          {/* Spectator data has no lane, so a live game names no role; the table's form leaves out the company. */}
+          <MatchChampion name={live.championName} company={compact ? "" : company} />
         </span>
       </div>
     );
@@ -360,31 +380,18 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
         <img src={championIconUrl(version, match.championId)} alt="" width={30} height={30} loading="lazy" decoding="async" />
       </span>
       <span className="mline__body">
-        <span className="mline__top">
+        <span className="mline__result">
           <b className={`outcome is-${outcome}`}>{outcomeLabel(outcome)}</b>
           {lp ? <span className={`mono lp-change is-${lpTone}`} title={lpEvidenceTitle(match.lpChangeEvidence, remake)}>{lp}</span> : null}
-          {compact ? null : <span className="mline__age">{age}</span>}
         </span>
-        {/* The game's figures spread over the line, each its own item, rather
-            than one summary run together with dots. */}
-        {compact ? (
-          <span className="mline__stats">
-            <b className="mono mline__kda">{kda}</b>
-            <span className="mline__age">{age}</span>
-          </span>
-        ) : (
-          <span className="mline__stats">
-            <span className="mline__champ">
-              {role && role !== "UNKNOWN" ? <RoleIcon role={role} size={12} /> : null}
-              <span>{match.championName}</span>
-            </span>
-            <span className="mline__kda">
-              <b className="mono">{kda}</b>
-              <small className="mono">{kdaRatio(match.kills, match.deaths, match.assists)} KDA</small>
-            </span>
-            <span className="mline__time"><ClockIcon size={12} /><span className="mono">{formatDuration(match.durationSeconds)}</span></span>
-            {company ? <span className="mline__with">{company}</span> : null}
-          </span>
+        <span className="mline__kda"><KdaFigures kills={match.kills} deaths={match.deaths} assists={match.assists} /></span>
+        <span className="mline__age">{age}</span>
+        {compact ? null : (
+          <>
+            <MatchChampion name={match.championName} role={role} company={company} />
+            <small className="mline__ratio mono">{kdaRatio(match.kills, match.deaths, match.assists)} KDA</small>
+            <span className="mline__time mono"><ClockIcon size={12} />{formatDuration(match.durationSeconds)}</span>
+          </>
         )}
       </span>
       {compact ? null : <ChevronRightIcon className="mline__chevron" size={14} />}
