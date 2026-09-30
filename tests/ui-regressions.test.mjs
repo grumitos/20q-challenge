@@ -120,8 +120,24 @@ test("draws champions as rows whose solid bar is the adjusted winrate and whose 
   assert.match(primitives, /className="wr-track__observed" style=\{\{ width: `\$\{champion\.winRate\}%` \}\}/);
   assert.match(primitives, /className="wr-track__adjusted" style=\{\{ width: `\$\{champion\.adjusted\}%` \}\}/);
   assert.match(primitives, /aria-label=\{`\$\{champion\.name\}: \$\{champion\.games\} partidas, \$\{champion\.winRate\}% de winrate`\}/);
-  assert.match(css, /\.wr-track__observed \{ background: var\(--win-soft\); \}/);
-  assert.match(css, /\.wr-track__adjusted \{ background: var\(--win\); \}/);
+  assert.match(css, /\.wr-track__observed \{ background: color-mix\(in srgb, var\(--bar\) 28%, transparent\); \}/);
+  assert.match(css, /\.wr-track__adjusted \{ background: var\(--bar\); \}/);
+});
+
+test("inks wins green, losses red and even results grey, and keeps the accent for focus and live", async () => {
+  const { primitives, standings, duos, css } = await sources();
+  assert.match(css, /\.wr-track\.is-even, \.wr-bar\.is-even \{ --bar: var\(--even\); \}/);
+  assert.match(css, /\.wr-track\.is-loss, \.wr-bar\.is-loss \{ --bar: var\(--loss\); \}/);
+  assert.match(primitives, /className=\{`wr-track is-\$\{champion\.tone\}`\}/);
+  assert.match(duos, /className=\{`wr-track is-\$\{view\.tone\}`\}/);
+  assert.match(standings, /className=\{`wr-bar is-\$\{winRateTone\(player\.winRate, games, 1\)\}`\}/);
+  for (const source of [primitives, standings]) {
+    assert.match(source, /const lpTone = lpChangeTone\(match\.lpChangeEvidence, remake\);/);
+  }
+  assert.match(css, /\.lp-change\.is-pending, \.lp-change\.is-neutral \{ color: var\(--text-2\); \}/);
+  assert.match(css, /\.outcome\.is-remake \{ color: var\(--text-2\); \}/);
+  assert.match(css, /\.live-badge \{[^}]*color: var\(--accent\)/);
+  assert.match(css, /outline: 2px solid var\(--accent\);/);
 });
 
 test("keeps the five form slots visible even with no games", async () => {

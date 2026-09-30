@@ -530,16 +530,6 @@ export function championWinRatePercent(champion: Pick<ChampionAggregate, "games"
   return Math.round((champion.wins / champion.games) * 100);
 }
 
-/**
- * Tone thresholds apply to the percentage the user actually sees, never to the
- * underlying decimal: 54.9% and 55.0% both render "55%", so they must also
- * share a colour.
- */
-export function championWinRateTone(shownPercent: number): "strong" | "even" | "weak" {
-  if (shownPercent >= 55) return "strong";
-  return shownPercent >= 48 ? "even" : "weak";
-}
-
 /** Respawn countdown as `H:MM:SS` instead of a raw five-digit second count. */
 export function formatRespawnClock(totalSeconds: number) {
   const safe = Math.max(0, Math.trunc(totalSeconds));

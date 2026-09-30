@@ -16,12 +16,14 @@ import {
   formatDuration,
   formatLpChange,
   kdaRatio,
+  lpChangeTone,
   lpEvidenceTitle,
   matchDetailsUrl,
   mostPlayedChampionViews,
   outcomeLabel,
   profileUrl,
   rankLabel,
+  winRateTone,
 } from "../../lib/ui-format";
 import { ChevronDownIcon, ExternalIcon, MoonIcon, RoleIcon } from "./icons";
 import {
@@ -186,7 +188,7 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
             <b className="mono">{games > 0 ? `${player.winRate.toFixed(1)}%` : "—"}</b>
             <small className="mono">{player.wins}V {player.losses}D</small>
           </span>
-          <span className="wr-bar" aria-hidden="true"><i style={{ width: `${games > 0 ? Math.max(2, player.winRate) : 0}%` }} /></span>
+          <span className={`wr-bar is-${winRateTone(player.winRate, games, 1)}`} aria-hidden="true"><i style={{ width: `${games > 0 ? Math.max(2, player.winRate) : 0}%` }} /></span>
         </span>
 
         <span className="srow__kda mono col-kda" aria-label={`KDA ${player.analytics.kda.toFixed(1)}`}>
@@ -290,9 +292,7 @@ function RowDetail({ player, version, roster, now }: {
     const remake = isRemakeMatch(match);
     const outcome = remake ? "remake" : match.win ? "win" : "loss";
     const lp = formatLpChange(match.lpChangeEvidence, remake);
-    const lpTone = remake ? "neutral" : match.lpChangeEvidence.status === "observed"
-      ? (match.lpChangeEvidence.value < 0 ? "loss" : "win")
-      : "pending";
+    const lpTone = lpChangeTone(match.lpChangeEvidence, remake);
     const { allies, enemies } = orderMatchRoster(match.participants, player.id);
     matchBlock = (
       <>

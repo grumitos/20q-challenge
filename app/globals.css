@@ -1,8 +1,10 @@
 /* ═══════════════════════════════════════════
    20Q CHALLENGE — rediseño de septiembre 2026
    Grafito neutro, un solo par de tintas de datos
-   (azul victoria, rojo derrota) y el oro reservado
-   para el #1 y para Los Juegos de Gaspi.
+   (verde victoria, rojo derrota, gris para lo que
+   queda parejo), el azul como acento del foco y de
+   lo que está en vivo, y el oro reservado para el #1
+   y para Los Juegos de Gaspi.
    ═══════════════════════════════════════════ */
 
 /* Registered so Los Juegos can repaint the page by interpolating the palette
@@ -19,7 +21,7 @@
 @property --text { syntax: "<color>"; inherits: true; initial-value: #ededef; }
 @property --text-2 { syntax: "<color>"; inherits: true; initial-value: #b3b4ba; }
 @property --text-3 { syntax: "<color>"; inherits: true; initial-value: #8b8c94; }
-@property --win { syntax: "<color>"; inherits: true; initial-value: #5b9dff; }
+@property --accent { syntax: "<color>"; inherits: true; initial-value: #5b9dff; }
 @property --dot { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 5%); }
 
 :root {
@@ -36,9 +38,12 @@
   --text-2: #b3b4ba;
   --text-3: #8b8c94;
   --text-4: #5e5f66;
-  --win: #5b9dff;
-  --win-soft: color-mix(in srgb, var(--win) 28%, transparent);
+  /* Data inks: a win, a loss, and what came out even (50%, a remake, 0 PL).
+     The accent marks focus and what is live, never a result. */
+  --win: #46cf7e;
   --loss: #f2626b;
+  --even: #7c7e87;
+  --accent: #5b9dff;
   --gold: #d9b26a;
   --gold-ink: #e9dcbc;
   --medal-1: #e7c77f;
@@ -88,7 +93,7 @@
     --inset 1.2s var(--ease), --raised 1.2s var(--ease), --line 1.2s var(--ease),
     --line-soft 1.2s var(--ease), --line-strong 1.2s var(--ease), --track 1.2s var(--ease),
     --text 1.2s var(--ease), --text-2 1.2s var(--ease), --text-3 1.2s var(--ease),
-    --win 1.2s var(--ease), --dot 1.2s var(--ease);
+    --accent 1.2s var(--ease), --dot 1.2s var(--ease);
 }
 
 /* Los Juegos de Gaspi: once the card has been opened the whole board turns to
@@ -106,7 +111,7 @@ html.is-invaded {
   --text: #f2e8d1;
   --text-2: #c7b99b;
   --text-3: #a29475;
-  --win: #e2bd6b;
+  --accent: #e2bd6b;
   --dot: rgb(217 178 106 / 8%);
   --stitch: #372f24;
 }
@@ -136,11 +141,11 @@ img { display: block; max-width: 100%; }
 button { font: inherit; color: inherit; }
 a { color: inherit; text-decoration: none; }
 a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid var(--win);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 6px;
 }
-::selection { background: color-mix(in srgb, var(--win) 35%, transparent); }
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .tier-iron { color: var(--tier-iron); }
@@ -209,7 +214,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .nav-short { display: none; }
 .topbar__spacer { flex: 1; }
 .topbar__live { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; white-space: nowrap; animation: fade-in .3s var(--ease); }
-.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); animation: pulse 1.6s ease-out infinite; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-out infinite; }
 .gaspi-button {
   display: flex; align-items: center; gap: 10px;
   height: 36px; margin-left: 6px; padding: 0 14px 0 12px;
@@ -468,14 +473,19 @@ html.is-invaded .pcard__splash { filter: grayscale(0) sepia(.35) saturate(.8) br
 .champ-row__name { width: 96px; flex: none; color: #d4d5da; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .champ-row__games { width: 30px; flex: none; text-align: right; color: var(--text-3); font-size: 12px; }
 .champ-row__wr { width: 40px; flex: none; text-align: right; font-size: 13px; font-weight: 500; }
+/* Winrate bars take their ink from the result: green above 50%, red below,
+   grey for an even 50% (see `winRateTone`). */
+.wr-track, .wr-bar { --bar: var(--win); }
+.wr-track.is-even, .wr-bar.is-even { --bar: var(--even); }
+.wr-track.is-loss, .wr-bar.is-loss { --bar: var(--loss); }
 .wr-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .wr-track i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
-.wr-track__observed { background: var(--win-soft); }
-.wr-track__adjusted { background: var(--win); }
+.wr-track__observed { background: color-mix(in srgb, var(--bar) 28%, transparent); }
+.wr-track__adjusted { background: var(--bar); }
 .wr-track::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--surface); }
-.tone-strong { color: var(--text); }
+.tone-win { color: var(--win); }
 .tone-even { color: var(--text-2); }
-.tone-weak { color: var(--loss); }
+.tone-loss { color: var(--loss); }
 .empty-note { margin: 12px 0 0; color: var(--text-3); font-size: 13px; }
 
 .champ-tiles { display: flex; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -513,8 +523,8 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .lp-change.is-win { color: var(--win); }
 .lp-change.is-loss { color: var(--loss); }
 .lp-change.is-pending, .lp-change.is-neutral { color: var(--text-2); }
-.live-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--win); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
-.live-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--win); animation: pulse 1.6s ease-out infinite; }
+.live-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+.live-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-out infinite; }
 .mline.is-live b { font-size: 13px; font-weight: 500; }
 
 .respawn { display: flex; flex-direction: column; gap: 5px; }
@@ -577,7 +587,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 .srow__wr-top b { font-size: 14px; font-weight: 500; }
 .srow__wr-top small { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .wr-bar { position: relative; display: block; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
-.wr-bar i { display: block; height: 100%; background: var(--win); transition: width .8s var(--ease); }
+.wr-bar i { display: block; height: 100%; background: var(--bar); transition: width .8s var(--ease); }
 .wr-bar::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--surface); }
 .srow.is-dead .wr-bar i { background: var(--text-4); }
 .srow__kda { font-size: 14px; }
@@ -824,7 +834,7 @@ a.mline:hover .mline__chevron { transform: translateX(2px); color: var(--text-2)
 @keyframes sk-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 @keyframes pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--win) 45%, transparent); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
   100% { box-shadow: 0 0 0 7px transparent; }
 }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

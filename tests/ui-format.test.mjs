@@ -15,6 +15,7 @@ import {
   formatLimaTime,
   formatLpChange,
   kdaRatio,
+  lpChangeTone,
   matchDetailsUrl,
   mostPlayedChampionViews,
   peerNames,
@@ -23,6 +24,7 @@ import {
   rankAsset,
   rankLabel,
   roleShares,
+  winRateTone,
 } from "../lib/ui-format.ts";
 
 test("names ranks and crests the way the board prints them", () => {
@@ -85,10 +87,24 @@ test("orders champions by the Wilson bound and colours them by the rounded winra
   assert.equal(best[2].name, "Miss Fortune");
 
   assert.deepEqual(mostPlayedChampionViews(counts, 2).map((champion) => champion.id), ["MissFortune", "Nautilus"]);
-  // 54.6% displays as 55% and must share its colour with 55%.
-  assert.equal(championView({ id: "A", name: "A", games: 1000, wins: 546 }).tone, "strong");
-  assert.equal(championView({ id: "B", name: "B", games: 100, wins: 48 }).tone, "even");
-  assert.equal(championView({ id: "C", name: "C", games: 100, wins: 47 }).tone, "weak");
+  // The colour follows the percentage as displayed: 50.2% prints "50%" and stays grey.
+  assert.equal(championView({ id: "A", name: "A", games: 1000, wins: 546 }).tone, "win");
+  assert.equal(championView({ id: "B", name: "B", games: 1000, wins: 502 }).tone, "even");
+  assert.equal(championView({ id: "C", name: "C", games: 100, wins: 49 }).tone, "loss");
+});
+
+test("inks results green, red or grey, judged on what the board prints", () => {
+  assert.equal(winRateTone(50.1, 10, 1), "win");
+  assert.equal(winRateTone(50.04, 10, 1), "even", "printed as 50.0%");
+  assert.equal(winRateTone(49.9, 10, 1), "loss");
+  assert.equal(winRateTone(50, 2), "even");
+  assert.equal(winRateTone(0, 0), "even", "no games is not a loss");
+  const observed = (value) => ({ status: "observed", value, source: "rank_snapshot_delta", beforeObservedAt: "", afterObservedAt: "" });
+  assert.equal(lpChangeTone(observed(19)), "win");
+  assert.equal(lpChangeTone(observed(-23)), "loss");
+  assert.equal(lpChangeTone(observed(0)), "neutral", "0 PL is grey, not a win");
+  assert.equal(lpChangeTone(observed(-23), true), "neutral", "a remake is grey whatever the ladder says");
+  assert.equal(lpChangeTone({ status: "pending" }), "pending");
 });
 
 test("maps Match-V5 champion keys to names and Data Dragon assets", () => {
@@ -139,5 +155,6 @@ test("derives averages, KDA ratios and duo figures", () => {
   assert.equal(duo.losses, 48);
   assert.equal(duo.winRate.toFixed(1), "54.7");
   assert.equal(duo.adjusted.toFixed(1), "42.3");
-  assert.equal(duo.tone, "even");
+  assert.equal(duo.tone, "win");
+  assert.equal(duoView({ games: 20, wins: 10, score: 0.3 }).tone, "even");
 });

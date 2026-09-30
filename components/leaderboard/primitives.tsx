@@ -18,6 +18,7 @@ import {
   formatLimaTime,
   formatLpChange,
   kdaRatio,
+  lpChangeTone,
   lpEvidenceTitle,
   matchDetailsUrl,
   outcomeLabel,
@@ -186,7 +187,7 @@ export function ChampionBars({ champions, version, label }: { champions: readonl
           </span>
           <span className="champ-row__name" aria-hidden="true">{champion.name}</span>
           <span className="champ-row__games mono" aria-hidden="true">{champion.games}p</span>
-          <span className="wr-track" aria-hidden="true">
+          <span className={`wr-track is-${champion.tone}`} aria-hidden="true">
             <i className="wr-track__observed" style={{ width: `${champion.winRate}%` }} />
             <i className="wr-track__adjusted" style={{ width: `${champion.adjusted}%` }} />
           </span>
@@ -335,9 +336,7 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
   const outcome = matchOutcome(match);
   const remake = outcome === "remake";
   const lp = formatLpChange(match.lpChangeEvidence, remake);
-  const lpTone = remake ? "neutral" : match.lpChangeEvidence.status === "observed"
-    ? (match.lpChangeEvidence.value < 0 ? "loss" : "win")
-    : "pending";
+  const lpTone = lpChangeTone(match.lpChangeEvidence, remake);
   const href = matchDetailsUrl(match.matchId) ?? profileUrl(player);
   const kda = `${match.kills}/${match.deaths}/${match.assists}`;
   const company = peerText(peerNames(match.participants, player.id, roster));
