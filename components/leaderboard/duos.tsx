@@ -70,7 +70,7 @@ export function Duos({ duos, players, version }: {
                       <small className="mono drow__wr-record">{record}</small>
                       <small className="mono drow__wr-adjusted">aj. {view.adjusted.toFixed(1)}%</small>
                     </span>
-                    <span className="wr-track" aria-hidden="true">
+                    <span className={`wr-track is-${view.tone}`} aria-hidden="true">
                       <i className="wr-track__observed" style={{ width: `${view.winRate}%` }} />
                       <i className="wr-track__adjusted" style={{ width: `${view.adjusted}%` }} />
                     </span>

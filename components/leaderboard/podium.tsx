@@ -1,6 +1,7 @@
 import { m } from "motion/react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { PlayerSnapshot } from "../../lib/leaderboard";
+import { EASE, ENTRANCE } from "../../lib/motion";
 import {
   ROLE_LABELS,
   bestChampionViews,
@@ -8,6 +9,7 @@ import {
   mostPlayedChampionViews,
   profileUrl,
   rankLabel,
+  type ChampionView,
 } from "../../lib/ui-format";
 import { RoleIcon } from "./icons";
 import {
@@ -22,6 +24,7 @@ import {
   RankEmblem,
   RespawnPill,
   RoleList,
+  Segmented,
   Stitch,
   WINRATE_BAR_HINT,
   tierClass,
@@ -143,13 +146,9 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
   /** The card being looked at on a touch screen; see `useFeaturedCard`. */
   featured: boolean;
 }) {
-  const [view, setView] = useState<PanelView>("best");
-  const counts = player.analytics.championCounts;
-  // The art follows the best champion whichever view is showing, so switching
-  // views never repaints the cover.
-  const best = player.riotIdFound ? bestChampionViews(counts, PODIUM_CHAMPION_SLOTS) : [];
-  const champions = !player.riotIdFound ? [] : view === "most" ? mostPlayedChampionViews(counts, PODIUM_CHAMPION_SLOTS) : best;
-  const showingChampions = view === "best" || view === "most";
+  // The art follows the best champion whichever view the panel shows, so
+  // switching views never repaints the cover.
+  const best = player.riotIdFound ? bestChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS) : [];
   const splash = best[0];
   const role = player.riotIdFound ? player.analytics.mainRole : "UNKNOWN";
   const dead = respawnSeconds !== null;
@@ -160,7 +159,7 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: (place - 1) * 0.06, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: ENTRANCE.card.duration, delay: (place - 1) * ENTRANCE.card.step, ease: EASE }}
       className={`pcard place-${place}${dead ? " is-dead" : ""}${featured ? " is-featured" : ""}`}
       data-ranking-id={player.id}
     >
@@ -236,40 +235,64 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
           ? <div className="pcard__respawn"><RespawnPill seconds={respawnSeconds} playerName={player.gameName} /></div>
           : <MatchLine player={player} roster={roster} version={version} now={now} />}
         <Stitch />
-        <div className="pcard__champs">
-          <div className="section-label">
-            <span className="segmented" role="group" aria-label={`Qué mostrar de ${player.gameName}`}>
-              {PANEL_VIEWS.map(([key, label]) => (
-                <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>
-              ))}
-            </span>
-            {showingChampions ? <InfoHint label={WINRATE_BAR_HINT} /> : null}
-          </div>
-          {/* The views swap in place at one height, so switching never moves the podium. */}
-          <div className="pcard__panel">
-            {showingChampions ? (
-              <>
-                <div className="pcard__champs-bars">
-                  <ChampionBars
-                    champions={champions}
-                    version={version}
-                    label={`${view === "best" ? "Mejores campeones" : "Campeones más jugados"} de ${player.gameName}`}
-                  />
-                </div>
-                <div className="pcard__champs-tiles">
-                  <ChampionTiles champions={champions} version={version} showGames size={36} />
-                </div>
-              </>
-            ) : view === "roles" ? (
-              <RoleList player={player} />
-            ) : (
-              <PlayerSummary player={player} roster={roster} version={version} />
-            )}
-          </div>
-        </div>
+        <PodiumPanel player={player} roster={roster} version={version} best={best} />
       </div>
       </div>
     </m.article>
+  );
+}
+
+/**
+ * The card's lower panel. It keeps the view to itself, so a switch re-renders
+ * the panel and never the card: the card's layout animation is for the podium
+ * moving, and on a phone, where the views are not all the same height, it
+ * would stretch the whole card into its new size.
+ */
+function PodiumPanel({ player, roster, version, best }: {
+  player: PlayerSnapshot;
+  roster: readonly PlayerSnapshot[];
+  version: string;
+  best: readonly ChampionView[];
+}) {
+  // Null until the reader picks a view: only their switches bring a view in
+  // with motion, and the first paint keeps just the card's own entrance.
+  const [chosen, setChosen] = useState<PanelView | null>(null);
+  const view = chosen ?? "best";
+  const champions = view === "most" && player.riotIdFound
+    ? mostPlayedChampionViews(player.analytics.championCounts, PODIUM_CHAMPION_SLOTS)
+    : best;
+  const showingChampions = view === "best" || view === "most";
+
+  return (
+    <div className="pcard__champs">
+      <div className="section-label">
+        <Segmented options={PANEL_VIEWS} value={view} onChange={setChosen} label={`Qué mostrar de ${player.gameName}`} />
+        {showingChampions ? <InfoHint label={WINRATE_BAR_HINT} /> : null}
+      </div>
+      {/* The views swap in place at one height, so switching never moves the podium. */}
+      <div className="pcard__panel">
+        <div key={view} className={chosen === null ? undefined : "swap-in"}>
+          {showingChampions ? (
+            <>
+              <div className="pcard__champs-bars">
+                <ChampionBars
+                  champions={champions}
+                  version={version}
+                  label={`${view === "best" ? "Mejores campeones" : "Campeones más jugados"} de ${player.gameName}`}
+                />
+              </div>
+              <div className="pcard__champs-tiles">
+                <ChampionTiles champions={champions} version={version} showGames size={36} />
+              </div>
+            </>
+          ) : view === "roles" ? (
+            <RoleList player={player} />
+          ) : (
+            <PlayerSummary player={player} roster={roster} version={version} />
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

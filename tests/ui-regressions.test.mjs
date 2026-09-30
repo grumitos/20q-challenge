@@ -120,8 +120,24 @@ test("draws champions as rows whose solid bar is the adjusted winrate and whose 
   assert.match(primitives, /className="wr-track__observed" style=\{\{ width: `\$\{champion\.winRate\}%` \}\}/);
   assert.match(primitives, /className="wr-track__adjusted" style=\{\{ width: `\$\{champion\.adjusted\}%` \}\}/);
   assert.match(primitives, /aria-label=\{`\$\{champion\.name\}: \$\{champion\.games\} partidas, \$\{champion\.winRate\}% de winrate`\}/);
-  assert.match(css, /\.wr-track__observed \{ background: var\(--win-soft\); \}/);
-  assert.match(css, /\.wr-track__adjusted \{ background: var\(--win\); \}/);
+  assert.match(css, /\.wr-track__observed \{ background: color-mix\(in srgb, var\(--bar\) 28%, transparent\); \}/);
+  assert.match(css, /\.wr-track__adjusted \{ background: var\(--bar\); \}/);
+});
+
+test("inks wins green, losses red and even results grey, and keeps the accent for focus and live", async () => {
+  const { primitives, standings, duos, css } = await sources();
+  assert.match(css, /\.wr-track\.is-even, \.wr-bar\.is-even \{ --bar: var\(--even\); \}/);
+  assert.match(css, /\.wr-track\.is-loss, \.wr-bar\.is-loss \{ --bar: var\(--loss\); \}/);
+  assert.match(primitives, /className=\{`wr-track is-\$\{champion\.tone\}`\}/);
+  assert.match(duos, /className=\{`wr-track is-\$\{view\.tone\}`\}/);
+  assert.match(standings, /className=\{`wr-bar is-\$\{winRateTone\(player\.winRate, games, 1\)\}`\}/);
+  for (const source of [primitives, standings]) {
+    assert.match(source, /const lpTone = lpChangeTone\(match\.lpChangeEvidence, remake\);/);
+  }
+  assert.match(css, /\.lp-change\.is-pending, \.lp-change\.is-neutral \{ color: var\(--text-2\); \}/);
+  assert.match(css, /\.outcome\.is-remake \{ color: var\(--text-2\); \}/);
+  assert.match(css, /\.live-badge \{[^}]*color: var\(--accent\)/);
+  assert.match(css, /outline: 2px solid var\(--accent\);/);
 });
 
 test("keeps the five form slots visible even with no games", async () => {
@@ -140,11 +156,16 @@ test("names the live game, remakes and missing PL evidence honestly", async () =
 });
 
 test("opens a row's detail from its button, with the row itself as a pointer shortcut", async () => {
-  const { standings } = await sources();
+  const { standings, primitives } = await sources();
   assert.match(standings, /aria-expanded=\{open\}/);
   assert.match(standings, /aria-controls=\{detailId\}/);
   assert.match(standings, /if \(\(event\.target as HTMLElement\)\.closest\("a, button"\)\) return;/);
-  assert.match(standings, /aria-pressed=\{order === "best"\}/);
+  // The champion list's switch is a labelled group of pressed-state buttons, best first.
+  assert.match(standings, /\["best", "Mejores"\],\s*\["most", "Más jugados"\],/);
+  assert.match(standings, /const order = chosen \?\? "best";/);
+  assert.match(standings, /<Segmented options=\{DETAIL_ORDERS\} value=\{order\} onChange=\{setChosen\} label="Ordenar campeones" \/>/);
+  assert.match(primitives, /<span className="segmented" role="group" aria-label=\{label\}>/);
+  assert.match(primitives, /aria-pressed=\{value === key\}/);
   assert.match(standings, /<AnimatePresence initial=\{false\}>/);
   assert.match(standings, /is-self/);
   assert.match(standings, /is-peer/);
@@ -158,6 +179,49 @@ test("lets a podium card show a row detail's roles and summary in place, at one 
     assert.match(source, /<PlayerSummary player=\{player\} roster=\{roster\} version=\{version\} \/>/);
   }
   assert.match(css, /\.pcard__panel \{ margin-top: 12px; min-height: 164px; \}/);
+});
+
+test("switches views with one shared pill whose thumb slides, and fades the new view in without moving the card", async () => {
+  const { podium, standings, primitives, css } = await sources();
+  // One component for both switches, so the podium and the row detail behave alike.
+  for (const source of [podium, standings]) {
+    assert.match(source, /<Segmented options=\{/);
+    assert.doesNotMatch(source, /className="segmented"|aria-pressed=/);
+  }
+  // A single highlight per switch that motion slides to the chosen option; the
+  // pressed button paints no background of its own, and every label sits above the thumb.
+  assert.match(primitives, /const thumbId = useId\(\);/);
+  assert.match(primitives, /<m\.span\s+layoutId=\{thumbId\}\s+layoutDependency=\{value\}/);
+  assert.match(css, /\.segmented \{[^}]*isolation: isolate; \}/);
+  assert.match(css, /\.segmented button\[aria-pressed="true"\] \{ color: var\(--text\); \}/);
+  assert.match(css, /\.segmented__label \{ position: relative; z-index: 1; \}/);
+  // The panel keeps its view to itself: a switch never re-renders the card, whose
+  // layout animation would otherwise stretch it on a phone.
+  const card = podium.match(/\nfunction PodiumCard\([\s\S]*?\n\}\n/)?.[0] ?? "";
+  assert.match(card, /<PodiumPanel player=\{player\} roster=\{roster\} version=\{version\} best=\{best\} \/>/);
+  assert.doesNotMatch(card, /useState/);
+  // The shown view is keyed, and it only fades in once the reader has switched,
+  // so the first paint keeps the entrances it had.
+  assert.match(podium, /<div key=\{view\} className=\{chosen === null \? undefined : "swap-in"\}>/);
+  assert.match(standings, /<div key=\{order\} className=\{chosen === null \? undefined : "swap-in"\}>/);
+  assert.match(css, /\.swap-in \{ animation: view-in var\(--switch\) var\(--ease\); \}/);
+  assert.match(css, /\.swap-in :is\(\.wr-track i, \.role-list__bar i\) \{ transform-origin: left center; animation: bar-fill var\(--fill\) var\(--ease\); \}/);
+  assert.match(css, /@keyframes view-in \{ from \{ opacity: 0; transform: translateY\(4px\); \} \}/);
+  assert.match(css, /@keyframes bar-fill \{ from \{ transform: scaleX\(0\); \} \}/);
+  // Reduced motion cancels each new animation with the very selector that sets it.
+  const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(reduced, /\.swap-in, \.swap-in :is\(\.wr-track i, \.role-list__bar i\), \.board--duos\.is-expanded \.drow\.is-extra \{ animation: none; \}/);
+});
+
+test("keeps the stylesheet's motion tokens and the ones motion/react uses in step", async () => {
+  const { css } = await sources();
+  const { DURATION, EASE } = await import("../lib/motion.ts");
+  const ease = css.match(/--ease: cubic-bezier\(([^)]*)\);/)?.[1].split(",").map(Number);
+  assert.deepEqual(ease, [...EASE]);
+  for (const [token, seconds] of Object.entries(DURATION)) {
+    const declared = css.match(new RegExp(`--${token}: (\\d+)ms;`))?.[1];
+    assert.equal(Number(declared) / 1000, seconds, `--${token} and DURATION.${token}`);
+  }
 });
 
 test("gives the podium and the table their own headings and keeps the duos title visible", async () => {

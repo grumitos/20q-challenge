@@ -7,6 +7,7 @@ import {
   type PlayerSnapshot,
   type RosterSlot,
 } from "../../lib/leaderboard";
+import { DURATION, EASE, ENTRANCE } from "../../lib/motion";
 import {
   ROLE_LABELS,
   bestChampionViews,
@@ -15,12 +16,14 @@ import {
   formatDuration,
   formatLpChange,
   kdaRatio,
+  lpChangeTone,
   lpEvidenceTitle,
   matchDetailsUrl,
   mostPlayedChampionViews,
   outcomeLabel,
   profileUrl,
   rankLabel,
+  winRateTone,
 } from "../../lib/ui-format";
 import { ChevronDownIcon, ExternalIcon, MoonIcon, RoleIcon } from "./icons";
 import {
@@ -34,12 +37,20 @@ import {
   RankEmblem,
   RespawnPill,
   RoleList,
+  Segmented,
   WINRATE_BAR_HINT,
   tierClass,
 } from "./primitives";
 
 export const ROW_CHAMPION_SLOTS = 4;
 const DETAIL_CHAMPION_SLOTS = 5;
+
+/** The two ways the detail lists a player's champions. */
+const DETAIL_ORDERS = [
+  ["best", "Mejores"],
+  ["most", "Más jugados"],
+] as const;
+type DetailOrder = (typeof DETAIL_ORDERS)[number][0];
 
 type StandingsProps = {
   standings: readonly PlayerSnapshot[];
@@ -126,7 +137,7 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
       layout="position"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: Math.min(0.3, (place - 4) * 0.035), ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: ENTRANCE.row.duration, delay: Math.min(ENTRANCE.row.maxDelay, (place - 4) * ENTRANCE.row.step), ease: EASE }}
       className={`srow${open ? " is-open" : ""}${dead ? " is-dead" : ""}${unranked ? " is-unranked" : ""}`}
       data-ranking-id={player.id}
     >
@@ -177,7 +188,7 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
             <b className="mono">{games > 0 ? `${player.winRate.toFixed(1)}%` : "—"}</b>
             <small className="mono">{player.wins}V {player.losses}D</small>
           </span>
-          <span className="wr-bar" aria-hidden="true"><i style={{ width: `${games > 0 ? Math.max(2, player.winRate) : 0}%` }} /></span>
+          <span className={`wr-bar is-${winRateTone(player.winRate, games, 1)}`} aria-hidden="true"><i style={{ width: `${games > 0 ? Math.max(2, player.winRate) : 0}%` }} /></span>
         </span>
 
         <span className="srow__kda mono col-kda" aria-label={`KDA ${player.analytics.kda.toFixed(1)}`}>
@@ -218,7 +229,7 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: DURATION.fill, ease: EASE }}
           >
             <RowDetail player={player} version={version} roster={roster} now={now} />
           </m.div>
@@ -266,7 +277,10 @@ function RowDetail({ player, version, roster, now }: {
   roster: readonly PlayerSnapshot[];
   now: number;
 }) {
-  const [order, setOrder] = useState<"best" | "most">("best");
+  // Null until the reader picks a list, as in the podium's panel: only their
+  // switches bring the list in with motion.
+  const [chosen, setChosen] = useState<DetailOrder | null>(null);
+  const order = chosen ?? "best";
   const counts = player.analytics.championCounts;
   const champions = order === "best"
     ? bestChampionViews(counts, DETAIL_CHAMPION_SLOTS)
@@ -278,9 +292,7 @@ function RowDetail({ player, version, roster, now }: {
     const remake = isRemakeMatch(match);
     const outcome = remake ? "remake" : match.win ? "win" : "loss";
     const lp = formatLpChange(match.lpChangeEvidence, remake);
-    const lpTone = remake ? "neutral" : match.lpChangeEvidence.status === "observed"
-      ? (match.lpChangeEvidence.value < 0 ? "loss" : "win")
-      : "pending";
+    const lpTone = lpChangeTone(match.lpChangeEvidence, remake);
     const { allies, enemies } = orderMatchRoster(match.participants, player.id);
     matchBlock = (
       <>
@@ -309,12 +321,11 @@ function RowDetail({ player, version, roster, now }: {
       <section className="detail__block" aria-label={`Campeones de ${player.gameName}`}>
         <div className="section-label">
           <span>Campeones</span>
-          <span className="segmented" role="group" aria-label="Ordenar campeones">
-            <button type="button" aria-pressed={order === "best"} onClick={() => setOrder("best")}>Mejores</button>
-            <button type="button" aria-pressed={order === "most"} onClick={() => setOrder("most")}>Más jugados</button>
-          </span>
+          <Segmented options={DETAIL_ORDERS} value={order} onChange={setChosen} label="Ordenar campeones" />
         </div>
-        <ChampionBars champions={champions} version={version} label={`Campeones de ${player.gameName}`} />
+        <div key={order} className={chosen === null ? undefined : "swap-in"}>
+          <ChampionBars champions={champions} version={version} label={`Campeones de ${player.gameName}`} />
+        </div>
         <div className="detail__hint"><InfoHint label={WINRATE_BAR_HINT}>Cómo leer las barras</InfoHint></div>
       </section>
 

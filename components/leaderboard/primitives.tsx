@@ -1,5 +1,6 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
-import type { ReactNode } from "react";
+import { m } from "motion/react";
+import { useId, type ReactNode } from "react";
 import {
   formatRespawnClock,
   isRemakeMatch,
@@ -7,6 +8,7 @@ import {
   type PlayerSnapshot,
   type RankTier,
 } from "../../lib/leaderboard";
+import { DURATION, EASE } from "../../lib/motion";
 import {
   championIconUrl,
   firstName,
@@ -16,6 +18,7 @@ import {
   formatLimaTime,
   formatLpChange,
   kdaRatio,
+  lpChangeTone,
   lpEvidenceTitle,
   matchDetailsUrl,
   outcomeLabel,
@@ -100,6 +103,51 @@ export function PlaceChip({ place }: { place: number }) {
   );
 }
 
+/**
+ * A few options, one chosen: the podium panel's views and the row detail's
+ * champion lists. The highlight is one thumb that slides to the chosen option
+ * (a shared layout animation keyed to this switch) while the labels fade their
+ * colour. Choosing the option already chosen does nothing, so the view it
+ * shows never replays its entrance.
+ */
+export function Segmented<T extends string>({ options, value, onChange, label }: {
+  options: readonly (readonly [T, string])[];
+  value: T;
+  onChange: (value: T) => void;
+  label: string;
+}) {
+  const thumbId = useId();
+  return (
+    <span className="segmented" role="group" aria-label={label}>
+      {options.map(([key, text]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={value === key}
+          onClick={() => {
+            if (key !== value) onChange(key);
+          }}
+        >
+          {value === key ? (
+            // Measured only when the choice changes, or the clock's re-renders
+            // would finish a slide early. The radius rides in `style` so the
+            // slide's scale does not squash it.
+            <m.span
+              layoutId={thumbId}
+              layoutDependency={value}
+              className="segmented__thumb"
+              style={{ borderRadius: 6 }}
+              transition={{ duration: DURATION.switch, ease: EASE }}
+              aria-hidden="true"
+            />
+          ) : null}
+          <span className="segmented__label">{text}</span>
+        </button>
+      ))}
+    </span>
+  );
+}
+
 /** An "i" that explains itself on hover; `children` is an optional visible caption before it. */
 export function InfoHint({ label, children }: { label: string; children?: ReactNode }) {
   return (
@@ -139,7 +187,7 @@ export function ChampionBars({ champions, version, label }: { champions: readonl
           </span>
           <span className="champ-row__name" aria-hidden="true">{champion.name}</span>
           <span className="champ-row__games mono" aria-hidden="true">{champion.games}p</span>
-          <span className="wr-track" aria-hidden="true">
+          <span className={`wr-track is-${champion.tone}`} aria-hidden="true">
             <i className="wr-track__observed" style={{ width: `${champion.winRate}%` }} />
             <i className="wr-track__adjusted" style={{ width: `${champion.adjusted}%` }} />
           </span>
@@ -288,9 +336,7 @@ export function MatchLine({ player, roster, version, now, compact = false }: {
   const outcome = matchOutcome(match);
   const remake = outcome === "remake";
   const lp = formatLpChange(match.lpChangeEvidence, remake);
-  const lpTone = remake ? "neutral" : match.lpChangeEvidence.status === "observed"
-    ? (match.lpChangeEvidence.value < 0 ? "loss" : "win")
-    : "pending";
+  const lpTone = lpChangeTone(match.lpChangeEvidence, remake);
   const href = matchDetailsUrl(match.matchId) ?? profileUrl(player);
   const kda = `${match.kills}/${match.deaths}/${match.assists}`;
   const company = peerText(peerNames(match.participants, player.id, roster));

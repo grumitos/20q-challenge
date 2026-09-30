@@ -82,6 +82,15 @@ export function formatLpChange(evidence: LpChangeEvidence, remake = false) {
   return evidence.value < 0 ? `−${Math.abs(evidence.value)} PL` : `+${evidence.value} PL`;
 }
 
+export type LpChangeTone = "win" | "loss" | "neutral" | "pending";
+
+/** Green for points won, red for points lost, grey when nothing moved: a remake or 0 PL. */
+export function lpChangeTone(evidence: LpChangeEvidence, remake = false): LpChangeTone {
+  if (remake) return "neutral";
+  if (evidence.status !== "observed") return "pending";
+  return evidence.value > 0 ? "win" : evidence.value < 0 ? "loss" : "neutral";
+}
+
 export function lpEvidenceTitle(evidence: LpChangeEvidence, remake = false) {
   if (remake) return "La partida terminó como remake y no alteró los PL.";
   if (evidence.status === "observed") {
@@ -127,13 +136,25 @@ export function formSlots(results: readonly boolean[] = []) {
   return { slots, wins, losses, text: `${wins}V ${losses}D`, label };
 }
 
+export type WinRateTone = "win" | "even" | "loss";
+
+/**
+ * Green above 50%, red below, grey for an even 50% or no games at all. It is
+ * judged on the value as shown, so a winrate printed as "50.0%" stays grey.
+ */
+export function winRateTone(winRate: number, games: number, decimals = 0): WinRateTone {
+  if (games <= 0) return "even";
+  const shown = Number(winRate.toFixed(decimals));
+  return shown > 50 ? "win" : shown < 50 ? "loss" : "even";
+}
+
 export type ChampionView = {
   id: string;
   name: string;
   games: number;
   winRate: number;
   adjusted: number;
-  tone: "strong" | "even" | "weak";
+  tone: WinRateTone;
 };
 
 /** Winrate as displayed (rounded) and the Wilson lower bound the list is ordered by. */
@@ -145,7 +166,7 @@ export function championView(champion: ChampionAggregate): ChampionView {
     games: champion.games,
     winRate,
     adjusted: Math.round(wilsonLowerBound(champion.wins, champion.games) * 100),
-    tone: winRate >= 55 ? "strong" : winRate >= 48 ? "even" : "weak",
+    tone: winRateTone(winRate, champion.games),
   };
 }
 
@@ -272,7 +293,7 @@ export type DuoView = {
   losses: number;
   winRate: number;
   adjusted: number;
-  tone: "strong" | "even" | "weak";
+  tone: WinRateTone;
 };
 
 export function duoView(duo: { games: number; wins: number; score: number }): DuoView {
@@ -283,6 +304,6 @@ export function duoView(duo: { games: number; wins: number; score: number }): Du
     losses: Math.max(0, duo.games - duo.wins),
     winRate,
     adjusted: duo.score * 100,
-    tone: winRate >= 55 ? "strong" : winRate >= 48 ? "even" : "weak",
+    tone: winRateTone(winRate, duo.games, 1),
   };
 }
