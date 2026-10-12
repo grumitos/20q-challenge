@@ -1,5 +1,4 @@
 import type { MouseEvent } from "react";
-import { Brand } from "./brand";
 import { GaspiDoor } from "./gaspi-door";
 
 /**
@@ -26,7 +25,11 @@ export function TopBar({ liveCount, onOpenGaspi }: {
     // While someone plays, a phone's bar gives the section links' room to the live count.
     <header className={`topbar${liveCount > 0 ? " has-live" : ""}`}>
       <div className="topbar__inner shell">
-        <Brand />
+        <span className="brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="brand__logo" src="/brand-logo.webp" alt="" width={28} height={28} />
+          <span className="brand__name">20Q Challenge</span>
+        </span>
         <span className="topbar__rule" aria-hidden="true" />
         <span className="topbar__meta">LAS · Solo/Duo · Temporada 2026</span>
         {/* The same rule sets the section links apart from the season's line. */}

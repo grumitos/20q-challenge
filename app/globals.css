@@ -234,28 +234,7 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .topbar__inner { display: flex; align-items: center; gap: 18px; height: var(--topbar-h); }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand__logo { width: 28px; height: 28px; border-radius: 8px; object-fit: cover; }
-.brand__name { display: flex; align-items: baseline; font-size: 15px; font-weight: 600; line-height: 1.4; letter-spacing: -.01em; white-space: nowrap; }
-/* The typed tail shares one cell with two hidden copies of both tails, so the
-   slot keeps the wider one's width and the bar never shifts while it types. */
-.brand__tail { display: grid; align-items: baseline; white-space: pre; }
-.brand__tail > * { grid-area: 1 / 1; }
-.brand__tail > :not(:last-child) { visibility: hidden; }
-/* Deadlock's own wordmark face, in capitals as the game's logo is set, for the typed word. */
-@font-face { font-family: "Valve Occult"; font-weight: 600; font-display: swap; src: url("/fonts/ValveOccult-SemiBold.woff2") format("woff2"); }
-.brand__occult { font-family: "Valve Occult", var(--font-display); text-transform: uppercase; letter-spacing: .02em; }
-/* The "20" is drawn, not typeset, so brand.tsx can morph its outline into Deadlock's; the
-   box is sized in em from the outline's units and sits on the text's baseline. */
-.brand__num { flex: none; overflow: visible; fill: currentColor; }
-/* The logo and Deadlock's wheel (a mask, so it takes the title's ink) trade places with a quick fade. */
-.brand__mark { position: relative; flex: none; width: 28px; height: 28px; }
-.brand__mark > * { position: absolute; inset: 0; transition: opacity var(--switch) var(--ease-soft); }
-.brand__icon {
-  opacity: 0; background: var(--text);
-  -webkit-mask: url("/deadlock-icon.svg") center / contain no-repeat;
-  mask: url("/deadlock-icon.svg") center / contain no-repeat;
-}
-.brand.is-swapped .brand__logo { opacity: 0; }
-.brand.is-swapped .brand__icon { opacity: 1; }
+.brand__name { font-size: 15px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
 .topbar__rule { width: 1px; height: 16px; background: var(--line-strong); flex: none; }
 .topbar__meta { color: var(--text-3); font-size: 13px; white-space: nowrap; }
 /* The links' own padding already sets their text apart from the rule. */
