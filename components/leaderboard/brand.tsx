@@ -27,9 +27,11 @@ export function Brand() {
   // starts over with the full time of the state the title is in once the pointer
   // is gone (a swap the timer was holding stays its full time after the leave).
   // Only a mouse hovers: a tap would leave the swap stuck until the next tap
-  // elsewhere, so touch screens get the timer alone. Once the title is clicked
-  // (it opens Deadlocks' page in a new tab) it goes back to normal and the timer
-  // stops for good; a mouse can still bring the swap back by leaving and coming in again.
+  // elsewhere, so touch screens get the timer alone. The title only links to
+  // Deadlocks' page (in a new tab) while it reads "Deadlocks"; as "20Q Challenge" it
+  // links to this site, so pressing or right-clicking it gives nothing away. Once the
+  // Deadlocks link is clicked the title goes back to normal and the timer stops for
+  // good; a mouse can still bring the swap back by leaving and coming in again.
   const [timed, setTimed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [clicked, setClicked] = useState(false);
@@ -39,6 +41,8 @@ export function Brand() {
   const [shape, setShape] = useState(0);
   const swapped = hovered || (!clicked && timed);
   const want = swapped ? SWAPPED : NAME;
+  // What the title shows right now, not what it is heading to, decides where it links.
+  const onDeadlocks = tail !== "" && SWAPPED.startsWith(tail);
 
   // One flip at a time, after the full time of the current state; a hover cancels it.
   const swaps = useRef(0);
@@ -80,10 +84,11 @@ export function Brand() {
   return (
     <a
       className={`brand${swapped ? " is-swapped" : ""}`}
-      href={DEADLOCKS_URL}
-      target="_blank"
-      rel="noopener noreferrer"
+      href={onDeadlocks ? DEADLOCKS_URL : "/"}
+      target={onDeadlocks ? "_blank" : undefined}
+      rel={onDeadlocks ? "noopener noreferrer" : undefined}
       onClick={() => {
+        if (!onDeadlocks) return;
         // The pointer is still over the title: let go of the hover so it goes back at once.
         setClicked(true);
         setHovered(false);
@@ -98,7 +103,7 @@ export function Brand() {
         <span className="brand__icon" />
       </span>
       <span className="brand__name">
-        <span className="sr-only">20Q Challenge (abre Los 20 Deadlocks en una pestaña nueva)</span>
+        <span className="sr-only">20Q Challenge</span>
         <svg
           className="brand__num"
           viewBox={`0 -${GLYPH_20.height} ${GLYPH_20.width} ${GLYPH_20.height}`}
@@ -112,7 +117,7 @@ export function Brand() {
               while the text types and the font loads before it is first needed. */}
           <span>{NAME}</span>
           <span className="brand__occult">{SWAPPED}</span>
-          <span className={tail && SWAPPED.startsWith(tail) ? "brand__occult" : undefined}>{tail}</span>
+          <span className={onDeadlocks ? "brand__occult" : undefined}>{tail}</span>
         </span>
       </span>
     </a>
