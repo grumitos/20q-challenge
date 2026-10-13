@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GLYPH_20 } from "./glyph-20";
 
 /**
@@ -23,7 +23,9 @@ const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)"
 
 export function Brand() {
   // The timer and the pointer each ask for the swap: hovering forces it and
-  // holds it until the pointer leaves, unless the timer has already put it back.
+  // holds it until the pointer leaves. Hovering also stops the timer, which
+  // starts over with the full time of the state the title is in once the pointer
+  // is gone (a swap the timer was holding stays its full time after the leave).
   // Only a mouse hovers: a tap would leave the swap stuck until the next tap
   // elsewhere, so touch screens get the timer alone. Once the title is clicked
   // (it opens Deadlocks' page in a new tab) it goes back to normal and the timer
@@ -38,16 +40,17 @@ export function Brand() {
   const swapped = hovered || (!clicked && timed);
   const want = swapped ? SWAPPED : NAME;
 
+  // One flip at a time, after the full time of the current state; a hover cancels it.
+  const swaps = useRef(0);
   useEffect(() => {
-    if (clicked) return;
-    let id: number;
-    const step = (on: boolean) => {
-      setTimed(on);
-      id = window.setTimeout(() => step(!on), on ? SWAP_HOLD_MS : SWAP_EVERY_MS);
-    };
-    id = window.setTimeout(() => step(true), FIRST_SWAP_MS);
+    if (clicked || hovered) return;
+    const wait = timed ? SWAP_HOLD_MS : swaps.current === 0 ? FIRST_SWAP_MS : SWAP_EVERY_MS;
+    const id = window.setTimeout(() => {
+      if (!timed) swaps.current += 1;
+      setTimed(!timed);
+    }, wait);
     return () => window.clearTimeout(id);
-  }, [clicked]);
+  }, [clicked, hovered, timed]);
 
   // One character a step: type while the tail leads to the wanted text, erase otherwise.
   useEffect(() => {

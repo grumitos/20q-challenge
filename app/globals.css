@@ -241,8 +241,8 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
 .brand__tail > * { grid-area: 1 / 1; }
 .brand__tail > :not(:last-child) { visibility: hidden; }
 /* Deadlock's own wordmark face, in capitals as the game's logo is set, for the typed word.
-   Its digits and capitals stand 6% lower than the title face's, so it is set 6% larger:
-   the "20" then keeps its height through the swap (glyph-20.ts is drawn at the same scale). */
+   Its capitals stand 6% lower than the title face's, so it is set 6% larger. The morphing
+   "20" is sized apart, by the body of its digits (9% larger; see glyph-20.ts). */
 @font-face { font-family: "Valve Occult"; font-weight: 600; font-display: swap; src: url("/fonts/ValveOccult-SemiBold.woff2") format("woff2"); }
 .brand__occult { font-family: "Valve Occult", var(--font-display); font-size: 1.06em; text-transform: uppercase; letter-spacing: .02em; }
 /* The "20" is drawn, not typeset, so brand.tsx can morph its outline into Deadlock's; the
