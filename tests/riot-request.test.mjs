@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { gzipSync } from "node:zlib";
 import {
   ANALYTICS_REQUEST_BUDGET,
   createRiotRequester,
+  keepBrotliOutOfFetch,
   RIOT_MAX_RETRY_AFTER_MS,
   RIOT_MIN_REQUEST_INTERVAL_MS,
   RIOT_REQUEST_TIMEOUT_MS,
@@ -264,6 +266,66 @@ test("on Bun the requester's own fetch never reaches the Brotli decoder", { skip
     assert.deepEqual(await (await requester.fetch(`http://127.0.0.1:${port}/gzip`)).json(), { ok: true });
     await assert.rejects(requester.fetch(`http://127.0.0.1:${port}/br`), UnsupportedContentEncodingError);
   } finally {
+    server.close();
+  }
+});
+
+test("withoutBrotli leaves a fetch that is already guarded as it is", () => {
+  const once = withoutBrotli(async () => Response.json({ ok: true }));
+  assert.equal(withoutBrotli(once), once);
+});
+
+test("keepBrotliOutOfFetch guards the global fetch, once however often it is called", async () => {
+  const original = globalThis.fetch;
+  let seen;
+  globalThis.fetch = async (_input, init) => {
+    seen = init;
+    return new Response(gzipSync(JSON.stringify({ ok: true })), { headers: { "Content-Encoding": "gzip" } });
+  };
+  try {
+    keepBrotliOutOfFetch();
+    const guarded = globalThis.fetch;
+    keepBrotliOutOfFetch();
+    assert.equal(globalThis.fetch, guarded);
+    assert.deepEqual(await (await fetch("https://example.test/")).json(), { ok: true });
+    assert.equal(new Headers(seen.headers).get("accept-encoding"), "gzip, deflate");
+    assert.equal(seen.decompress, false);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("the VPS runner guards the global fetch before it runs anything", () => {
+  const source = readFileSync(new URL("../vps/tracker-runner.ts", import.meta.url), "utf8");
+  const guard = source.indexOf("\nkeepBrotliOutOfFetch();");
+  assert.ok(guard > 0, "tracker-runner.ts must call keepBrotliOutOfFetch()");
+  assert.ok(guard < source.indexOf("\nawait main();"), "and before main() starts");
+});
+
+test("on Bun the plain global fetch the tracker hands down never reaches the Brotli decoder", { skip: !("Bun" in globalThis) }, async () => {
+  const original = globalThis.fetch;
+  const acceptEncodings = [];
+  const server = createServer((request, response) => {
+    acceptEncodings.push(request.headers["accept-encoding"]);
+    response.setHeader("Content-Type", "application/json");
+    response.setHeader("Content-Encoding", "br");
+    response.end(Buffer.from([0x1b, 0x03, 0x00, 0xf8, 0x25, 0x02, 0x03]));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  try {
+    keepBrotliOutOfFetch();
+    // The shape of riot-tracker-api.ts and riot-client.ts: an explicit wrapper over the global.
+    const requester = createRiotRequester({
+      apiKey: "secret",
+      maxRequests: 1,
+      minIntervalMs: 0,
+      fetchImpl: (input, init) => fetch(input, init),
+    });
+    await assert.rejects(requester.fetch(`http://127.0.0.1:${port}/`), UnsupportedContentEncodingError);
+    assert.deepEqual(acceptEncodings, ["gzip, deflate"]);
+  } finally {
+    globalThis.fetch = original;
     server.close();
   }
 });
