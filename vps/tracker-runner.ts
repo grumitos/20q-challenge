@@ -29,12 +29,6 @@ import {
   readAnalyticsHeartbeat,
   readAnalyticsRetry,
 } from "./analytics-schedule.ts";
-import { keepBrotliOutOfFetch } from "../lib/riot-request.ts";
-
-// Riot, Data Dragon and the Worker are all reached through the global `fetch`,
-// and Bun's own decoder for `Content-Encoding: br` has an out-of-bounds write
-// (CVE-2026-111497, oven-sh/bun#46352). See the BROTLI note in riot-request.ts.
-keepBrotliOutOfFetch();
 
 /**
  * The Worker's defaults exist because of its 10 ms CPU ceiling; out here the
