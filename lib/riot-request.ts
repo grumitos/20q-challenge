@@ -59,8 +59,11 @@ export const RIOT_MAX_RETRY_AFTER_MS = 5_000;
    hand whatever answers as Riot to that decoder. It asks for gzip and deflate
    only, takes the body undecoded, decodes those two itself and refuses any
    other encoding. The Worker runtime has its own decoder and keeps its `fetch`.
-   Delete this block, `withoutBrotli` and its test when the Bun the VPS runs
-   carries the Brotli fix. */
+   The requester's own default is not enough: the tracker, the analytics refresh
+   and Data Dragon all hand it the global `fetch` explicitly, so the VPS entry
+   point calls `keepBrotliOutOfFetch` once and every one of them is covered.
+   Delete this block, `withoutBrotli`, `keepBrotliOutOfFetch` and their tests
+   when the Bun the VPS runs carries the Brotli fix. */
 
 const DECODABLE_ENCODINGS = new Map<string, "gzip" | "deflate">([
   ["gzip", "gzip"],
@@ -109,14 +112,26 @@ function decodedResponse(response: Response): Response {
   return answer;
 }
 
-/** `nativeFetch` that never reaches Bun's Brotli decoder. */
+const GUARDED = Symbol.for("20q.withoutBrotli");
+
+/** `nativeFetch` that never reaches Bun's Brotli decoder. Wrapping a fetch that
+    is already guarded returns it as it is. */
 export function withoutBrotli(nativeFetch: RiotFetch): RiotFetch {
-  return async (input, init) => {
+  if ((nativeFetch as { [GUARDED]?: true })[GUARDED]) return nativeFetch;
+  const guarded: RiotFetch = async (input, init) => {
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     headers.set("accept-encoding", "gzip, deflate");
     // `decompress` is Bun's own option: the body arrives as the server sent it.
     return decodedResponse(await nativeFetch(input, { ...init, headers, decompress: false } as RequestInit));
   };
+  return Object.assign(guarded, { [GUARDED]: true as const });
+}
+
+/** Replaces this process's global `fetch` with a guarded one. Every caller on
+    the VPS reads the global when it runs (a default argument or a `??`
+    fallback), so one call at start-up covers Riot, Data Dragon and the Worker. */
+export function keepBrotliOutOfFetch(): void {
+  globalThis.fetch = withoutBrotli(globalThis.fetch as RiotFetch) as unknown as typeof fetch;
 }
 
 const RUNNING_ON_BUN = "Bun" in globalThis;
