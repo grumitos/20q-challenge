@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createServer } from "node:http";
+import { gzipSync } from "node:zlib";
 import {
   ANALYTICS_REQUEST_BUDGET,
   createRiotRequester,
@@ -10,6 +12,8 @@ import {
   RiotRequestBudgetExceeded,
   RiotRequestTimeout,
   TRACKER_REQUEST_BUDGET,
+  UnsupportedContentEncodingError,
+  withoutBrotli,
   WORKER_SUBREQUEST_LIMIT,
 } from "../lib/riot-request.ts";
 
@@ -207,4 +211,59 @@ test("no run can outspend Cloudflare's subrequest ceiling", () => {
     ANALYTICS_REQUEST_BUDGET + D1_HEADROOM <= WORKER_SUBREQUEST_LIMIT,
     `analytics may spend ${ANALYTICS_REQUEST_BUDGET} of ${WORKER_SUBREQUEST_LIMIT}, leaving under ${D1_HEADROOM} for persistence`,
   );
+});
+
+test("withoutBrotli asks for gzip and deflate only, and takes the body undecoded", async () => {
+  let seen;
+  const fetchWithoutBrotli = withoutBrotli(async (_input, init) => {
+    seen = init;
+    return new Response(gzipSync(JSON.stringify({ ok: true })), { headers: { "Content-Encoding": "gzip", "Content-Length": "999" } });
+  });
+  const response = await fetchWithoutBrotli("https://example.test/", { headers: { "X-Riot-Token": "secret" } });
+
+  assert.equal(new Headers(seen.headers).get("accept-encoding"), "gzip, deflate");
+  assert.equal(new Headers(seen.headers).get("x-riot-token"), "secret");
+  assert.equal(seen.decompress, false);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(response.headers.get("content-encoding"), null);
+  assert.equal(response.headers.get("content-length"), null);
+});
+
+test("withoutBrotli refuses an answer in any other encoding instead of decoding it", async () => {
+  for (const encoding of ["br", "gzip, br", "zstd"]) {
+    const fetchWithoutBrotli = withoutBrotli(async () => new Response("not decoded", { headers: { "Content-Encoding": encoding } }));
+    await assert.rejects(
+      fetchWithoutBrotli("https://example.test/"),
+      (error) => error instanceof UnsupportedContentEncodingError && error.message.includes(`"${encoding}"`),
+      encoding,
+    );
+  }
+});
+
+test("withoutBrotli returns an answer without an encoding as it came", async () => {
+  const reply = Response.json({ ok: true });
+  const fetchWithoutBrotli = withoutBrotli(async () => reply);
+  assert.equal(await fetchWithoutBrotli("https://example.test/"), reply);
+});
+
+test("on Bun the requester's own fetch never reaches the Brotli decoder", { skip: !("Bun" in globalThis) }, async () => {
+  const server = createServer((request, response) => {
+    response.setHeader("Content-Type", "application/json");
+    if (request.url === "/gzip") {
+      response.setHeader("Content-Encoding", "gzip");
+      response.end(gzipSync(JSON.stringify({ ok: true })));
+      return;
+    }
+    response.setHeader("Content-Encoding", "br");
+    response.end(Buffer.from([0x1b, 0x03, 0x00, 0xf8, 0x25, 0x02, 0x03]));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  try {
+    const requester = createRiotRequester({ apiKey: "secret", maxRequests: 2, minIntervalMs: 0 });
+    assert.deepEqual(await (await requester.fetch(`http://127.0.0.1:${port}/gzip`)).json(), { ok: true });
+    await assert.rejects(requester.fetch(`http://127.0.0.1:${port}/br`), UnsupportedContentEncodingError);
+  } finally {
+    server.close();
+  }
 });
