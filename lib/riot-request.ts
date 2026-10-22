@@ -51,91 +51,6 @@ export const RIOT_REQUEST_TIMEOUT_MS = 8_000;
     anybody waiting. */
 export const RIOT_MAX_RETRY_AFTER_MS = 5_000;
 
-/* ─── BROTLI ───
-   Bun decodes a `Content-Encoding: br` answer with its own copy of Google's
-   Brotli, whose decoder has the out-of-bounds write that Node.js fixed on
-   2026-10-21 (CVE-2026-111497; oven-sh/bun#46352: every Bun release up to 1.4.3
-   carries it). `fetch` offers `br` by default, so the tracker on the VPS would
-   hand whatever answers as Riot to that decoder. It asks for gzip and deflate
-   only, takes the body undecoded, decodes those two itself and refuses any
-   other encoding. The Worker runtime has its own decoder and keeps its `fetch`.
-   The requester's own default is not enough: the tracker, the analytics refresh
-   and Data Dragon all hand it the global `fetch` explicitly, so the VPS entry
-   point calls `keepBrotliOutOfFetch` once and every one of them is covered.
-   Delete this block, `withoutBrotli`, `keepBrotliOutOfFetch` and their tests
-   when the Bun the VPS runs carries the Brotli fix. */
-
-const DECODABLE_ENCODINGS = new Map<string, "gzip" | "deflate">([
-  ["gzip", "gzip"],
-  ["x-gzip", "gzip"],
-  ["deflate", "deflate"],
-]);
-
-export class UnsupportedContentEncodingError extends Error {
-  constructor(encoding: string) {
-    super(`The response uses Content-Encoding "${encoding}", which this process does not decode.`);
-    this.name = "UnsupportedContentEncodingError";
-  }
-}
-
-function decodedResponse(response: Response): Response {
-  const header = response.headers.get("content-encoding") ?? "";
-  const encodings = header
-    .split(",")
-    .map((encoding) => encoding.trim().toLowerCase())
-    .filter((encoding) => encoding !== "" && encoding !== "identity");
-  if (encodings.length === 0) return response;
-
-  // Applied in the order listed, so they come off in reverse.
-  const formats: Array<"gzip" | "deflate"> = [];
-  for (const encoding of encodings) {
-    const format = DECODABLE_ENCODINGS.get(encoding);
-    if (!format) {
-      void response.body?.cancel().catch(() => undefined);
-      throw new UnsupportedContentEncodingError(header);
-    }
-    formats.unshift(format);
-  }
-
-  let body = response.body;
-  for (const format of formats) {
-    body = body?.pipeThrough(new DecompressionStream(format)) ?? null;
-  }
-  const headers = new Headers(response.headers);
-  headers.delete("content-encoding");
-  headers.delete("content-length");
-  const answer = new Response(body, { status: response.status, statusText: response.statusText, headers });
-  Object.defineProperties(answer, {
-    url: { value: response.url },
-    redirected: { value: response.redirected },
-  });
-  return answer;
-}
-
-const GUARDED = Symbol.for("20q.withoutBrotli");
-
-/** `nativeFetch` that never reaches Bun's Brotli decoder. Wrapping a fetch that
-    is already guarded returns it as it is. */
-export function withoutBrotli(nativeFetch: RiotFetch): RiotFetch {
-  if ((nativeFetch as { [GUARDED]?: true })[GUARDED]) return nativeFetch;
-  const guarded: RiotFetch = async (input, init) => {
-    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-    headers.set("accept-encoding", "gzip, deflate");
-    // `decompress` is Bun's own option: the body arrives as the server sent it.
-    return decodedResponse(await nativeFetch(input, { ...init, headers, decompress: false } as RequestInit));
-  };
-  return Object.assign(guarded, { [GUARDED]: true as const });
-}
-
-/** Replaces this process's global `fetch` with a guarded one. Every caller on
-    the VPS reads the global when it runs (a default argument or a `??`
-    fallback), so one call at start-up covers Riot, Data Dragon and the Worker. */
-export function keepBrotliOutOfFetch(): void {
-  globalThis.fetch = withoutBrotli(globalThis.fetch as RiotFetch) as unknown as typeof fetch;
-}
-
-const RUNNING_ON_BUN = "Bun" in globalThis;
-
 export class RiotRequestTimeout extends Error {
   constructor() {
     super("Riot request timed out.");
@@ -207,7 +122,7 @@ export function createRiotRequester(options: {
   const apiKey = options.apiKey.trim();
   if (!apiKey) throw new TypeError("Riot API key is required.");
   const budget = new RiotRequestBudget(options.maxRequests);
-  const fetchImpl = options.fetchImpl ?? (RUNNING_ON_BUN ? withoutBrotli(fetch) : fetch);
+  const fetchImpl = options.fetchImpl ?? fetch;
   const sleep = options.sleep ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const maxRateLimitRetries = options.maxRateLimitRetries ?? 2;
   const minIntervalMs = options.minIntervalMs ?? RIOT_MIN_REQUEST_INTERVAL_MS;
