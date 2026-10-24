@@ -12,7 +12,7 @@ import { Database } from "bun:sqlite";
 const exportPath = process.argv[2];
 if (!exportPath) throw new Error("Usage: bun vps/import-d1-export.ts <export.sql>");
 
-const targetPath = process.env.TRACKER_DB_PATH ?? "/var/lib/20q-tracker/20q.sqlite";
+const targetPath = process.env.TRACKER_DB_PATH ?? "/var/lib/20q/20q.sqlite";
 const temporaryPath = `${targetPath}.import-${process.pid}`;
 const requiredTables = [
   "leaderboard_cache",

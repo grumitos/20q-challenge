@@ -77,9 +77,16 @@ En Pages solo se necesita el texto público
 La fecha de compatibilidad `2026-07-26` solo se conserva en las
 configuraciones legacy de desarrollo y del Worker retirado.
 
-En el VPS, `/etc/20q-tracker.env` conserva `RIOT_API_KEY` para el timer. La API
+En el VPS, `/etc/20q.env` conserva `RIOT_API_KEY` para el timer. La API
 no recibe esa key. La base local vive en
-`/var/lib/20q-tracker/20q.sqlite` con WAL y migraciones aditivas.
+`/var/lib/20q/20q.sqlite` con WAL y migraciones aditivas.
+
+La parte del VPS (`vps/`, `lib/`, `db/`, `drizzle/` y `deploy/`) se publica con
+**Deploy VPS** (`mode` = `deploy` o `rollback`, `target_sha` de `main`) por
+`app-release` de `vps-platform`. `deploy/units.toml` describe la API, el tracker
+y el respaldo nocturno de la base (`deploy/backup.sh`: el histórico de PL no se
+puede reconstruir), y `deploy/site.caddy` el sitio. `update.yml` sube cada lunes
+las dependencias dentro de su versión mayor y el Bun del VPS.
 
 ### Migraciones
 

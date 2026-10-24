@@ -1,0 +1,35 @@
+(20q_api_cf_proxy_headers) {
+	header_up Host {host}
+	header_up X-Real-IP {client_ip}
+	header_up X-Forwarded-For {client_ip}
+	header_up X-Forwarded-Proto https
+}
+
+(20q_api_proxy) {
+	reverse_proxy 127.0.0.1:8200 {
+		import 20q_api_cf_proxy_headers
+	}
+}
+
+20q-api.yasmiau.com {
+	tls /etc/caddy/certs/yasmiau.com/fullchain.pem /etc/caddy/certs/yasmiau.com/privkey.pem
+	encode zstd gzip
+
+	@twentyQPublicPaths path /healthz /api/leaderboard
+	@twentyQFromCloudflare remote_ip {$CLOUDFLARE_RANGES}
+	@allowedTwentyQLocal remote_ip 127.0.0.1/32 ::1/128 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 fc00::/7
+
+	handle @twentyQFromCloudflare {
+		handle @twentyQPublicPaths {
+			import 20q_api_proxy
+		}
+		respond 404
+	}
+	handle @allowedTwentyQLocal {
+		handle @twentyQPublicPaths {
+			import 20q_api_proxy
+		}
+		respond 404
+	}
+	respond 403
+}

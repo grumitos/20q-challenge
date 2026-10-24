@@ -1,0 +1,86 @@
+name: Update
+
+# Mondays 04:50 in Lima: npm dependencies within their major version (majors are only
+# listed in the summary; vinext, still 0.x, moves only with its own migration) and the
+# Bun of deploy/units.toml. main moves only after CI passes on the update; a failed
+# deploy goes back to the previous release and reverts the update. Any failure leaves
+# this run red.
+on:
+  schedule:
+    - cron: "50 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: update
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+
+      - name: Update, test, deploy
+        run: |
+          set -euo pipefail
+          ncu() { npx --yes npm-check-updates@23.1.1 --cooldown 3d "$@"; }
+          ncu --target latest | tee -a "$GITHUB_STEP_SUMMARY"
+          ncu --target minor --reject vinext -u
+
+          new="$(gh api repos/oven-sh/bun/releases/latest --jq '.tag_name | ltrimstr("bun-v")')"
+          old="$(sed -n 's#^url = ".*/bun-v\([^/]*\)/.*#\1#p' deploy/units.toml)"
+          if [[ "$new" != "$old" && "$new" == "${old%%.*}".* ]]; then
+            sum="$(curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v$new/SHASUMS256.txt" | awk '$2 == "bun-linux-x64.zip" {print $1}')"
+            sed -i "/^\[runtimes.bun\]/,/^path/ { s#bun-v$old/#bun-v$new/#; s#^sha256 = .*#sha256 = \"$sum\"# }" deploy/units.toml
+          elif [ "$new" != "$old" ]; then
+            echo "Bun $new is a new major version: not taken." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          npm install --no-audit --no-fund
+          git diff --quiet && exit 0
+
+          # Starts a workflow and waits for its run; fails when the run does.
+          dispatch() {
+            local workflow="$1" ref="$2" since run=""
+            shift 2
+            since="$(date -u -d '-10 sec' +%FT%TZ)"
+            gh workflow run "$workflow" --ref "$ref" "$@" || return 1
+            until [ -n "$run" ]; do
+              sleep 10
+              run="$(gh run list --workflow "$workflow" --event workflow_dispatch --json databaseId,createdAt \
+                --jq "[.[] | select(.createdAt >= \"$since\")][0].databaseId // empty")"
+            done
+            gh run watch "$run" --exit-status > /dev/null
+          }
+          # main moves only to a commit whose checks passed.
+          land() {
+            git push -q origin "HEAD:refs/heads/update-$GITHUB_RUN_ID"
+            dispatch ci.yml "update-$GITHUB_RUN_ID"
+            git push -q origin HEAD:main
+            git push -q origin --delete "update-$GITHUB_RUN_ID"
+          }
+          git config user.name Diego
+          git config user.email 77018402+grumitos@users.noreply.github.com
+          previous="$(git rev-parse HEAD)"
+          git commit -qam "Update dependencies and Bun"
+          land
+          if ! dispatch deploy-vps.yml main -f mode=deploy -f target_sha="$(git rev-parse HEAD)"; then
+            dispatch deploy-vps.yml main -f mode=rollback -f target_sha="$previous"
+            git revert --no-edit HEAD
+            land
+            echo "The update failed its deploy and was reverted." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi

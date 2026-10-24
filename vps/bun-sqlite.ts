@@ -78,7 +78,7 @@ export async function openBunTrackerDatabase(options: {
   path?: string;
   migrationsDirectory?: URL;
 } = {}) {
-  const path = options.path ?? process.env.TRACKER_DB_PATH ?? "/var/lib/20q-tracker/20q.sqlite";
+  const path = options.path ?? process.env.TRACKER_DB_PATH ?? "/var/lib/20q/20q.sqlite";
   await mkdir(dirname(path), { recursive: true });
   const database = new Database(path, { create: true });
   database.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");

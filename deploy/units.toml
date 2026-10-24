@@ -1,0 +1,54 @@
+# What app-release installs for the VPS side of 20q (vps-platform AGENTS.md, "deploy/units.toml").
+health = ["http://127.0.0.1:8200/healthz"]
+
+[runtimes.bun]
+url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-x64.zip"
+sha256 = "bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c"
+path = "bun-linux-x64/bun"
+
+# The leaderboard API only reads the database and gets nothing of /etc/20q.env (the Riot key).
+["20q.service".Service]
+EnvironmentFile = ""
+ExecStart = "/usr/bin/env PORT=8200 PUBLIC_WEB_ORIGIN=https://20q-challenge.pages.dev {bun} --no-env-file vps/api-server.ts"
+Restart = "on-failure"
+RestartSec = 5
+TimeoutStartSec = "30s"
+TimeoutStopSec = "20s"
+MemoryHigh = "96M"
+MemoryMax = "192M"
+TasksMax = 64
+CPUWeight = 30
+# Loopback only: Caddy connects from 127.0.0.1, and the code opens no connection of its own.
+IPAddressDeny = "any"
+IPAddressAllow = "localhost"
+PrivateUsers = "yes"
+RemoveIPC = "yes"
+
+# Every minute, one look at each player's rank: Riot keeps no LP history, so it only grows forward.
+["20q-tracker.service".Service]
+Type = "oneshot"
+ExecStart = "{bun} --no-env-file vps/tracker-runner.ts"
+TimeoutStartSec = "90s"
+Nice = 5
+IOSchedulingClass = "best-effort"
+IOSchedulingPriority = 6
+
+["20q-tracker.timer".Timer]
+OnBootSec = "2min"
+OnUnitActiveSec = "1min"
+AccuracySec = "10s"
+
+# Nightly at 03:45 in Lima, because that history cannot be rebuilt (deploy/backup.sh).
+# Only this unit reads the bucket credential.
+["20q-backup.service".Service]
+Type = "oneshot"
+EnvironmentFile = ["", "-/etc/20q-backup.env"]
+LoadCredential = "s3:/etc/20q-backup.s3"
+ExecStart = "/bin/bash deploy/backup.sh"
+TimeoutStartSec = "30min"
+Nice = 10
+
+["20q-backup.timer".Timer]
+OnCalendar = "*-*-* 08:45:00"
+Persistent = true
+RandomizedDelaySec = "5m"
