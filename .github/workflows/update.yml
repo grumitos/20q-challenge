@@ -1,10 +1,9 @@
 name: Update
 
 # Mondays 04:50 in Lima: npm dependencies within their major version (majors are only
-# listed in the summary; vinext, still 0.x, moves only with its own migration) and the
-# Bun of deploy/units.toml. main moves only after CI passes on the update; a failed
-# deploy goes back to the previous release and reverts the update. Any failure leaves
-# this run red.
+# listed in the summary) and the Bun of deploy/units.toml. main moves only after CI
+# passes on the update; a failed deploy goes back to the previous release and reverts
+# the update. Any failure leaves this run red.
 on:
   schedule:
     - cron: "50 9 * * 1"
@@ -39,7 +38,7 @@ jobs:
           set -euo pipefail
           ncu() { npx --yes npm-check-updates@23.1.1 --cooldown 3d "$@"; }
           ncu --target latest | tee -a "$GITHUB_STEP_SUMMARY"
-          ncu --target minor --reject vinext -u
+          ncu --target minor -u
 
           new="$(gh api repos/oven-sh/bun/releases/latest --jq '.tag_name | ltrimstr("bun-v")')"
           old="$(sed -n 's#^url = ".*/bun-v\([^/]*\)/.*#\1#p' deploy/units.toml)"

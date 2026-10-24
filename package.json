@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test:source": "node --experimental-strip-types --test tests/cloud-cron-pinger.test.mjs tests/leaderboard-logic.test.mjs tests/leaderboard-route-refresh.test.mjs tests/leaderboard-service.test.mjs tests/lp-evidence-persistence.test.mjs tests/lp-reconciliation.test.mjs tests/lp-tracker-api.test.mjs tests/lp-tracker-integration.test.mjs tests/lp-tracker.test.mjs tests/migrations.test.mjs tests/opus-frontend-contract.test.mjs tests/player-enrichment.test.mjs tests/remote-store.test.mjs tests/riot-client.test.mjs tests/riot-request.test.mjs tests/scheduled-refresh.test.mjs tests/season-analytics.test.mjs tests/ui-format.test.mjs tests/ui-regressions.test.mjs",
     "verify": "npm run lint && npm run typecheck && npm run test:source && npm test",
-    "test:built": "node --test tests/cron-endpoints.test.mjs tests/rendered-html.test.mjs tests/rso-readiness.test.mjs"
+    "test:built": "node --import ./tests/workerd-modules.mjs --test tests/cron-endpoints.test.mjs tests/rendered-html.test.mjs tests/rso-readiness.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.3.1",
@@ -40,7 +40,7 @@
     "eslint-config-next": "16.4.2",
     "react-server-dom-webpack": "19.3.1",
     "typescript": "5.9.3",
-    "vinext": "0.0.50",
+    "vinext": "1.3.0",
     "vite": "8.3.5",
     "wrangler": "4.151.3"
   },

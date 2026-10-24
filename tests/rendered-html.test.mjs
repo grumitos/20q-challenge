@@ -83,7 +83,7 @@ test("leaves dist/client as a static Pages bundle", async () => {
   // The stylesheet the HTML asks for has to be one of the files actually
   // shipped — a hash mismatch here is invisible until the page renders bare.
   const html = await (await render("/")).text();
-  const stylesheet = html.match(/href="(\/assets\/[^"]+\.css)"/)?.[1];
+  const stylesheet = html.match(/href="(\/_next\/static\/[^"]+\.css)"/)?.[1];
   assert.ok(stylesheet, "the rendered HTML must reference a built stylesheet");
   await access(new URL(`.${stylesheet}`, client));
 });
