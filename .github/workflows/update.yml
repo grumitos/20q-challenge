@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
+      GIT_SIGNING_KEY_B64: ${{ secrets.GIT_SIGNING_KEY_B64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -73,6 +74,14 @@ jobs:
           }
           git config user.name Diego
           git config user.email 77018402+grumitos@users.noreply.github.com
+          if [ -n "${GIT_SIGNING_KEY_B64:-}" ]; then
+            install -d -m 700 "$HOME/.ssh"
+            key="$HOME/.ssh/git-signing-cloud"
+            (umask 077; printf '%s' "$GIT_SIGNING_KEY_B64" | base64 -d > "$key")
+            git config gpg.format ssh
+            git config user.signingkey "$key"
+            git config commit.gpgsign true
+          fi
           previous="$(git rev-parse HEAD)"
           git commit -qam "Update dependencies and Bun"
           land
