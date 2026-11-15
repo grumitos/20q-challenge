@@ -81,12 +81,13 @@ En el VPS, `/etc/20q.env` conserva `RIOT_API_KEY` para el timer. La API
 no recibe esa key. La base local vive en
 `/var/lib/20q/20q.sqlite` con WAL y migraciones aditivas.
 
-La parte del VPS (`vps/`, `lib/`, `db/`, `drizzle/` y `deploy/`) se publica con
-**Deploy VPS** (`mode` = `deploy` o `rollback`, `target_sha` de `main`) por
-`app-release` de `vps-platform`. `deploy/units.toml` describe la API, el tracker
+La parte del VPS (`vps/`, `lib/`, `db/`, `drizzle/` y `deploy/`) se publica sola
+con cada commit que llega a `main`, cuando CI pasa (job `deploy-vps`), por
+`app-release` de `vps-platform`; a mano, **Deploy VPS** (`mode` = `deploy` o
+`rollback`, `target_sha` de `main`). `deploy/units.toml` describe la API, el tracker
 y el respaldo nocturno de la base (`deploy/backup.sh`: el histórico de PL no se
-puede reconstruir), y `deploy/site.caddy` el sitio. `update.yml` sube cada lunes
-las dependencias dentro de su versión mayor y el Bun del VPS.
+puede reconstruir), y `deploy/site.caddy` el sitio. `update.yml` sube cada domingo
+por la noche (hora de Lima) las dependencias dentro de su versión mayor y el Bun del VPS.
 
 ### Migraciones
 
