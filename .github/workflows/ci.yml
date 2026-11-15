@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  # main takes a commit only once this check passed on it, in a branch first.
+  # A commit pushed to main is deployed to the VPS once this check passed on it.
   push:
   # update.yml starts it: pushes made with GITHUB_TOKEN start no workflow.
   workflow_dispatch:
@@ -11,7 +11,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A run on main may be deploying: it finishes, and the next one waits.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   check:
@@ -32,3 +33,11 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run verify
       - run: npm audit --omit=dev --audit-level=high
+
+  deploy-vps:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    uses: ./.github/workflows/deploy-vps.yml
+    with:
+      target_sha: ${{ github.sha }}
+    secrets: inherit

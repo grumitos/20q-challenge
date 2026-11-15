@@ -1,12 +1,14 @@
 name: Update
 
-# Mondays 04:50 in Lima: npm dependencies within their major version (majors are only
+# Weekly: npm dependencies within their major version (majors are only
 # listed in the summary) and the Bun of deploy/units.toml. main moves only after CI
 # passes on the update; a failed deploy goes back to the previous release and reverts
 # the update. Any failure leaves this run red.
 on:
   schedule:
-    - cron: "50 9 * * 1"
+    # Sundays 20:50 in Lima. GitHub has been starting scheduled runs six to ten hours late,
+    # which puts this one before dawn there; on time, it still runs outside the working week.
+    - cron: "50 1 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -84,6 +86,8 @@ jobs:
           fi
           previous="$(git rev-parse HEAD)"
           git commit -qam "Update dependencies and Bun"
+          # A run that stops halfway leaves no branch behind.
+          trap 'git push -q origin --delete "update-$GITHUB_RUN_ID" 2> /dev/null || true' EXIT
           land
           if ! dispatch deploy-vps.yml main -f mode=deploy -f target_sha="$(git rev-parse HEAD)"; then
             dispatch deploy-vps.yml main -f mode=rollback -f target_sha="$previous"
