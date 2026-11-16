@@ -191,7 +191,7 @@ function PodiumCard({ player, place, version, roster, now, respawnSeconds, featu
                 <RankEmblem tier={player.tier} size={70} className="plate__emblem" />
                 <div className="plate__figures">
                   <span className={`plate__tier ${tierClass(player.tier)}`}>{rankLabel(player)}</span>
-                  <span className="plate__lp" aria-label={`${player.leaguePoints} PL`}>
+                  <span className="plate__lp" role="img" aria-label={`${player.leaguePoints} PL`}>
                     <b className="mono" aria-hidden="true">{player.leaguePoints}</b>
                     <small aria-hidden="true">PL</small>
                   </span>

@@ -60,7 +60,7 @@ export function Duos({ duos, players, version }: {
                       <small className="drow__mobile-meta mono">{view.games}p · {record}</small>
                     </span>
                   </span>
-                  <span className="drow__games" aria-label={`${view.games} partidas juntos`}>
+                  <span className="drow__games" role="img" aria-label={`${view.games} partidas juntos`}>
                     <b className="mono" aria-hidden="true">{view.games}</b>
                     <span className="volume" aria-hidden="true"><i style={{ width: `${Math.round((view.games / busiest) * 100)}%` }} /></span>
                   </span>
@@ -76,7 +76,7 @@ export function Duos({ duos, players, version }: {
                     </span>
                   </span>
                   <span className="drow__record mono col-record">{record}</span>
-                  <span className="drow__adjusted mono col-adjusted" aria-label={`Winrate ajustado ${view.adjusted.toFixed(1)}%`}>{view.adjusted.toFixed(1)}%</span>
+                  <span className="drow__adjusted mono col-adjusted" role="img" aria-label={`Winrate ajustado ${view.adjusted.toFixed(1)}%`}>{view.adjusted.toFixed(1)}%</span>
                 </div>
               </li>
             );

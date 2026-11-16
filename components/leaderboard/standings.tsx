@@ -131,9 +131,9 @@ export function Standings({ standings, version, now, respawnFor, pending }: Stan
 }
 
 function PlaceDelta({ delta = 0 }: { delta?: number }) {
-  if (delta > 0) return <small className="delta is-up mono" aria-label={`Sube ${delta} ${delta === 1 ? "puesto" : "puestos"}`}>▲{delta}</small>;
-  if (delta < 0) return <small className="delta is-down mono" aria-label={`Baja ${-delta} ${delta === -1 ? "puesto" : "puestos"}`}>▼{-delta}</small>;
-  return <small className="delta mono" aria-label="Sin cambio de puesto">—</small>;
+  if (delta > 0) return <small className="delta is-up mono" role="img" aria-label={`Sube ${delta} ${delta === 1 ? "puesto" : "puestos"}`}>▲{delta}</small>;
+  if (delta < 0) return <small className="delta is-down mono" role="img" aria-label={`Baja ${-delta} ${delta === -1 ? "puesto" : "puestos"}`}>▼{-delta}</small>;
+  return <small className="delta mono" role="img" aria-label="Sin cambio de puesto">—</small>;
 }
 
 function StandingRow({ player, place, version, roster, now, respawnSeconds, open, onToggle }: {
@@ -235,7 +235,7 @@ function StandingRow({ player, place, version, roster, now, respawnSeconds, open
           <span className={`wr-bar is-${winRateTone(player.winRate, games, 1)}`} aria-hidden="true"><i style={{ width: `${games > 0 ? Math.max(2, player.winRate) : 0}%` }} /></span>
         </span>
 
-        <span className="srow__kda mono col-kda" aria-label={`KDA ${player.analytics.kda.toFixed(1)}`}>
+        <span className="srow__kda mono col-kda" role="img" aria-label={`KDA ${player.analytics.kda.toFixed(1)}`}>
           {player.analytics.games > 0 ? player.analytics.kda.toFixed(1) : "—"}
         </span>
 
