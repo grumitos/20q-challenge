@@ -23,13 +23,13 @@
     "@radix-ui/react-tooltip": "1.4.1",
     "drizzle-orm": "0.45.4",
     "metal-fx": "1.0.4",
-    "motion": "14.13.0",
+    "motion": "14.14.0",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.69.1",
+    "@cloudflare/vite-plugin": "1.70.1",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -40,9 +40,9 @@
     "eslint-config-next": "16.4.6",
     "react-server-dom-webpack": "19.3.1",
     "typescript": "6.0.3",
-    "vinext": "1.4.5",
+    "vinext": "1.4.6",
     "vite": "8.3.8",
-    "wrangler": "4.161.0"
+    "wrangler": "4.165.0"
   },
   "type": "module"
 }
